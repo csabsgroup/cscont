@@ -18,7 +18,43 @@ export function GoogleCalendarConfig({ setting, onSave }: Props) {
 
   useEffect(() => {
     checkStatus();
+    // Handle OAuth callback
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    const isGoogleOAuth = params.get('oauth') === 'google';
+    if (code && isGoogleOAuth) {
+      exchangeCode(code);
+      // Clean URL
+      const url = new URL(window.location.href);
+      url.searchParams.delete('code');
+      url.searchParams.delete('oauth');
+      url.searchParams.delete('scope');
+      window.history.replaceState({}, '', url.toString());
+    }
   }, []);
+
+  const exchangeCode = async (code: string) => {
+    setLoading(true);
+    try {
+      const redirectUri = `${window.location.origin}/configuracoes?tab=integracoes&oauth=google`;
+      const { data, error } = await supabase.functions.invoke('integration-google-calendar', {
+        body: {
+          action: 'exchangeCode',
+          data: { code, redirect_uri: redirectUri, user_id: session?.user?.id },
+        },
+      });
+      if (error) throw error;
+      if (data?.success) {
+        toast.success(`Google Calendar conectado como ${data.email}`);
+        setStatus({ connected: true, email: data.email });
+      } else {
+        throw new Error('Falha na troca do código OAuth');
+      }
+    } catch (e: any) {
+      toast.error('Erro ao conectar: ' + e.message);
+    }
+    setLoading(false);
+  };
 
   const checkStatus = async () => {
     setLoading(true);
