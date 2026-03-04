@@ -409,6 +409,8 @@ export type Database = {
       contacts: {
         Row: {
           birthday: string | null
+          contact_type: string | null
+          cpf: string | null
           created_at: string
           email: string | null
           id: string
@@ -421,9 +423,12 @@ export type Database = {
           photo_url: string | null
           role_title: string | null
           updated_at: string
+          whatsapp: string | null
         }
         Insert: {
           birthday?: string | null
+          contact_type?: string | null
+          cpf?: string | null
           created_at?: string
           email?: string | null
           id?: string
@@ -436,9 +441,12 @@ export type Database = {
           photo_url?: string | null
           role_title?: string | null
           updated_at?: string
+          whatsapp?: string | null
         }
         Update: {
           birthday?: string | null
+          contact_type?: string | null
+          cpf?: string | null
           created_at?: string
           email?: string | null
           id?: string
@@ -451,6 +459,7 @@ export type Database = {
           photo_url?: string | null
           role_title?: string | null
           updated_at?: string
+          whatsapp?: string | null
         }
         Relationships: [
           {
@@ -1365,13 +1374,19 @@ export type Database = {
         Row: {
           activation_date: string | null
           active_product_id: string | null
+          address: string | null
           asaas_customer_id: string | null
           asaas_total_overdue: number | null
+          cep: string | null
           city: string | null
           cnpj: string | null
+          cpf: string | null
           created_at: string
           csm_id: string | null
           email: string | null
+          faturamento_anual: number | null
+          faturamento_mensal: number | null
+          first_signature_date: string | null
           id: string
           instagram: string | null
           logo_url: string | null
@@ -1381,22 +1396,32 @@ export type Database = {
           phone: string | null
           photo_url: string | null
           piperun_deal_id: string | null
+          qtd_clientes: number | null
+          qtd_colaboradores: number | null
+          segment: string | null
           state: string | null
           status: Database["public"]["Enums"]["office_status"]
           tags: string[] | null
           updated_at: string
           visible_in_directory: boolean
+          whatsapp: string | null
         }
         Insert: {
           activation_date?: string | null
           active_product_id?: string | null
+          address?: string | null
           asaas_customer_id?: string | null
           asaas_total_overdue?: number | null
+          cep?: string | null
           city?: string | null
           cnpj?: string | null
+          cpf?: string | null
           created_at?: string
           csm_id?: string | null
           email?: string | null
+          faturamento_anual?: number | null
+          faturamento_mensal?: number | null
+          first_signature_date?: string | null
           id?: string
           instagram?: string | null
           logo_url?: string | null
@@ -1406,22 +1431,32 @@ export type Database = {
           phone?: string | null
           photo_url?: string | null
           piperun_deal_id?: string | null
+          qtd_clientes?: number | null
+          qtd_colaboradores?: number | null
+          segment?: string | null
           state?: string | null
           status?: Database["public"]["Enums"]["office_status"]
           tags?: string[] | null
           updated_at?: string
           visible_in_directory?: boolean
+          whatsapp?: string | null
         }
         Update: {
           activation_date?: string | null
           active_product_id?: string | null
+          address?: string | null
           asaas_customer_id?: string | null
           asaas_total_overdue?: number | null
+          cep?: string | null
           city?: string | null
           cnpj?: string | null
+          cpf?: string | null
           created_at?: string
           csm_id?: string | null
           email?: string | null
+          faturamento_anual?: number | null
+          faturamento_mensal?: number | null
+          first_signature_date?: string | null
           id?: string
           instagram?: string | null
           logo_url?: string | null
@@ -1431,11 +1466,15 @@ export type Database = {
           phone?: string | null
           photo_url?: string | null
           piperun_deal_id?: string | null
+          qtd_clientes?: number | null
+          qtd_colaboradores?: number | null
+          segment?: string | null
           state?: string | null
           status?: Database["public"]["Enums"]["office_status"]
           tags?: string[] | null
           updated_at?: string
           visible_in_directory?: boolean
+          whatsapp?: string | null
         }
         Relationships: [
           {
