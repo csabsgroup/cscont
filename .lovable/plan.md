@@ -1,56 +1,49 @@
 
 
-## Relatórios Page Complete Rewrite Plan
+## Plan: Complete the Client Portal
 
 ### Current State
-The page has 8 tabs with basic KPI cards and a few charts, but is missing:
-- CSM/Product filters for manager/admin
-- Churn breakdown charts (donut by type, monthly evolution line, churned clients table)
-- Retention/LTV charts (distribution histogram, monthly retention evolution)
-- Health evolution charts (monthly line, stacked bar by band, biggest drops table)
-- NPS distribution chart (promoters/neutrals/detractors bars), quarterly evolution
-- Cobertura table (meetings per CSM with coverage %), monthly meeting frequency chart
-- Journey analytics (avg time per stage, churn by stage, conversion funnel)
-- Inadimplência evolution chart, days overdue in table
-- Evolução rankings (placeholder since perception fields don't exist)
-- Period comparison overlays on line charts
+The portal is already ~80% implemented. All 9 pages exist with routes, layout, sidebar, and basic functionality. The gaps are specific enhancements rather than new pages.
 
-### Implementation: Single file rewrite `src/pages/Relatorios.tsx`
+### What's Missing
 
-**Filters bar** (top, always visible):
-- Period selector (month/quarter/semester/year) — already exists
-- CSM multi-select (manager/admin only) — uses `useAuth()` + fetch profiles with csm role
-- Product dropdown (all products from `products` table)
-- Comparison toggle — already exists
-- "Limpar" button to reset filters
+**1. PortalHome** — Missing cards: Health Score, Bonus balance, Next event, Next meeting. Greeting shows generic text instead of office name.
 
-**Data fetching**: Same `Promise.all` as current but add `office_stage_history` for journey analytics. All computations use `useMemo` filtered by selected CSM/product.
+**2. PortalMembros** — Missing search/filter by name and city.
 
-**Tab enhancements:**
+**3. PortalEventos** — Missing participation status (confirmed/attended/absent) per office.
 
-1. **Visão Executiva**: Keep current KPIs + charts, add comparison deltas to all cards
+**4. PortalLayout** — Shows hardcoded "Contador CEO" instead of the client's office name.
 
-2. **Churn**: Add donut chart (breakdown by type: nao_iniciado/during journey/nao_renovado), monthly churn evolution line chart (last 12 months), churned clients table (office, type, months active, last health, CSM)
+**5. No separate /portal/login** — Currently uses same /auth page. The spec requests a dedicated portal login. However, since Auth already redirects clients to /portal automatically, a separate branded login page at `/portal/login` is straightforward.
 
-3. **Receita & LTV**: Add LTV distribution histogram (group offices by LTV ranges), monthly retention evolution line chart
+### Changes
 
-4. **Health/NPS**: Split into health evolution line chart (12 months), stacked bar (green/yellow/red per month), biggest health drops table. NPS: quarterly evolution, promoter/neutral/detractor bar chart
+**1. `src/pages/portal/PortalHome.tsx`** (rewrite)
+- Fetch office name for greeting: "Bem-vindo, [Office Name]"
+- Add Health Score card (latest from `health_scores`)
+- Add Bonus balance card (sum of `bonus_grants.available`)
+- Add Next event card (from `events` filtered by product eligibility)
+- Add Next meeting card (from `meetings` where `share_with_client=true` and future)
+- Keep existing: contract status, OKR progress
 
-5. **Cobertura**: Add CSM coverage table (CSM name, total meetings, clients attended, coverage %), monthly meeting frequency bar chart, no-contact-30d client list
+**2. `src/pages/portal/PortalMembros.tsx`** (small addition)
+- Add search Input that filters members by name or city (client-side)
 
-6. **Jornada**: Add avg time per stage (horizontal bars, red if > SLA), churn-by-stage bar, conversion funnel percentages
+**3. `src/pages/portal/PortalEventos.tsx`** (small addition)
+- Fetch `event_participants` for the client's office
+- Show participation badge on each event card (Convidado/Confirmado/Participou/Faltou)
 
-7. **Inadimplência**: Add monthly evolution line chart, expand table with days overdue and CSM columns
+**4. `src/components/portal/PortalLayout.tsx`** (small change)
+- Fetch office name from `client_office_links` → `offices` and display it instead of hardcoded text
 
-8. **Evolução**: Placeholder with "Configure percepção para ver rankings" since perception fields don't exist in offices table
+**5. `src/pages/portal/PortalLogin.tsx`** (new file)
+- Simple login-only page (no signup tab) branded for portal
+- Route at `/portal/login`
+- Redirects to `/portal` on success, to `/auth` if not a client
 
-**Role-based filtering**: Use `useAuth()` to get role/user. CSM: filter all data by `csm_id = user.id`. Manager: filter by team CSMs. Admin/Viewer: see all.
+**6. `src/App.tsx`** (add route)
+- Add `/portal/login` route pointing to PortalLogin
 
-**Comparison overlay**: Line charts show 2 lines (current period + previous period) when comparison toggle is on.
-
-### No DB changes needed
-All data comes from existing tables. `office_stage_history` provides journey analytics data.
-
-### Estimated size
-~700 lines (rewrite of existing 405-line file with significantly more charts and tables).
+### No DB changes needed.
 
