@@ -1,148 +1,135 @@
 
 
-## Gap Analysis and Implementation Plan
+## Design System Redesign Plan
 
-After thoroughly reviewing the codebase against the full specification, here is what exists and what remains to be built.
+This is a visual-only refactoring — no logic or functionality changes. The work spans the global CSS tokens, layout components (sidebar, topbar), and all page-level styling across ~20 files.
 
----
+### Approach
 
-### What's Already Implemented
+Rather than editing every single page file individually (which would be massive), the most efficient approach is to:
 
-- **Database**: All core tables exist with RLS (offices, contacts, contracts, products, activities, meetings, events, event_participants, journey_stages, office_journey, health_scores/pillars/indicators/overrides/playbooks, form_templates, form_submissions, bonus_catalog/grants/requests, action_plans, client_office_links, manager_csm_links, profiles, user_roles)
-- **Auth/RBAC**: 5 roles with security definer functions (has_role, get_visible_office_ids, etc.)
-- **All pages exist**: Dashboard, Clientes, Cliente360, Jornada, Atividades, Reunioes, Eventos, ContratosGlobal, ContatosGlobal, Relatorios, Configuracoes, Portal (8 pages)
-- **Configuracoes tabs**: Produtos, Etapas da Jornada, Health Score, Formularios, Catalogo de Bonus, Usuarios & Roles
+1. **Update the global design tokens** (CSS variables + Tailwind config) so all existing component primitives automatically inherit the new look
+2. **Restyle the layout shell** (AppLayout, AppSidebar, PortalLayout) for the sidebar/topbar redesign
+3. **Update shared UI primitives** (Card, Button, Input, Table, Badge, Dialog) at the component level so all pages benefit
+4. **Touch each page file** only for page-specific styling (grid layouts, section headers, loading/empty states)
 
----
+### Phase 1 — Global Design Tokens & CSS
 
-### What's Missing (organized by priority)
+**File: `src/index.css`**
+- Update CSS variables: background to `#F9FAFB` (page bg), card stays white, border to `#E5E7EB`
+- Add utility classes for card hover effects, skeleton shimmer animation
+- Set default border-radius to 12px (rounded-xl for cards)
 
-#### Batch 1 — Core Functionality Gaps
+**File: `tailwind.config.ts`**
+- Update `--radius` to `0.75rem` (12px)
+- Add gray scale colors matching the spec (#F9FAFB, #F3F4F6, #E5E7EB, #6B7280, #111827)
+- Ensure primary maps to `#DC2626`
 
-**1. Dashboard Enhancements**
-- Missing: Health distribution (V/A/V), health medio, NPS medio + cobertura, sem percepcao no mes, +30 dias sem reuniao, ranking evolucao, funil/etapas por produto, top churn risk, top expansao
-- Current: Only has basic KPI cards + attention items + birthdays
+### Phase 2 — UI Primitives (7 files)
 
-**2. Atividades Improvements**
-- Missing: Tabs Hoje/Atrasadas/Futuras/Concluidas (has only Pendentes/Concluidas)
-- Missing: Full activity types (ligacao, follow_up, check_in, email, whatsapp, planejamento, task, other)
-- Missing: Checklist/subtarefas inside activities
-- Missing: Popup menu with edit/complete/delete actions per item
-- Missing: "Observacoes" prompt when completing
+**`src/components/ui/card.tsx`**: rounded-xl, shadow-sm, border-gray-100, hover:shadow-md transition on clickable cards. CardHeader gets mb-4, CardTitle gets text-base font-semibold text-gray-900.
 
-**3. Reunioes Improvements**
-- Missing: `share_with_client` toggle on create/detail
-- Missing: Form selector when marking as "completed" (link to form_templates)
-- Missing: Transcript field visible in detail
+**`src/components/ui/button.tsx`**: rounded-lg, transition-all duration-200. Primary variant bg-red-600 hover:bg-red-700 shadow-sm. Secondary with border-gray-300. Ghost with hover:bg-gray-100.
 
-**4. Eventos Improvements**
-- Missing: `eligible_product_ids` multi-select on create
-- Missing: Auto-pull all active offices of eligible products as participants
-- Missing: Participation management UI (confirm/attended/absent/remove)
+**`src/components/ui/input.tsx`**: rounded-md, focus:ring-2 focus:ring-red-500 focus:border-red-500, text-sm.
 
-**5. Jornada Kanban Improvements**
-- Missing: Real drag & drop (currently uses Select dropdown)
-- Missing: Move reason modal
-- Missing: Health badge on cards, dias renovacao, parcelas vencidas, ultima reuniao
-- Missing: Filters (saude, status, CSM, renovacao, parcelas vencidas, sem percepcao, +30 dias sem reuniao)
+**`src/components/ui/table.tsx`**: Header bg-gray-50 text-xs uppercase tracking-wider text-gray-500. Rows border-b border-gray-50 hover:bg-gray-50 transition. Cells py-3 px-4 text-sm text-gray-700.
 
-#### Batch 2 — Enhanced Features
+**`src/components/ui/badge.tsx`**: rounded-full px-2.5 py-0.5 text-xs font-medium.
 
-**6. Clientes Table Enhancements**
-- Missing: Health, LTV, ultimo contato, proximo passo, parcelas vencidas, dias renovacao columns
-- Missing: Configurable/reorderable columns with saved views (user_table_views table needed)
-- Missing: More filters (CSM, etapa, tags, saude, etc.)
+**`src/components/ui/dialog.tsx`**: Overlay backdrop-blur-sm bg-black/50. Content rounded-2xl shadow-2xl.
 
-**7. Relatorios Full Implementation**
-- Missing: Tab structure (Visao executiva, Churn & retencao, Receita & LTV, Health/NPS/CSAT, Cobertura/cadencia, Jornada analytics, Inadimplencia, Evolucao do cliente)
-- Missing: Period selector + comparison
+**`src/components/ui/sheet.tsx`**: Same overlay treatment, smooth transitions.
 
-**8. Configuracoes — Missing Tabs**
-- Missing: Integracoes tab (stubs for Google Calendar, Asaas, Slack, Piperun, WhatsApp, Fireflies)
-- Missing: Templates/Automacoes tab
+### Phase 3 — Layout Shell (3 files)
 
-**9. Portal Pages — Real Data**
-- Current portal pages are minimal stubs
-- Missing: Real contract details with installments in PortalContrato
-- Missing: Proper OKR editing (status/observations only) in PortalOKR
-- Missing: share_with_client filter in PortalReunioes
-- Missing: Product-filtered events in PortalEventos
-- Missing: Full bonus request flow in PortalBonus
-- Missing: Arquivos compartilhados page
+**`src/components/AppSidebar.tsx`**: 
+- White background sidebar (not dark), border-r border-gray-100
+- Group labels: text-xs text-gray-400 uppercase tracking-wider
+- Items: py-2.5 px-4 rounded-lg text-gray-600, hover:bg-gray-50
+- Active: bg-red-50 text-red-700 font-medium with left border accent
+- Logo area: generous padding py-6 px-5
+- Footer: user profile with avatar, name, role badge
 
-#### Batch 3 — Polish & Data
+**`src/components/AppLayout.tsx`**:
+- Topbar height 64px (h-16), white bg, shadow-sm
+- Left side: breadcrumb in text-sm text-gray-500
+- Right side: search input (rounded-full bg-gray-100), notification bell, user avatar with dropdown
+- Main content: bg-gray-50 (page background), p-6
 
-**10. Branding**
-- Red primary color needs to be applied in Tailwind config
+**`src/components/portal/PortalLayout.tsx`**:
+- Same white sidebar treatment, red accent for active items
+- Top bar consistent with main app
 
-**11. Viewer Read-Only**
-- Partially implemented; needs consistent check across all pages
+**`src/components/ui/sidebar.tsx`**:
+- Update sidebar CSS variables: bg white, foreground gray-700, accent bg-red-50, border gray-100
+- Width 260px (currently 16rem/256px — close enough, adjust to match)
 
-**12. Seed Data**
-- 3 products, 10 offices, 20 contacts, 30 activities, 10 meetings, 3 events, journey stages, health config
+### Phase 4 — Page-Level Styling (~15 files)
 
----
+Apply consistent patterns across all pages:
 
-### Database Changes Needed
+**`src/pages/Dashboard.tsx`**: 
+- Page bg inherited from layout (gray-50)
+- Cards with rounded-xl shadow-sm border-gray-100
+- KPI values: text-2xl font-bold
+- Loading state: replace Loader2 spinner with skeleton shimmer blocks
 
-```text
-New table: activity_checklists
-  - id, activity_id, title, completed, position, created_at
+**`src/pages/Clientes.tsx`**: 
+- Table container rounded-xl shadow-sm border-gray-100 overflow-hidden
+- Table header bg-gray-50 uppercase tracking-wider
+- Row hover:bg-gray-50 transition
+- Loading: skeleton rows instead of spinner
 
-New table: user_table_views
-  - id, user_id, page, name, columns (jsonb), filters (jsonb), is_default, created_at
+**`src/pages/Jornada.tsx`**: 
+- Kanban columns with rounded-xl bg-gray-50 border
+- Cards inside with rounded-lg shadow-sm bg-white hover:shadow-md
+- Loading: skeleton columns
 
-New table: shared_files (for portal "Arquivos compartilhados")
-  - id, office_id, name, url, uploaded_by, shared_with_client, created_at
+**`src/pages/Atividades.tsx`**: Same card/table treatment
 
-Enum update: activity_type
-  - Add: ligacao, check_in, email, whatsapp, planejamento
+**`src/pages/Reunioes.tsx`**: Same treatment
 
-Add column: activities.observations (text, nullable)
-```
+**`src/pages/Eventos.tsx`**: Same treatment
 
----
+**`src/pages/ContratosGlobal.tsx`**: Same table treatment
 
-### Implementation Order
+**`src/pages/ContatosGlobal.tsx`**: Same table treatment
 
-Due to the volume, I recommend splitting into 3 batches:
+**`src/pages/Relatorios.tsx`**: Cards rounded-xl, chart containers styled
 
-**Batch 1** (this implementation — highest impact):
-1. DB migration (activity_checklists, activity_type enum, observations column)
-2. Branding (red primary in tailwind.config)
-3. Atividades: 4-tab layout, full types, checklist, popup menu, observations on complete
-4. Reunioes: share_with_client toggle, form selector on complete, transcript
-5. Eventos: product selector, auto-pull participants, participation management
-6. Jornada: Filters, health/info on cards, move reason modal
-7. Dashboard: Health distribution, +30 dias sem reuniao, funil/etapas, attention items expansion
+**`src/pages/Configuracoes.tsx`**: Tab panels with consistent card styling
 
-**Batch 2** (next round):
-1. DB migration (user_table_views, shared_files)
-2. Clientes: Enhanced columns, saved views
-3. Relatorios: Full tab structure with all report types
-4. Configuracoes: Integracoes tab, Templates/Automacoes tab
-5. Portal: Enhanced pages with real data flows, Arquivos page
+**`src/pages/Cliente360.tsx`**: Tab content with rounded-xl cards
 
-**Batch 3** (final round):
-1. Viewer read-only consistency
-2. Seed data
-3. Polish and edge cases
+**`src/pages/Auth.tsx`**: Centered card with rounded-2xl shadow-lg
 
----
+**Portal pages** (9 files): Same rounded-xl card treatment, consistent with main app
 
-### Files to Create (Batch 1)
-- `src/components/atividades/ActivityChecklist.tsx`
-- `src/components/atividades/ActivityPopup.tsx`
-- `src/components/eventos/ParticipantManager.tsx`
-- `src/components/reunioes/FormFillDialog.tsx`
+### Phase 5 — Loading/Empty/Error States
 
-### Files to Edit (Batch 1)
-- `tailwind.config.ts` (red primary)
-- `src/pages/Dashboard.tsx` (health + funil + more attention items)
-- `src/pages/Atividades.tsx` (4 tabs, types, checklist, popup, observations)
-- `src/pages/Reunioes.tsx` (share_with_client, form on complete, transcript)
-- `src/pages/Eventos.tsx` (product selector, auto-pull, participation)
-- `src/pages/Jornada.tsx` (filters, card info, move reason)
+Create a shared set of state components:
+- **`src/components/ui/skeleton-card.tsx`**: Reusable skeleton shimmer for cards (animated bg-gray-200 pulse)
+- Update all pages to use skeleton shimmer instead of Loader2 spinner
+- Ensure empty states have icon + title + subtitle pattern
+- Error states with alert icon + retry button
 
-Shall I proceed with Batch 1?
+### Key Files Summary
+
+| Category | Files | Count |
+|----------|-------|-------|
+| CSS/Config | index.css, tailwind.config.ts | 2 |
+| UI Primitives | card, button, input, table, badge, dialog, sheet, sidebar | 8 |
+| Layout | AppLayout, AppSidebar, PortalLayout | 3 |
+| Pages (internal) | Dashboard, Clientes, Cliente360, Jornada, Atividades, Reunioes, Eventos, ContratosGlobal, ContatosGlobal, Relatorios, Configuracoes, Auth | 12 |
+| Pages (portal) | 9 portal pages | 9 |
+| New components | skeleton helpers | 1 |
+| **Total** | | **~35 files** |
+
+### Technical Notes
+
+- The sidebar currently uses Radix UI `Sidebar` component with dark theme CSS variables. The redesign switches to white bg by updating the CSS variables in `index.css` (--sidebar-background, --sidebar-foreground, etc.)
+- No package additions needed — everything uses existing Tailwind classes
+- The `App.css` file with its legacy styles should be cleaned up (max-width, text-align center, logo spin animation are unused)
+- All changes are purely CSS/className modifications — zero logic changes
 
