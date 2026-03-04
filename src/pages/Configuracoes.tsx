@@ -12,9 +12,11 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Loader2, Package, Route, Users, Trash2, Edit2, Heart } from 'lucide-react';
+import { Plus, Loader2, Package, Route, Users, Trash2, Edit2, Heart, FileText, Gift } from 'lucide-react';
 import { toast } from 'sonner';
 import { HealthScoreTab } from '@/components/configuracoes/HealthScoreTab';
+import { FormTemplatesTab } from '@/components/configuracoes/FormTemplatesTab';
+import { BonusCatalogTab } from '@/components/configuracoes/BonusCatalogTab';
 
 // ─── Products Tab ────────────────────────────────────────────
 function ProductsTab() {
@@ -327,6 +329,14 @@ export default function Configuracoes() {
           <TabsTrigger value="health" className="gap-1.5">
             <Heart className="h-4 w-4" />Health Score
           </TabsTrigger>
+          <TabsTrigger value="formularios" className="gap-1.5">
+            <FileText className="h-4 w-4" />Formulários
+          </TabsTrigger>
+          {isAdmin && (
+            <TabsTrigger value="bonus" className="gap-1.5">
+              <Gift className="h-4 w-4" />Catálogo de Bônus
+            </TabsTrigger>
+          )}
           {isAdmin && (
             <TabsTrigger value="usuarios" className="gap-1.5">
               <Users className="h-4 w-4" />Usuários & Roles
@@ -337,6 +347,8 @@ export default function Configuracoes() {
         <TabsContent value="produtos"><ProductsTab /></TabsContent>
         <TabsContent value="jornada"><JourneyStagesTab /></TabsContent>
         <TabsContent value="health"><HealthScoreTab /></TabsContent>
+        <TabsContent value="formularios"><FormTemplatesTab /></TabsContent>
+        {isAdmin && <TabsContent value="bonus"><BonusCatalogTab /></TabsContent>}
         {isAdmin && <TabsContent value="usuarios"><UsersTab /></TabsContent>}
       </Tabs>
     </div>

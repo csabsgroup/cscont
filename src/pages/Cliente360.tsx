@@ -16,6 +16,7 @@ import { ClienteJornada } from '@/components/clientes/ClienteJornada';
 import { ClienteMetricas } from '@/components/clientes/ClienteMetricas';
 import { EditOfficeDialog } from '@/components/clientes/EditOfficeDialog';
 import { HealthBadge } from '@/components/clientes/HealthBadge';
+import { ClienteBonus } from '@/components/clientes/ClienteBonus';
 
 export default function Cliente360() {
   const { id } = useParams<{ id: string }>();
@@ -81,6 +82,7 @@ export default function Cliente360() {
           <TabsTrigger value="contratos">Contratos ({contracts.length})</TabsTrigger>
           <TabsTrigger value="metricas">Métricas</TabsTrigger>
           <TabsTrigger value="notas">Notas</TabsTrigger>
+          <TabsTrigger value="bonus">Bônus/Cashback</TabsTrigger>
         </TabsList>
 
         <TabsContent value="resumo">
@@ -117,6 +119,10 @@ export default function Cliente360() {
 
         <TabsContent value="notas">
           <Card className="p-6"><ClienteNotas officeId={office.id} initialNotes={office.notes} /></Card>
+        </TabsContent>
+
+        <TabsContent value="bonus">
+          <Card className="p-6"><ClienteBonus officeId={office.id} /></Card>
         </TabsContent>
       </Tabs>
 

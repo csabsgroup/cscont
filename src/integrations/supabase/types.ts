@@ -70,6 +70,7 @@ export type Database = {
           id: string
           office_id: string | null
           priority: Database["public"]["Enums"]["activity_priority"]
+          shared_with_client: boolean
           title: string
           type: Database["public"]["Enums"]["activity_type"]
           updated_at: string
@@ -83,6 +84,7 @@ export type Database = {
           id?: string
           office_id?: string | null
           priority?: Database["public"]["Enums"]["activity_priority"]
+          shared_with_client?: boolean
           title: string
           type?: Database["public"]["Enums"]["activity_type"]
           updated_at?: string
@@ -96,6 +98,7 @@ export type Database = {
           id?: string
           office_id?: string | null
           priority?: Database["public"]["Enums"]["activity_priority"]
+          shared_with_client?: boolean
           title?: string
           type?: Database["public"]["Enums"]["activity_type"]
           updated_at?: string
@@ -104,6 +107,141 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "activities_office_id_fkey"
+            columns: ["office_id"]
+            isOneToOne: false
+            referencedRelation: "offices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bonus_catalog: {
+        Row: {
+          created_at: string
+          default_validity_days: number | null
+          eligible_product_ids: string[] | null
+          id: string
+          name: string
+          requires_approval: boolean
+          unit: string
+          updated_at: string
+          visible_in_portal: boolean
+        }
+        Insert: {
+          created_at?: string
+          default_validity_days?: number | null
+          eligible_product_ids?: string[] | null
+          id?: string
+          name: string
+          requires_approval?: boolean
+          unit?: string
+          updated_at?: string
+          visible_in_portal?: boolean
+        }
+        Update: {
+          created_at?: string
+          default_validity_days?: number | null
+          eligible_product_ids?: string[] | null
+          id?: string
+          name?: string
+          requires_approval?: boolean
+          unit?: string
+          updated_at?: string
+          visible_in_portal?: boolean
+        }
+        Relationships: []
+      }
+      bonus_grants: {
+        Row: {
+          available: number
+          catalog_item_id: string
+          expires_at: string | null
+          granted_at: string
+          id: string
+          office_id: string
+          quantity: number
+          used: number
+        }
+        Insert: {
+          available?: number
+          catalog_item_id: string
+          expires_at?: string | null
+          granted_at?: string
+          id?: string
+          office_id: string
+          quantity?: number
+          used?: number
+        }
+        Update: {
+          available?: number
+          catalog_item_id?: string
+          expires_at?: string | null
+          granted_at?: string
+          id?: string
+          office_id?: string
+          quantity?: number
+          used?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bonus_grants_catalog_item_id_fkey"
+            columns: ["catalog_item_id"]
+            isOneToOne: false
+            referencedRelation: "bonus_catalog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bonus_grants_office_id_fkey"
+            columns: ["office_id"]
+            isOneToOne: false
+            referencedRelation: "offices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bonus_requests: {
+        Row: {
+          catalog_item_id: string
+          created_at: string
+          id: string
+          notes: string | null
+          office_id: string
+          quantity: number
+          reviewed_by: string | null
+          status: Database["public"]["Enums"]["bonus_request_status"]
+          updated_at: string
+        }
+        Insert: {
+          catalog_item_id: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          office_id: string
+          quantity?: number
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["bonus_request_status"]
+          updated_at?: string
+        }
+        Update: {
+          catalog_item_id?: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          office_id?: string
+          quantity?: number
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["bonus_request_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bonus_requests_catalog_item_id_fkey"
+            columns: ["catalog_item_id"]
+            isOneToOne: false
+            referencedRelation: "bonus_catalog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bonus_requests_office_id_fkey"
             columns: ["office_id"]
             isOneToOne: false
             referencedRelation: "offices"
@@ -319,6 +457,7 @@ export type Database = {
           created_at: string
           created_by: string
           description: string | null
+          eligible_product_ids: string[] | null
           end_date: string | null
           event_date: string
           id: string
@@ -332,6 +471,7 @@ export type Database = {
           created_at?: string
           created_by: string
           description?: string | null
+          eligible_product_ids?: string[] | null
           end_date?: string | null
           event_date: string
           id?: string
@@ -345,6 +485,7 @@ export type Database = {
           created_at?: string
           created_by?: string
           description?: string | null
+          eligible_product_ids?: string[] | null
           end_date?: string | null
           event_date?: string
           id?: string
@@ -355,6 +496,102 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      form_submissions: {
+        Row: {
+          data: Json
+          id: string
+          meeting_id: string | null
+          office_id: string
+          submitted_at: string
+          template_id: string
+          user_id: string
+        }
+        Insert: {
+          data?: Json
+          id?: string
+          meeting_id?: string | null
+          office_id: string
+          submitted_at?: string
+          template_id: string
+          user_id: string
+        }
+        Update: {
+          data?: Json
+          id?: string
+          meeting_id?: string | null
+          office_id?: string
+          submitted_at?: string
+          template_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "form_submissions_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "form_submissions_office_id_fkey"
+            columns: ["office_id"]
+            isOneToOne: false
+            referencedRelation: "offices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "form_submissions_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "form_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      form_templates: {
+        Row: {
+          created_at: string
+          created_by: string
+          fields: Json
+          id: string
+          name: string
+          post_actions: Json
+          product_id: string | null
+          type: Database["public"]["Enums"]["form_template_type"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          fields?: Json
+          id?: string
+          name: string
+          post_actions?: Json
+          product_id?: string | null
+          type?: Database["public"]["Enums"]["form_template_type"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          fields?: Json
+          id?: string
+          name?: string
+          post_actions?: Json
+          product_id?: string | null
+          type?: Database["public"]["Enums"]["form_template_type"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "form_templates_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       health_indicators: {
         Row: {
@@ -884,7 +1121,17 @@ export type Database = {
       activity_priority: "low" | "medium" | "high" | "urgent"
       activity_type: "task" | "follow_up" | "onboarding" | "renewal" | "other"
       app_role: "admin" | "manager" | "csm" | "viewer" | "client"
+      bonus_request_status: "pending" | "approved" | "denied"
       contract_status: "ativo" | "encerrado" | "cancelado" | "pendente"
+      form_template_type:
+        | "kickoff"
+        | "onboarding"
+        | "nutricao"
+        | "renovacao"
+        | "expansao"
+        | "sos"
+        | "extra"
+        | "apresentacao"
       health_band: "red" | "yellow" | "green"
       health_override_action: "force_red" | "reduce_score"
       meeting_status: "scheduled" | "completed" | "cancelled"
@@ -1026,7 +1273,18 @@ export const Constants = {
       activity_priority: ["low", "medium", "high", "urgent"],
       activity_type: ["task", "follow_up", "onboarding", "renewal", "other"],
       app_role: ["admin", "manager", "csm", "viewer", "client"],
+      bonus_request_status: ["pending", "approved", "denied"],
       contract_status: ["ativo", "encerrado", "cancelado", "pendente"],
+      form_template_type: [
+        "kickoff",
+        "onboarding",
+        "nutricao",
+        "renovacao",
+        "expansao",
+        "sos",
+        "extra",
+        "apresentacao",
+      ],
       health_band: ["red", "yellow", "green"],
       health_override_action: ["force_red", "reduce_score"],
       meeting_status: ["scheduled", "completed", "cancelled"],
