@@ -1,101 +1,76 @@
 
 
-# Plan: Automation Rules Engine — Triggers + Conditions
+# Plan: Remove Legacy Automation Tabs + Add Dark Mode
 
-## Context
+## BLOCO 1 — Remove Legacy Automation Pages
 
-The current system has hardcoded automation types (distribution, onboarding_tasks, stage_tasks) stored in `automation_rules` with `rule_type` + `config` JSONB. The new system replaces this with a generic trigger-condition-action engine.
+### Files to DELETE:
+- `src/components/configuracoes/AutomationDistributionTab.tsx`
+- `src/components/configuracoes/AutomationOnboardingTab.tsx`
+- `src/components/configuracoes/AutomationStageTasksTab.tsx`
 
-## 1. Database Migration
+### Changes in `src/pages/Configuracoes.tsx`:
+1. Remove imports (lines 14-16): `AutomationDistributionTab`, `AutomationOnboardingTab`, `AutomationStageTasksTab`
+2. Remove from `SIDEBAR_SECTIONS` (lines 355-358): `auto_distribuicao`, `auto_onboarding`, `auto_etapas`, `auto_playbooks`
+3. Remove from `renderContent()` (lines 444-447): the 4 corresponding cases
+4. "Automações" category keeps only `auto_regras` ("Regras de Automação") — since it's a single item, it'll render as a standalone button (no accordion), clicking "Automações" directly opens the rules tab
 
-**New table: `automation_rules_v2`**
+## BLOCO 2 — Dark Mode
 
-| Column | Type | Notes |
-|---|---|---|
-| id | uuid PK | |
-| name | text NOT NULL | Rule name |
-| description | text | Optional |
-| is_active | boolean | Default true |
-| trigger_type | text NOT NULL | e.g. "office.created", "health.band_changed" |
-| trigger_params | jsonb | e.g. `{ "dias": 30 }` for time-based triggers |
-| conditions | jsonb | Array of condition objects |
-| condition_logic | text | "and" or "or", default "and" |
-| actions | jsonb | Array of action objects (for future use) |
-| product_id | uuid | Optional filter (nullable) |
-| created_by | uuid | |
-| created_at / updated_at | timestamptz | |
+### Approach: Use CSS variables (already in place) + class toggle
 
-RLS: Admin-only for ALL, authenticated SELECT.
+The project already has `darkMode: ["class"]` in `tailwind.config.ts` and `.dark` CSS variables defined in `index.css`. The existing HSL-based variables already cover both modes for all shadcn components. This means all shadcn primitives (Card, Button, Input, Dialog, Table, Badge, etc.) **already support dark mode** through the CSS variable system.
 
-Keep existing `automation_rules` table untouched for backward compatibility.
+What's needed:
 
-## 2. Frontend — New Component `AutomationRulesTab.tsx`
+### 1. Create `src/contexts/ThemeContext.tsx`
+- State: `theme` from localStorage (default `'light'`)
+- `toggleTheme()` toggles between light/dark, saves to localStorage, toggles `dark` class on `document.documentElement`
+- Export `useTheme` hook
 
-### Rule List View
-- Table showing all rules: Name, Trigger (badge), Active toggle, Edit/Delete buttons
-- "Nova Regra" button opens rule editor dialog
+### 2. Wrap App with ThemeProvider
+- In `src/App.tsx`, wrap everything with `<ThemeProvider>`
 
-### Rule Editor (Dialog or full panel)
+### 3. Add toggle button in `src/components/AppLayout.tsx`
+- Sun/Moon icon between notifications bell and avatar
+- Calls `toggleTheme()`
 
-**Section 1 — Info**
-- Name (text input)
-- Description (optional textarea)
-- Active toggle
+### 4. Fix hardcoded colors in components
+These components use hardcoded Tailwind colors instead of CSS variables, which won't respond to dark mode:
 
-**Section 2 — Trigger (SE)**
-- Dropdown with 15 triggers grouped by category:
-  - **Cliente**: T1 (office.created), T7 (office.status_changed), T15 (office.imported_piperun)
-  - **Jornada**: T2 (office.stage_changed)
-  - **Health Score**: T3 (health.band_changed)
-  - **Formulários**: T4 (form.submitted)
-  - **Reuniões**: T5 (meeting.completed), T9 (office.no_meeting)
-  - **Financeiro**: T6 (payment.overdue), T8 (office.renewal_approaching)
-  - **Bônus**: T10 (bonus.requested)
-  - **Atividades**: T11 (activity.overdue)
-  - **NPS**: T12 (nps.below_threshold)
-  - **Contrato/Contato**: T13 (contract.created), T14 (contact.created)
-- Dynamic params below trigger based on type (stage selectors, number inputs, form dropdown, etc.)
-- Badge indicating "Tempo real" vs "Cron diário" for each trigger
+| Component | Hardcoded colors to fix |
+|---|---|
+| `NavigationTabs.tsx` | `bg-white`, `border-gray-200`, `text-red-700`, `bg-red-50`, `text-gray-500`, `hover:bg-gray-50` → use semantic classes (`bg-card`, `border-border`, `text-primary`, etc.) |
+| `Configuracoes.tsx` (line 512) | `bg-white` → `bg-card` |
+| `AppLayout.tsx` | Already uses semantic classes mostly, minor fixes |
 
-**Section 3 — Conditions (QUANDO)**
-- "+ Adicionar condição" button
-- Each condition row: `[Campo dropdown] [Operador dropdown] [Valor input/dropdown]`
-- Between conditions: AND/OR toggle
-- Fields available per the user's spec (Produto, Status, Health Score, CSM, Etapa, Cidade, Estado, Parcelas vencidas, Dias para renovação, etc.)
-- Operators change dynamically based on field type (text → igual/diferente/contém, number → maior/menor/entre, enum → igual/diferente/está em)
-
-**Data shape stored in `conditions` JSONB:**
-```json
-[
-  { "field": "product_id", "operator": "equals", "value": "uuid-here" },
-  { "field": "health_band", "operator": "equals", "value": "red" },
-  { "field": "installments_overdue", "operator": "greater_than", "value": 3 }
-]
+### 5. Add smooth transition
+Add to `index.css`:
+```css
+html.transitioning * {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
 ```
+Apply class briefly during toggle to avoid permanent transition overhead.
 
-## 3. Navigation
+### 6. Portal dark mode toggle
+Add the same Sun/Moon toggle in `src/components/portal/PortalLayout.tsx` header.
 
-Add to `SIDEBAR_SECTIONS` in Configuracoes.tsx:
-```
-{ key: 'auto_regras', label: 'Regras de Automação', icon: Workflow, category: 'Automações', adminOnly: true }
-```
+### Key insight
+Since the entire UI is built on shadcn/ui with HSL CSS variables, and dark mode variables are already defined in `index.css`, **most components will automatically switch** once we toggle the `dark` class. The main work is:
+- Creating the ThemeContext + toggle
+- Fixing ~3-4 components with hardcoded colors
 
-Add to `renderContent()`:
-```
-case 'auto_regras': return <AutomationRulesTab />;
-```
-
-## 4. Files to Create/Modify
+### Files to create/modify:
 
 | File | Action |
 |---|---|
-| SQL Migration | Create `automation_rules_v2` table with RLS |
-| `src/components/configuracoes/AutomationRulesTab.tsx` | **New** — Rule list + editor with trigger/condition UI |
-| `src/pages/Configuracoes.tsx` | Add sidebar entry + render case |
-
-## Notes
-
-- Actions (ENTÃO) will be implemented in a follow-up — for now the `actions` column stores an empty array
-- Time-based triggers (T8, T9, T11) need a cron Edge Function — will be planned separately
-- Existing automation_rules table stays intact; migration path will come later
+| `src/contexts/ThemeContext.tsx` | **Create** — ThemeProvider + useTheme hook |
+| `src/App.tsx` | Wrap with ThemeProvider |
+| `src/components/AppLayout.tsx` | Add Sun/Moon toggle |
+| `src/components/NavigationTabs.tsx` | Replace hardcoded colors with semantic classes |
+| `src/pages/Configuracoes.tsx` | Remove legacy tabs + fix `bg-white` |
+| `src/components/portal/PortalLayout.tsx` | Add dark mode toggle |
+| `src/index.css` | Add transition utility |
+| Delete 3 legacy automation files | |
 
