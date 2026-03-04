@@ -4,6 +4,7 @@ import { AppSidebar } from '@/components/AppSidebar';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocation } from 'react-router-dom';
 import { Bell, Search, User, LogOut } from 'lucide-react';
+import { NavigationTabs } from '@/components/NavigationTabs';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import {
@@ -19,7 +20,7 @@ interface AppLayoutProps {
 }
 
 const pageNames: Record<string, string> = {
-  '/': 'Dashboard',
+  '/': 'Minha Carteira',
   '/clientes': 'Clientes',
   '/jornada': 'Jornada',
   '/atividades': 'Atividades',
@@ -27,7 +28,8 @@ const pageNames: Record<string, string> = {
   '/eventos': 'Eventos',
   '/contratos': 'Contratos',
   '/contatos': 'Contatos',
-  '/relatorios': 'Relatórios',
+  '/financeiro': 'Financeiro',
+  '/relatorios': 'Performance',
   '/configuracoes': 'Configurações',
 };
 
@@ -105,6 +107,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               </DropdownMenu>
             </div>
           </header>
+          {!location.pathname.match(/^\/clientes\/[^/]+$/) && <NavigationTabs />}
           <main className="flex-1 overflow-auto p-6">{children}</main>
         </div>
       </div>
