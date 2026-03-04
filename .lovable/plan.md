@@ -1,74 +1,75 @@
 
 
-# Plan: Corrigir Vulnerabilidades de Seguranca (2 findings error)
+# Plan: Desfazer Importacao + Exclusao em Massa
 
-## Finding 1: Edge Functions sem autenticacao
+## 1. Tabela `import_batches` (nova)
 
-Adicionar bloco de autenticacao JWT + verificacao de role (admin/manager/csm) em 5 edge functions, replicando o padrao ja usado em `execute-automations`. A acao `webhook` em cada funcao sera tratada separadamente — webhooks externos nao enviam JWT, entao serao processados sem auth (mantendo o comportamento atual para chamadas externas).
-
-### Funcoes afetadas e mudancas
-
-Para cada funcao abaixo, inserir apos o check de OPTIONS:
-
-1. Parse `Authorization` header e validar usuario via `getUser()`
-2. Verificar role via `get_user_role` RPC (permitir admin/manager/csm)
-3. Retornar 401/403 se falhar
-4. Para acoes `webhook`: processar sem auth (sao chamadas por servicos externos)
-5. Substituir `String(err)` no catch por `"Internal server error"`
-
-**Arquivos modificados:**
-- `supabase/functions/integration-whatsapp/index.ts`
-- `supabase/functions/integration-asaas/index.ts`
-- `supabase/functions/integration-slack/index.ts`
-- `supabase/functions/integration-piperun/index.ts`
-- `supabase/functions/integration-email/index.ts`
-
-### Estrutura do bloco de auth (inserido apos OPTIONS check, antes de parse body)
-
-```typescript
-// Webhook bypass — external services don't send JWT
-const rawBody = await req.text();
-const body = JSON.parse(rawBody);
-if (body.action === "webhook") {
-  // process webhook without auth...
-}
-
-// Auth for all other actions
-const authHeader = req.headers.get("Authorization");
-if (!authHeader?.startsWith("Bearer ")) { return 401 }
-const userClient = createClient(url, anonKey, { headers: { Authorization: authHeader } });
-const { data: { user } } = await userClient.auth.getUser();
-if (!user) { return 401 }
-const { data: roleCheck } = await supabase.rpc("get_user_role", { _user_id: user.id });
-if (!["admin","manager","csm"].includes(roleCheck)) { return 403 }
-```
-
-Nota: como `req.json()` so pode ser chamado uma vez, o body sera parsed via `req.text()` + `JSON.parse()` para permitir o check de webhook antes do auth.
-
-## Finding 2: Transcripts expostos via `OR matched = false`
-
-Criar migracao SQL que:
-1. Remove a policy atual `"Users see transcripts of visible offices"`
-2. Recria sem o `OR matched = false`
-3. Adiciona policy separada para admins verem transcripts nao vinculados
+Criar tabela para rastrear cada importacao realizada, armazenando os IDs dos registros criados para permitir rollback.
 
 ```sql
-DROP POLICY IF EXISTS "Users see transcripts of visible offices" ON public.meeting_transcripts;
-
-CREATE POLICY "Users see transcripts of visible offices" ON public.meeting_transcripts
-FOR SELECT TO authenticated USING (
-  meeting_id IN (SELECT id FROM public.meetings WHERE office_id IN (SELECT get_visible_office_ids(auth.uid())))
+CREATE TABLE public.import_batches (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  entity_type text NOT NULL,        -- 'offices', 'contacts', etc.
+  table_name text NOT NULL,
+  record_ids uuid[] NOT NULL DEFAULT '{}',
+  record_count integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  undone_at timestamptz           -- NULL = ativo, preenchido = desfeito
 );
 
-CREATE POLICY "Admin can see unmatched transcripts" ON public.meeting_transcripts
-FOR SELECT TO authenticated USING (
-  matched = false AND has_role(auth.uid(), 'admin')
-);
+ALTER TABLE public.import_batches ENABLE ROW LEVEL SECURITY;
+
+-- Apenas admin e manager podem ver/gerenciar batches
+CREATE POLICY "Admin can manage import_batches" ON public.import_batches
+  FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin')) WITH CHECK (has_role(auth.uid(), 'admin'));
+
+CREATE POLICY "Manager can manage import_batches" ON public.import_batches
+  FOR ALL TO authenticated USING (has_role(auth.uid(), 'manager')) WITH CHECK (has_role(auth.uid(), 'manager'));
+
+CREATE POLICY "Users can view own batches" ON public.import_batches
+  FOR SELECT TO authenticated USING (user_id = auth.uid());
 ```
 
-## Resumo
+## 2. Modificar `ImportWizard.tsx`
 
-- 5 edge functions corrigidas com auth JWT + RBAC
-- 1 migracao SQL para corrigir policy de transcripts
-- Total: 6 arquivos modificados
+Apos cada importacao bem-sucedida:
+- Coletar todos os IDs inseridos (capturar retorno do `.insert().select('id')`)
+- Inserir um registro em `import_batches` com os IDs
+- Exibir no resultado a opcao de "Desfazer importacao"
+
+## 3. Nova secao "Historico de Importacoes" no `ImportExportTab.tsx`
+
+- Listar as ultimas importacoes de `import_batches` (onde `undone_at IS NULL`)
+- Cada item mostra: data, entidade, quantidade, usuario
+- Botao "Desfazer" com confirmacao (AlertDialog)
+- Ao desfazer: deletar os registros pelos IDs armazenados, marcar `undone_at = now()`
+- Registrar no `audit_logs`
+
+## 4. Nova secao "Exclusao em Massa" no `ImportExportTab.tsx`
+
+- Cards para cada entidade (Clientes, Contatos, Contratos, Reunioes)
+- Ao clicar, abre dialog com:
+  - Filtros opcionais (status, produto, CSM)
+  - Preview da quantidade de registros que serao deletados
+  - Campo de confirmacao (digitar "EXCLUIR" para confirmar)
+  - Botao de exclusao com processamento em lotes
+- Exclusao registra audit_log com detalhes
+- Restrito a Admin apenas
+
+## 5. Componentes novos
+
+- `src/components/import-export/ImportHistorySection.tsx` — lista de batches com botao desfazer
+- `src/components/import-export/BulkDeleteDialog.tsx` — dialog de exclusao em massa
+- `src/components/import-export/UndoImportDialog.tsx` — confirmacao de rollback
+
+## 6. Resumo de arquivos
+
+| Arquivo | Acao |
+|---|---|
+| Migration SQL | Criar tabela `import_batches` com RLS |
+| `src/components/import-export/ImportWizard.tsx` | Capturar IDs e salvar batch |
+| `src/components/import-export/ImportHistorySection.tsx` | Novo: listar batches, desfazer |
+| `src/components/import-export/BulkDeleteDialog.tsx` | Novo: exclusao em massa |
+| `src/components/configuracoes/ImportExportTab.tsx` | Adicionar secoes de historico e exclusao |
 
