@@ -1,3 +1,4 @@
+import logo from '@/assets/logo.png';
 import {
   LayoutDashboard,
   Building2,
@@ -109,9 +110,7 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader className="py-6 px-5">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary shadow-sm">
-            <span className="text-sm font-bold text-primary-foreground">C</span>
-          </div>
+          <img src={logo} alt="Contador CEO" className="h-9 w-auto" />
           {!collapsed && (
             <div className="flex flex-col">
               <span className="text-sm font-bold text-foreground">Contador CEO</span>
