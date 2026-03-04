@@ -12,8 +12,9 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Loader2, Package, Route, Users, Trash2, Edit2, Save, ShieldCheck } from 'lucide-react';
+import { Plus, Loader2, Package, Route, Users, Trash2, Edit2, Heart } from 'lucide-react';
 import { toast } from 'sonner';
+import { HealthScoreTab } from '@/components/configuracoes/HealthScoreTab';
 
 // ─── Products Tab ────────────────────────────────────────────
 function ProductsTab() {
@@ -106,7 +107,6 @@ function ProductsTab() {
           </TableBody>
         </Table>
       </Card>
-
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>{editProduct ? 'Editar Produto' : 'Novo Produto'}</DialogTitle></DialogHeader>
@@ -166,51 +166,28 @@ function JourneyStagesTab() {
   useEffect(() => { fetchStages(); }, [fetchStages]);
 
   const openNew = () => {
-    setEditStage(null);
-    setName('');
-    setDescription('');
-    setSlaDays('');
-    setPosition(String(stages.length));
-    setDialogOpen(true);
+    setEditStage(null); setName(''); setDescription(''); setSlaDays(''); setPosition(String(stages.length)); setDialogOpen(true);
   };
-
   const openEdit = (s: any) => {
-    setEditStage(s);
-    setName(s.name);
-    setDescription(s.description || '');
-    setSlaDays(s.sla_days ? String(s.sla_days) : '');
-    setPosition(String(s.position));
-    setDialogOpen(true);
+    setEditStage(s); setName(s.name); setDescription(s.description || ''); setSlaDays(s.sla_days ? String(s.sla_days) : ''); setPosition(String(s.position)); setDialogOpen(true);
   };
 
   const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    const payload = {
-      name,
-      description: description || null,
-      sla_days: slaDays ? parseInt(slaDays) : null,
-      position: parseInt(position) || 0,
-      product_id: selectedProduct,
-    };
+    e.preventDefault(); setSaving(true);
+    const payload = { name, description: description || null, sla_days: slaDays ? parseInt(slaDays) : null, position: parseInt(position) || 0, product_id: selectedProduct };
     if (editStage) {
       const { error } = await supabase.from('journey_stages').update(payload).eq('id', editStage.id);
-      if (error) toast.error('Erro: ' + error.message);
-      else toast.success('Etapa atualizada!');
+      if (error) toast.error('Erro: ' + error.message); else toast.success('Etapa atualizada!');
     } else {
       const { error } = await supabase.from('journey_stages').insert(payload);
-      if (error) toast.error('Erro: ' + error.message);
-      else toast.success('Etapa criada!');
+      if (error) toast.error('Erro: ' + error.message); else toast.success('Etapa criada!');
     }
-    setSaving(false);
-    setDialogOpen(false);
-    fetchStages();
+    setSaving(false); setDialogOpen(false); fetchStages();
   };
 
   const handleDelete = async (id: string) => {
     const { error } = await supabase.from('journey_stages').delete().eq('id', id);
-    if (error) toast.error('Erro: ' + error.message);
-    else { toast.success('Etapa removida!'); fetchStages(); }
+    if (error) toast.error('Erro: ' + error.message); else { toast.success('Etapa removida!'); fetchStages(); }
   };
 
   return (
@@ -218,27 +195,18 @@ function JourneyStagesTab() {
       <div className="flex items-center justify-between">
         <Select value={selectedProduct} onValueChange={setSelectedProduct}>
           <SelectTrigger className="w-[220px]"><SelectValue placeholder="Produto" /></SelectTrigger>
-          <SelectContent>
-            {products.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-          </SelectContent>
+          <SelectContent>{products.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
         </Select>
         <Button size="sm" onClick={openNew} disabled={!selectedProduct}><Plus className="mr-1 h-4 w-4" />Nova Etapa</Button>
       </div>
-
       {stages.length === 0 ? (
         <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">Nenhuma etapa configurada.</CardContent></Card>
       ) : (
         <Card>
           <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Posição</TableHead>
-                <TableHead>Nome</TableHead>
-                <TableHead>Descrição</TableHead>
-                <TableHead>SLA (dias)</TableHead>
-                <TableHead></TableHead>
-              </TableRow>
-            </TableHeader>
+            <TableHeader><TableRow>
+              <TableHead>Posição</TableHead><TableHead>Nome</TableHead><TableHead>Descrição</TableHead><TableHead>SLA (dias)</TableHead><TableHead></TableHead>
+            </TableRow></TableHeader>
             <TableBody>
               {stages.map(s => (
                 <TableRow key={s.id}>
@@ -258,7 +226,6 @@ function JourneyStagesTab() {
           </Table>
         </Card>
       )}
-
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>{editStage ? 'Editar Etapa' : 'Nova Etapa'}</DialogTitle></DialogHeader>
@@ -294,41 +261,28 @@ function UsersTab() {
   useEffect(() => { fetch(); }, [fetch]);
 
   const updateRole = async (userId: string, newRole: string) => {
-    // Check if user already has a role
     const { data: existing } = await supabase.from('user_roles').select('id').eq('user_id', userId).single();
     if (existing) {
       const { error } = await supabase.from('user_roles').update({ role: newRole as any }).eq('user_id', userId);
-      if (error) toast.error('Erro: ' + error.message);
-      else { toast.success('Role atualizado!'); fetch(); }
+      if (error) toast.error('Erro: ' + error.message); else { toast.success('Role atualizado!'); fetch(); }
     } else {
       const { error } = await supabase.from('user_roles').insert({ user_id: userId, role: newRole as any });
-      if (error) toast.error('Erro: ' + error.message);
-      else { toast.success('Role atribuído!'); fetch(); }
+      if (error) toast.error('Erro: ' + error.message); else { toast.success('Role atribuído!'); fetch(); }
     }
   };
 
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>;
 
-  const roleLabels: Record<string, string> = {
-    admin: 'Admin',
-    manager: 'Gestor',
-    csm: 'CSM',
-    viewer: 'Viewer',
-    client: 'Cliente',
-  };
+  const roleLabels: Record<string, string> = { admin: 'Admin', manager: 'Gestor', csm: 'CSM', viewer: 'Viewer', client: 'Cliente' };
 
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">{users.length} usuário{users.length !== 1 ? 's' : ''}</p>
       <Card>
         <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nome</TableHead>
-              <TableHead>Telefone</TableHead>
-              <TableHead>Role</TableHead>
-            </TableRow>
-          </TableHeader>
+          <TableHeader><TableRow>
+            <TableHead>Nome</TableHead><TableHead>Telefone</TableHead><TableHead>Role</TableHead>
+          </TableRow></TableHeader>
           <TableBody>
             {users.map(u => (
               <TableRow key={u.id}>
@@ -336,13 +290,9 @@ function UsersTab() {
                 <TableCell className="text-muted-foreground">{u.phone || '—'}</TableCell>
                 <TableCell>
                   <Select value={u.role} onValueChange={(val) => updateRole(u.id, val)}>
-                    <SelectTrigger className="w-[140px] h-8">
-                      <SelectValue />
-                    </SelectTrigger>
+                    <SelectTrigger className="w-[140px] h-8"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {Object.entries(roleLabels).map(([k, v]) => (
-                        <SelectItem key={k} value={k}>{v}</SelectItem>
-                      ))}
+                      {Object.entries(roleLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </TableCell>
@@ -363,16 +313,19 @@ export default function Configuracoes() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Configurações</h1>
-        <p className="text-sm text-muted-foreground">Gerencie produtos, etapas da jornada e usuários</p>
+        <p className="text-sm text-muted-foreground">Gerencie produtos, etapas, health score e usuários</p>
       </div>
 
       <Tabs defaultValue="produtos" className="space-y-4">
-        <TabsList>
+        <TabsList className="flex-wrap">
           <TabsTrigger value="produtos" className="gap-1.5">
             <Package className="h-4 w-4" />Produtos
           </TabsTrigger>
           <TabsTrigger value="jornada" className="gap-1.5">
             <Route className="h-4 w-4" />Etapas da Jornada
+          </TabsTrigger>
+          <TabsTrigger value="health" className="gap-1.5">
+            <Heart className="h-4 w-4" />Health Score
           </TabsTrigger>
           {isAdmin && (
             <TabsTrigger value="usuarios" className="gap-1.5">
@@ -383,6 +336,7 @@ export default function Configuracoes() {
 
         <TabsContent value="produtos"><ProductsTab /></TabsContent>
         <TabsContent value="jornada"><JourneyStagesTab /></TabsContent>
+        <TabsContent value="health"><HealthScoreTab /></TabsContent>
         {isAdmin && <TabsContent value="usuarios"><UsersTab /></TabsContent>}
       </Tabs>
     </div>

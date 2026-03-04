@@ -14,6 +14,53 @@ export type Database = {
   }
   public: {
     Tables: {
+      action_plans: {
+        Row: {
+          created_at: string
+          created_by: string
+          description: string | null
+          due_date: string | null
+          id: string
+          observations: string | null
+          office_id: string
+          status: Database["public"]["Enums"]["action_plan_status"]
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          observations?: string | null
+          office_id: string
+          status?: Database["public"]["Enums"]["action_plan_status"]
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          observations?: string | null
+          office_id?: string
+          status?: Database["public"]["Enums"]["action_plan_status"]
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "action_plans_office_id_fkey"
+            columns: ["office_id"]
+            isOneToOne: false
+            referencedRelation: "offices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       activities: {
         Row: {
           completed_at: string | null
@@ -309,6 +356,196 @@ export type Database = {
         }
         Relationships: []
       }
+      health_indicators: {
+        Row: {
+          created_at: string
+          data_key: string | null
+          data_source: string | null
+          id: string
+          name: string
+          pillar_id: string
+          updated_at: string
+          weight: number
+        }
+        Insert: {
+          created_at?: string
+          data_key?: string | null
+          data_source?: string | null
+          id?: string
+          name: string
+          pillar_id: string
+          updated_at?: string
+          weight?: number
+        }
+        Update: {
+          created_at?: string
+          data_key?: string | null
+          data_source?: string | null
+          id?: string
+          name?: string
+          pillar_id?: string
+          updated_at?: string
+          weight?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "health_indicators_pillar_id_fkey"
+            columns: ["pillar_id"]
+            isOneToOne: false
+            referencedRelation: "health_pillars"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      health_overrides: {
+        Row: {
+          action: Database["public"]["Enums"]["health_override_action"]
+          condition_type: string
+          created_at: string
+          id: string
+          product_id: string
+          reduction_points: number | null
+          threshold: number
+          updated_at: string
+        }
+        Insert: {
+          action?: Database["public"]["Enums"]["health_override_action"]
+          condition_type: string
+          created_at?: string
+          id?: string
+          product_id: string
+          reduction_points?: number | null
+          threshold?: number
+          updated_at?: string
+        }
+        Update: {
+          action?: Database["public"]["Enums"]["health_override_action"]
+          condition_type?: string
+          created_at?: string
+          id?: string
+          product_id?: string
+          reduction_points?: number | null
+          threshold?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "health_overrides_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      health_pillars: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          position: number
+          product_id: string
+          updated_at: string
+          weight: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          position?: number
+          product_id: string
+          updated_at?: string
+          weight?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          position?: number
+          product_id?: string
+          updated_at?: string
+          weight?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "health_pillars_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      health_playbooks: {
+        Row: {
+          activity_template: Json
+          band: Database["public"]["Enums"]["health_band"]
+          created_at: string
+          id: string
+          product_id: string
+          updated_at: string
+        }
+        Insert: {
+          activity_template?: Json
+          band: Database["public"]["Enums"]["health_band"]
+          created_at?: string
+          id?: string
+          product_id: string
+          updated_at?: string
+        }
+        Update: {
+          activity_template?: Json
+          band?: Database["public"]["Enums"]["health_band"]
+          created_at?: string
+          id?: string
+          product_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "health_playbooks_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      health_scores: {
+        Row: {
+          band: Database["public"]["Enums"]["health_band"]
+          breakdown: Json | null
+          calculated_at: string
+          id: string
+          office_id: string
+          score: number
+        }
+        Insert: {
+          band?: Database["public"]["Enums"]["health_band"]
+          breakdown?: Json | null
+          calculated_at?: string
+          id?: string
+          office_id: string
+          score?: number
+        }
+        Update: {
+          band?: Database["public"]["Enums"]["health_band"]
+          breakdown?: Json | null
+          calculated_at?: string
+          id?: string
+          office_id?: string
+          score?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "health_scores_office_id_fkey"
+            columns: ["office_id"]
+            isOneToOne: true
+            referencedRelation: "offices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       journey_stages: {
         Row: {
           created_at: string
@@ -379,6 +616,7 @@ export type Database = {
           notes: string | null
           office_id: string
           scheduled_at: string
+          share_with_client: boolean
           status: Database["public"]["Enums"]["meeting_status"]
           title: string
           transcript: string | null
@@ -392,6 +630,7 @@ export type Database = {
           notes?: string | null
           office_id: string
           scheduled_at: string
+          share_with_client?: boolean
           status?: Database["public"]["Enums"]["meeting_status"]
           title: string
           transcript?: string | null
@@ -405,6 +644,7 @@ export type Database = {
           notes?: string | null
           office_id?: string
           scheduled_at?: string
+          share_with_client?: boolean
           status?: Database["public"]["Enums"]["meeting_status"]
           title?: string
           transcript?: string | null
@@ -640,10 +880,13 @@ export type Database = {
       }
     }
     Enums: {
+      action_plan_status: "pending" | "in_progress" | "done" | "cancelled"
       activity_priority: "low" | "medium" | "high" | "urgent"
       activity_type: "task" | "follow_up" | "onboarding" | "renewal" | "other"
       app_role: "admin" | "manager" | "csm" | "viewer" | "client"
       contract_status: "ativo" | "encerrado" | "cancelado" | "pendente"
+      health_band: "red" | "yellow" | "green"
+      health_override_action: "force_red" | "reduce_score"
       meeting_status: "scheduled" | "completed" | "cancelled"
       office_status:
         | "ativo"
@@ -779,10 +1022,13 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      action_plan_status: ["pending", "in_progress", "done", "cancelled"],
       activity_priority: ["low", "medium", "high", "urgent"],
       activity_type: ["task", "follow_up", "onboarding", "renewal", "other"],
       app_role: ["admin", "manager", "csm", "viewer", "client"],
       contract_status: ["ativo", "encerrado", "cancelado", "pendente"],
+      health_band: ["red", "yellow", "green"],
+      health_override_action: ["force_red", "reduce_score"],
       meeting_status: ["scheduled", "completed", "cancelled"],
       office_status: [
         "ativo",
