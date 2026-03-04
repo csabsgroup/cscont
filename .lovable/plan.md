@@ -1,160 +1,175 @@
 
 
-# Plano de Implementacao — 7 Blocos SenseData
+# Implementation Plan — 5 Blocks
 
-Este e um conjunto massivo de mudancas. Vou dividir a implementacao em fases incrementais para garantir qualidade. Abaixo esta o plano completo.
-
----
-
-## Fase 1: Fundacao (Blocos 5 e 1)
-
-### Bloco 5 — Componente Reutilizavel ActivityCounterBadges
-
-Criar `src/components/shared/ActivityCounterBadges.tsx`:
-- Props: `counts: { todas, atrasadas, vencemHoje, aVencer, concluidas }` + `onFilter?: (filter: string) => void` + variant opcional para reunioes
-- 5 badges horizontais com cores definidas (cinza-escuro, vermelho, laranja, verde, azul)
-- Layout: `flex gap-3 justify-center`, cada badge com `rounded-lg px-6 py-3`, numero `text-3xl font-bold`, label `text-xs uppercase`
-- Badge clicavel emite filtro via callback
-
-### Bloco 1 — NavigationTabs + Sidebar Simplificada
-
-**Criar `src/components/NavigationTabs.tsx`:**
-- 8 tabs horizontais com icones (Home, CheckSquare, Building2, FileText, DollarSign, Phone, Kanban, BarChart3)
-- Rotas: `/` (Minha Carteira), `/atividades`, `/clientes`, `/contratos`, `/financeiro`, `/contatos`, `/jornada`, `/relatorios`
-- Estilo: fundo branco, `border-b border-gray-200`, tab ativa com `text-red-700 border-b-2 border-red-600 bg-red-50 rounded-t-lg`
-- Scroll horizontal em mobile (`overflow-x-auto`)
-- Usa `useLocation()` para tab ativa
-
-**Modificar `AppLayout.tsx`:**
-- Renderizar NavigationTabs entre header e main content
-- Nao mostrar tabs em rotas `/clientes/:id` (360)
-
-**Modificar `AppSidebar.tsx`:**
-- Renomear "Dashboard" para "Minha Carteira"
-- Simplificar: Operacao (Minha Carteira, Jornada), Gestao (Relatorios, Configuracoes, Auditoria)
-- Remover itens duplicados das tabs (Atividades, Clientes, Contratos, etc. ja acessiveis via tabs)
-
-**Modificar `Dashboard.tsx`:**
-- Renomear titulo de "Dashboard" para "Minha Carteira"
-
-**Adicionar rota `/financeiro`:**
-- Criar pagina `src/pages/Financeiro.tsx` (pode comecar como redirect ou pagina simples agregando dados financeiros de contratos)
-- Adicionar rota em `App.tsx`
-
-**Atualizar `pageNames` no AppLayout** para refletir "Minha Carteira"
+## Overview
+Restructure Settings page with sidebar layout, add per-product 360 config, build automation engine, improve Piperun field picker, and compact Kanban columns.
 
 ---
 
-## Fase 2: Minha Carteira Redesign (Bloco 2)
+## Database Migrations Required
 
-**Reestruturar `Dashboard.tsx`:**
+### Migration 1: `product_360_config` table
+```sql
+CREATE TABLE public.product_360_config (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  product_id uuid NOT NULL,
+  config_type text NOT NULL, -- 'indicators' | 'fields' | 'tabs'
+  items jsonb NOT NULL DEFAULT '[]',
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  updated_by uuid
+);
+ALTER TABLE public.product_360_config ENABLE ROW LEVEL SECURITY;
+CREATE UNIQUE INDEX idx_product_360_config_unique ON public.product_360_config(product_id, config_type);
+-- RLS: Admin full, authenticated read
+```
 
-Secao 1 — Indicadores:
-- Lado esquerdo: Health Score medio grande com cor, distribuicao por faixa (barras vermelha/amarela/verde com contagens)
-- Lado direito: Grid 2x4 de KPIs compactos (MRR, Variacao MRR, MRR em Risco, MRR Expansao, Clientes Ativos, Novos, Em Risco, Expansao)
-- Cada KPI: card com label `text-xs uppercase text-gray-400`, valor `text-lg font-bold`, tooltip info
+### Migration 2: `automation_rules` table
+```sql
+CREATE TABLE public.automation_rules (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  product_id uuid NOT NULL,
+  rule_type text NOT NULL, -- 'distribution' | 'onboarding_tasks' | 'stage_tasks' | 'health_playbook'
+  config jsonb NOT NULL DEFAULT '{}',
+  is_active boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  updated_by uuid
+);
+ALTER TABLE public.automation_rules ENABLE ROW LEVEL SECURITY;
+-- RLS: Admin full manage, authenticated read
+```
 
-Secao 2 — ActivityCounterBadges (componente do Bloco 5):
-- Contar atividades globais do CSM (ou time para admin/manager)
-- Clicar filtra a lista abaixo
-
-Secao 3 — Lista de Atividades:
-- Botoes "ADICIONAR ATIVIDADE" e "ADICIONAR PLAYBOOK" (outlined vermelho)
-- Filtro + dropdown categoria
-- Tabela com colunas: checkbox, tipo/descricao, responsavel (avatar), cliente (link 360), categoria, data
-- Paginacao
-
----
-
-## Fase 3: Kanban 3 Visoes (Bloco 3)
-
-**Modificar `Jornada.tsx`:**
-
-- Adicionar toggle de 3 visoes (Lista | Quadro | Tabela) no canto superior direito
-- Mover filtros para area comum acima das visoes
-- Adicionar ActivityCounterBadges com contagens dos escritorios visiveis
-- Titulo da jornada: "[NOME] - (X Clientes)"
-
-**Visao Quadro (redesign):**
-- Headers cinza (`bg-gray-200 rounded-t-lg`)
-- Cards com borda esquerda colorida por health (4px)
-- Card: health score + nome (link) + CSM (avatar) + barra progresso tarefas
-- Drag & drop mantido
-
-**Criar componentes auxiliares:**
-- `src/components/jornada/JornadaListView.tsx` — tabela flat com colunas ordenáveis
-- `src/components/jornada/JornadaTableView.tsx` — estilo planilha compacto com colunas configuráveis
-
----
-
-## Fase 4: Visao 360 Redesign (Bloco 4)
-
-**Reestruturar `Cliente360.tsx`:**
-
-Header redesenhado:
-- Logo circular 48px + nome + health score visual (numero em circulo + 10 barrinhas verticais)
-- Botoes: Ver como cliente, Editar, menu ...
-
-Tabs horizontais do 360 (substituir TabsList atual):
-- Visao 360, Atividades (N), Arquivos (N), Contratos, Historico, Contatos (N), Notas (N), Formularios, Plano de Acao, Cashback
-- Tab ativa: `bg-red-50 text-red-700 border-b-2 border-red-600`
-
-Aba "Visao 360" (nova aba principal):
-- Grid 4 colunas de campos informativos com "VER MAIS INFORMACOES" expansivel
-- Grid 4 colunas de cards indicadores grandes (Health, NPS, Dias sem Reuniao, Tarefas OKR, Parcelas Atraso, LTV, Cobertura, Dias Renovacao)
-- Cada card com "VER DETALHES" linkando para aba correspondente
+### Migration 3: `automation_executions` table (idempotency)
+```sql
+CREATE TABLE public.automation_executions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  rule_id uuid NOT NULL,
+  office_id uuid NOT NULL,
+  context_key text NOT NULL, -- e.g. 'onboarding' or stage_id
+  executed_at timestamptz NOT NULL DEFAULT now(),
+  result jsonb DEFAULT '{}'
+);
+ALTER TABLE public.automation_executions ENABLE ROW LEVEL SECURITY;
+CREATE UNIQUE INDEX idx_automation_exec_unique ON public.automation_executions(rule_id, office_id, context_key);
+-- RLS: Admin manage, visible offices read
+```
 
 ---
 
-## Fase 5: Portal Calendario + Piperun + Cashback (Blocos 6, 7)
+## Block 1 — Settings Sidebar Layout
 
-### Bloco 6 — Portal Calendario
-- Toggle Lista/Calendario em `PortalEventos.tsx`
-- Criar `src/components/portal/PortalCalendar.tsx` com CSS Grid (7 colunas)
-- Fetch events + meetings (share_with_client=true)
-- Navegacao mes, hoje destacado, click em dia expande itens
-
-### Bloco 7.1 — Piperun Refinado
-- Modificar `PiperunConfig.tsx`: adicionar filtro status=won na importacao
-- Secao "Mapeamento de Campos" com tabela de/para editavel
-- Mapeamentos default pre-definidos salvos no config jsonb
-- Adicionar acao `listFields` na edge function para buscar campos do Piperun
-- Modificar `importDeals` para aplicar mapeamento e filtrar por status=won
-
-### Bloco 7.2 — Cashback Notificacao
-- Modificar portal de bonus: ao criar bonus_request, criar atividade automatica para CSM
-- Se Slack integrado, enviar notificacao
-- Badge de contagem de solicitacoes pendentes na sidebar/header
-- Destacar pendentes na aba Cashback do 360 com `bg-amber-50`
+**Modify `src/pages/Configuracoes.tsx`:**
+- Replace `<Tabs>` with a two-panel layout: left sidebar (240px) + right content area
+- Sidebar has grouped menu items with categories as headers
+- State: `selectedSection` string controlling which component renders on the right
+- Add breadcrumb at top of content area
+- Mobile: sidebar becomes a `<Select>` dropdown
+- New sections added: "Visão 360" (Block 2), "Automações" (Block 3) — load new components
+- Existing tab components (ProductsTab, JourneyStagesTab, etc.) remain unchanged, just rendered conditionally
 
 ---
 
-## Arquivos Novos
+## Block 2 — 360 Config per Product
 
-- `src/components/shared/ActivityCounterBadges.tsx`
-- `src/components/NavigationTabs.tsx`
-- `src/pages/Financeiro.tsx`
-- `src/components/jornada/JornadaListView.tsx`
-- `src/components/jornada/JornadaTableView.tsx`
-- `src/components/portal/PortalCalendar.tsx`
+**Create `src/components/configuracoes/Visao360ConfigTab.tsx`:**
+- Product selector at top (tabs or dropdown)
+- Two sub-sections: "Campos e Indicadores" and "Abas Visíveis"
+- Indicators section: list with toggle + drag handle (using @hello-pangea/dnd for vertical reorder)
+- Fields section: same pattern
+- Tabs section: toggles per tab (Visão 360 always on, not toggleable)
+- "Copiar de outro produto" button
+- Save per section to `product_360_config` table
+- Fallback: if no config exists, show everything enabled
 
-## Arquivos Modificados
+**Modify `src/pages/Cliente360.tsx`:**
+- On load, fetch `product_360_config` for the office's active product
+- Filter `tabs360` array based on tab config
+- Pass indicator/field config to `ClienteVisao360` to filter what's shown
 
-- `src/components/AppLayout.tsx` — adicionar NavigationTabs, renomear pageNames
-- `src/components/AppSidebar.tsx` — simplificar itens
-- `src/pages/Dashboard.tsx` — redesign completo "Minha Carteira"
-- `src/pages/Jornada.tsx` — 3 visoes + redesign cards
-- `src/pages/Cliente360.tsx` — header + tabs + aba Visao 360
-- `src/pages/Atividades.tsx` — usar ActivityCounterBadges
-- `src/pages/Reunioes.tsx` — usar ActivityCounterBadges adaptado
-- `src/pages/portal/PortalEventos.tsx` — toggle + calendario
-- `src/components/configuracoes/integrations/PiperunConfig.tsx` — mapeamento + status won
-- `supabase/functions/integration-piperun/index.ts` — listFields + importacao refinada
-- `src/App.tsx` — rota /financeiro
+---
 
-## Consideracoes
+## Block 3 — Automation Engine
 
-- Nao ha necessidade de migracoes de banco; todos os dados necessarios ja existem nas tabelas atuais
-- A implementacao sera feita em multiplas iteracoes dado o volume (~15+ arquivos, ~3000+ linhas de codigo)
-- Prioridade: Blocos 5 → 1 → 2 → 3 → 4 → 6 → 7
+**Create `src/components/configuracoes/AutomationDistributionTab.tsx`:**
+- Per-product config: method dropdown (Manual/Least clients/Round-robin/Fixed)
+- CSM eligibility toggles per product
+- Save to `automation_rules` with `rule_type='distribution'`
+
+**Create `src/components/configuracoes/AutomationOnboardingTab.tsx`:**
+- Per-product list of onboarding activity templates
+- CRUD: type dropdown, title, due_days, description, checklist items
+- Drag to reorder
+- Save to `automation_rules` with `rule_type='onboarding_tasks'`
+
+**Create `src/components/configuracoes/AutomationStageTasksTab.tsx`:**
+- Product selector + stage selector
+- Activity templates per stage
+- Save to `automation_rules` with `rule_type='stage_tasks'`
+
+**Create edge function `execute-automations/index.ts`:**
+- Actions: `onNewOffice` (distribution + onboarding tasks), `onStageChange` (stage tasks)
+- Checks `automation_executions` for idempotency before creating activities
+- Called from client-side after office creation or stage move
+
+---
+
+## Block 4 — Piperun Field Picker
+
+**Create `src/components/configuracoes/integrations/PiperunFieldPicker.tsx`:**
+- Modal/popover with search input at top
+- List of Piperun fields fetched from edge function `listFields` action
+- Each field shows icon + name + example value
+- Click selects and closes
+- Cache fields in component state (1 hour TTL)
+
+**Add `listFields` action to `integration-piperun/index.ts`:**
+- GET Piperun API for deal fields
+- Return array of `{key, label, example_value}`
+
+**Modify `PiperunConfig.tsx`:**
+- Replace right-side Input with PiperunFieldPicker trigger
+- Left side: dropdown of CRM fields (offices columns)
+- Add/remove mapping rows
+- "Restaurar padrão" button
+
+---
+
+## Block 5 — Kanban Compact Columns
+
+**Modify `src/pages/Jornada.tsx` (board view section):**
+- Column width: `w-[240px]` instead of `w-[300px]`
+- Gap: `gap-3` instead of `gap-4`
+- Card padding: `p-2.5`
+- Card content: max 3 lines
+  - Line 1: Health badge + truncated name
+  - Line 2: CSM avatar (tooltip for name) + tasks fraction + progress bar (h-1)
+  - Line 3: Optional renewal/overdue badge
+- Column header: `py-1.5 px-2 text-sm`
+- Remove CSM name text, show only avatar with title tooltip
+- Remove status badge row
+- Add scroll shadow indicators on container edges
+
+---
+
+## Files Summary
+
+**New files (7):**
+- `src/components/configuracoes/Visao360ConfigTab.tsx`
+- `src/components/configuracoes/AutomationDistributionTab.tsx`
+- `src/components/configuracoes/AutomationOnboardingTab.tsx`
+- `src/components/configuracoes/AutomationStageTasksTab.tsx`
+- `src/components/configuracoes/integrations/PiperunFieldPicker.tsx`
+- `supabase/functions/execute-automations/index.ts`
+
+**Modified files (4):**
+- `src/pages/Configuracoes.tsx` — sidebar layout
+- `src/pages/Cliente360.tsx` — respect product 360 config
+- `src/pages/Jornada.tsx` — compact kanban
+- `supabase/functions/integration-piperun/index.ts` — add listFields action
+- `src/components/configuracoes/integrations/PiperunConfig.tsx` — use PiperunFieldPicker
+
+**3 DB migrations** for new tables.
+
+Implementation will proceed in order: DB migrations → Block 1 → Block 5 → Block 2 → Block 4 → Block 3.
 
