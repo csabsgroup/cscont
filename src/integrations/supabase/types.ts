@@ -182,6 +182,66 @@ export type Database = {
         }
         Relationships: []
       }
+      automation_executions: {
+        Row: {
+          context_key: string
+          executed_at: string
+          id: string
+          office_id: string
+          result: Json | null
+          rule_id: string
+        }
+        Insert: {
+          context_key: string
+          executed_at?: string
+          id?: string
+          office_id: string
+          result?: Json | null
+          rule_id: string
+        }
+        Update: {
+          context_key?: string
+          executed_at?: string
+          id?: string
+          office_id?: string
+          result?: Json | null
+          rule_id?: string
+        }
+        Relationships: []
+      }
+      automation_rules: {
+        Row: {
+          config: Json
+          created_at: string
+          id: string
+          is_active: boolean
+          product_id: string
+          rule_type: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          config?: Json
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          product_id: string
+          rule_type: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          config?: Json
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          product_id?: string
+          rule_type?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       bonus_catalog: {
         Row: {
           created_at: string
@@ -1373,6 +1433,33 @@ export type Database = {
           id?: string
           setting_key?: string
           setting_value?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      product_360_config: {
+        Row: {
+          config_type: string
+          id: string
+          items: Json
+          product_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          config_type: string
+          id?: string
+          items?: Json
+          product_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          config_type?: string
+          id?: string
+          items?: Json
+          product_id?: string
           updated_at?: string
           updated_by?: string | null
         }
