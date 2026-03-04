@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AppLayout } from "@/components/AppLayout";
 import { PortalLayout } from "@/components/portal/PortalLayout";
 import Auth from "@/pages/Auth";
@@ -71,13 +72,14 @@ function PortalRoute({ children }: { children: React.ReactNode }) {
 }
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AuthProvider>
-          <Routes>
+  <ThemeProvider>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <AuthProvider>
+            <Routes>
             <Route path="/auth" element={<Auth />} />
             <Route path="/portal/login" element={<PortalLogin />} />
             <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
@@ -104,11 +106,12 @@ const App = () => (
             <Route path="/portal/membros" element={<PortalRoute><PortalMembros /></PortalRoute>} />
             <Route path="/portal/arquivos" element={<PortalRoute><PortalArquivos /></PortalRoute>} />
             <Route path="*" element={<NotFound />} />
-          </Routes>
-        </AuthProvider>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
+            </Routes>
+          </AuthProvider>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  </ThemeProvider>
 );
 
 export default App;

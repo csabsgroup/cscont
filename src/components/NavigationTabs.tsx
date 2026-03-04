@@ -22,7 +22,7 @@ export function NavigationTabs() {
   };
 
   return (
-    <div className="bg-white border-b border-gray-200 overflow-x-auto">
+    <div className="bg-card border-b border-border overflow-x-auto">
       <nav className="flex min-w-max px-2">
         {tabs.map((tab) => {
           const active = isActive(tab.path);
@@ -33,8 +33,8 @@ export function NavigationTabs() {
               className={cn(
                 'flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap border-b-2',
                 active
-                  ? 'text-red-700 border-red-600 bg-red-50 rounded-t-lg'
-                  : 'text-gray-500 border-transparent hover:text-gray-700 hover:bg-gray-50'
+                  ? 'text-primary border-primary bg-primary/5 rounded-t-lg'
+                  : 'text-muted-foreground border-transparent hover:text-foreground hover:bg-muted/50'
               )}
             >
               <tab.icon className="h-4 w-4" />
