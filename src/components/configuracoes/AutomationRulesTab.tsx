@@ -67,9 +67,11 @@ const TRIGGER_CATEGORIES = [...new Set(TRIGGERS.map(t => t.category))];
 interface ConditionFieldDef {
   value: string;
   label: string;
+  category: string;
   type: 'enum' | 'number' | 'text' | 'uuid';
   operators: { value: string; label: string }[];
   options?: { value: string; label: string }[];
+  suffix?: string;
 }
 
 const OPERATORS = {
@@ -80,6 +82,9 @@ const OPERATORS = {
   less_than: { value: 'less_than', label: 'Menor que' },
   between: { value: 'between', label: 'Entre' },
   is_in: { value: 'is_in', label: 'Está em' },
+  days_greater_than: { value: 'days_greater_than', label: 'Há mais de X dias' },
+  days_less_than: { value: 'days_less_than', label: 'Há menos de X dias' },
+  days_equal: { value: 'days_equal', label: 'Há exatamente X dias' },
 };
 
 const STATUS_OPTIONS = [
@@ -91,6 +96,13 @@ const STATUS_OPTIONS = [
   { value: 'bonus_elite', label: 'Bônus Elite' },
 ];
 
+const CONTRACT_STATUS_OPTIONS = [
+  { value: 'ativo', label: 'Ativo' },
+  { value: 'encerrado', label: 'Encerrado' },
+  { value: 'cancelado', label: 'Cancelado' },
+  { value: 'pendente', label: 'Pendente' },
+];
+
 const BAND_OPTIONS = [
   { value: 'green', label: 'Verde' },
   { value: 'yellow', label: 'Amarelo' },
@@ -98,24 +110,54 @@ const BAND_OPTIONS = [
 ];
 
 const CONDITION_FIELDS: ConditionFieldDef[] = [
-  { value: 'product_id', label: 'Produto', type: 'uuid', operators: [OPERATORS.equals, OPERATORS.not_equals] },
-  { value: 'status', label: 'Status', type: 'enum', operators: [OPERATORS.equals, OPERATORS.not_equals, OPERATORS.is_in], options: STATUS_OPTIONS },
-  { value: 'health_band', label: 'Health Score (faixa)', type: 'enum', operators: [OPERATORS.equals], options: BAND_OPTIONS },
-  { value: 'health_score', label: 'Health Score (número)', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between] },
-  { value: 'csm_id', label: 'CSM responsável', type: 'uuid', operators: [OPERATORS.equals, OPERATORS.not_equals] },
-  { value: 'journey_stage_id', label: 'Etapa da jornada', type: 'uuid', operators: [OPERATORS.equals, OPERATORS.not_equals] },
-  { value: 'city', label: 'Cidade', type: 'text', operators: [OPERATORS.equals, OPERATORS.contains] },
-  { value: 'state', label: 'Estado', type: 'text', operators: [OPERATORS.equals] },
-  { value: 'installments_overdue', label: 'Parcelas vencidas', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.equals] },
-  { value: 'days_to_renewal', label: 'Dias para renovação', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between] },
-  { value: 'days_without_meeting', label: 'Dias sem reunião', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than] },
-  { value: 'ltv', label: 'LTV', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between] },
-  { value: 'faturamento_mensal', label: 'Faturamento mensal', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between] },
-  { value: 'nps_score', label: 'NPS (última nota)', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.equals] },
-  { value: 'months_as_client', label: 'Tempo como cliente (meses)', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between] },
-  { value: 'okr_completion', label: '% OKR concluído', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than] },
-  { value: 'partner_count', label: 'Qtd de sócios', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.equals] },
+  // ── Cliente / Geral ──
+  { value: 'product_id', label: 'Produto', category: 'Cliente', type: 'uuid', operators: [OPERATORS.equals, OPERATORS.not_equals] },
+  { value: 'status', label: 'Status do cliente', category: 'Cliente', type: 'enum', operators: [OPERATORS.equals, OPERATORS.not_equals, OPERATORS.is_in], options: STATUS_OPTIONS },
+  { value: 'csm_id', label: 'CSM responsável', category: 'Cliente', type: 'uuid', operators: [OPERATORS.equals, OPERATORS.not_equals] },
+  { value: 'journey_stage_id', label: 'Etapa da jornada', category: 'Cliente', type: 'uuid', operators: [OPERATORS.equals, OPERATORS.not_equals] },
+  { value: 'health_band', label: 'Health Score (faixa)', category: 'Cliente', type: 'enum', operators: [OPERATORS.equals], options: BAND_OPTIONS },
+  { value: 'health_score', label: 'Health Score (número)', category: 'Cliente', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between] },
+  { value: 'months_as_client', label: 'Tempo como cliente (meses)', category: 'Cliente', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between] },
+  { value: 'nps_score', label: 'NPS (última nota)', category: 'Cliente', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.equals] },
+  { value: 'ltv', label: 'LTV', category: 'Cliente', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between] },
+  { value: 'okr_completion', label: '% OKR concluído', category: 'Cliente', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than] },
+  { value: 'partner_count', label: 'Qtd de sócios', category: 'Cliente', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.equals] },
+
+  // ── Datas Relativas ──
+  { value: 'days_since_creation', label: 'Dias desde criação', category: 'Datas', type: 'number', operators: [OPERATORS.days_greater_than, OPERATORS.days_less_than, OPERATORS.days_equal, OPERATORS.between], suffix: 'dias' },
+  { value: 'days_since_activation', label: 'Dias desde ativação', category: 'Datas', type: 'number', operators: [OPERATORS.days_greater_than, OPERATORS.days_less_than, OPERATORS.days_equal, OPERATORS.between], suffix: 'dias' },
+  { value: 'days_since_onboarding', label: 'Dias desde onboarding', category: 'Datas', type: 'number', operators: [OPERATORS.days_greater_than, OPERATORS.days_less_than, OPERATORS.days_equal, OPERATORS.between], suffix: 'dias' },
+  { value: 'days_since_first_signature', label: 'Dias desde primeira assinatura', category: 'Datas', type: 'number', operators: [OPERATORS.days_greater_than, OPERATORS.days_less_than, OPERATORS.days_equal, OPERATORS.between], suffix: 'dias' },
+  { value: 'last_activity_completed_days', label: 'Dias desde última atividade concluída', category: 'Datas', type: 'number', operators: [OPERATORS.days_greater_than, OPERATORS.days_less_than, OPERATORS.days_equal], suffix: 'dias' },
+  { value: 'last_meeting_days', label: 'Dias desde última reunião', category: 'Datas', type: 'number', operators: [OPERATORS.days_greater_than, OPERATORS.days_less_than, OPERATORS.days_equal], suffix: 'dias' },
+  { value: 'days_without_meeting', label: 'Dias sem reunião', category: 'Datas', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than], suffix: 'dias' },
+  { value: 'days_to_renewal', label: 'Dias para renovação', category: 'Datas', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between], suffix: 'dias' },
+  { value: 'days_to_contract_end', label: 'Dias para fim do contrato', category: 'Datas', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between], suffix: 'dias' },
+
+  // ── Empresa ──
+  { value: 'segment', label: 'Segmento', category: 'Empresa', type: 'text', operators: [OPERATORS.equals, OPERATORS.not_equals, OPERATORS.contains] },
+  { value: 'city', label: 'Cidade', category: 'Empresa', type: 'text', operators: [OPERATORS.equals, OPERATORS.contains] },
+  { value: 'state', label: 'Estado', category: 'Empresa', type: 'text', operators: [OPERATORS.equals] },
+  { value: 'tags', label: 'Tags', category: 'Empresa', type: 'text', operators: [OPERATORS.contains] },
+  { value: 'cnpj', label: 'CNPJ', category: 'Empresa', type: 'text', operators: [OPERATORS.equals, OPERATORS.contains] },
+  { value: 'qtd_clientes', label: 'Qtd de clientes da empresa', category: 'Empresa', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between] },
+  { value: 'qtd_colaboradores', label: 'Qtd de colaboradores', category: 'Empresa', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between] },
+  { value: 'faturamento_mensal', label: 'Faturamento mensal', category: 'Empresa', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between] },
+  { value: 'faturamento_anual', label: 'Faturamento anual', category: 'Empresa', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between] },
+
+  // ── Contrato ──
+  { value: 'contract_status', label: 'Status do contrato', category: 'Contrato', type: 'enum', operators: [OPERATORS.equals, OPERATORS.not_equals], options: CONTRACT_STATUS_OPTIONS },
+  { value: 'contract_monthly_value', label: 'Valor mensal do contrato', category: 'Contrato', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between] },
+  { value: 'contract_total_value', label: 'Valor total do contrato', category: 'Contrato', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between] },
+  { value: 'installments_overdue', label: 'Parcelas vencidas', category: 'Contrato', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.equals] },
+  { value: 'installments_total', label: 'Total de parcelas', category: 'Contrato', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.equals] },
+
+  // ── Atividades ──
+  { value: 'open_activities_count', label: 'Qtd atividades abertas', category: 'Atividades', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.equals] },
+  { value: 'overdue_activities_count', label: 'Qtd atividades atrasadas', category: 'Atividades', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.equals] },
 ];
+
+const CONDITION_CATEGORIES = [...new Set(CONDITION_FIELDS.map(f => f.category))];
 
 interface Condition {
   field: string;
@@ -409,23 +451,28 @@ export function AutomationRulesTab() {
     }
 
     // Number or text
+    const hasSuffix = !!fieldDef.suffix;
     if (cond.operator === 'between') {
       return (
-        <div className="flex gap-2 flex-1">
+        <div className="flex gap-2 flex-1 items-center">
           <Input type="number" placeholder="De" value={cond.value || ''} onChange={e => updateCondition(idx, { value: e.target.value })} />
           <Input type="number" placeholder="Até" value={cond.value2 || ''} onChange={e => updateCondition(idx, { value2: e.target.value })} />
+          {hasSuffix && <span className="text-xs text-muted-foreground whitespace-nowrap">{fieldDef.suffix}</span>}
         </div>
       );
     }
 
     return (
-      <Input
-        type={fieldDef.type === 'number' ? 'number' : 'text'}
-        placeholder="Valor"
-        value={cond.value || ''}
-        onChange={e => updateCondition(idx, { value: e.target.value })}
-        className="flex-1"
-      />
+      <div className="flex gap-2 flex-1 items-center">
+        <Input
+          type={fieldDef.type === 'number' ? 'number' : 'text'}
+          placeholder="Valor"
+          value={cond.value || ''}
+          onChange={e => updateCondition(idx, { value: e.target.value })}
+          className="flex-1"
+        />
+        {hasSuffix && <span className="text-xs text-muted-foreground whitespace-nowrap">{fieldDef.suffix}</span>}
+      </div>
     );
   };
 
@@ -582,9 +629,16 @@ export function AutomationRulesTab() {
                     <div className="flex items-start gap-2 bg-muted/30 rounded-lg p-2">
                       {/* Field */}
                       <Select value={cond.field} onValueChange={v => updateCondition(idx, { field: v })}>
-                        <SelectTrigger className="w-[180px]"><SelectValue placeholder="Campo" /></SelectTrigger>
+                        <SelectTrigger className="w-[200px]"><SelectValue placeholder="Campo" /></SelectTrigger>
                         <SelectContent>
-                          {CONDITION_FIELDS.map(f => <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>)}
+                          {CONDITION_CATEGORIES.map(cat => (
+                            <SelectGroup key={cat}>
+                              <SelectLabel>{cat}</SelectLabel>
+                              {CONDITION_FIELDS.filter(f => f.category === cat).map(f => (
+                                <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                              ))}
+                            </SelectGroup>
+                          ))}
                         </SelectContent>
                       </Select>
                       {/* Operator */}
