@@ -29,6 +29,7 @@ import PortalBonus from "@/pages/portal/PortalBonus";
 import PortalContatos from "@/pages/portal/PortalContatos";
 import PortalMembros from "@/pages/portal/PortalMembros";
 import PortalArquivos from "@/pages/portal/PortalArquivos";
+import PortalLogin from "@/pages/portal/PortalLogin";
 
 const queryClient = new QueryClient();
 
@@ -75,6 +76,7 @@ const App = () => (
         <AuthProvider>
           <Routes>
             <Route path="/auth" element={<Auth />} />
+            <Route path="/portal/login" element={<PortalLogin />} />
             <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
             <Route path="/clientes/:id" element={<ProtectedRoute><Cliente360 /></ProtectedRoute>} />
