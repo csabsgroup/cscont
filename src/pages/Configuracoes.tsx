@@ -12,11 +12,12 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Loader2, Package, Route, Users, Trash2, Edit2, Heart, FileText, Gift } from 'lucide-react';
+import { Plus, Loader2, Package, Route, Users, Trash2, Edit2, Heart, FileText, Gift, Link2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { HealthScoreTab } from '@/components/configuracoes/HealthScoreTab';
 import { FormTemplatesTab } from '@/components/configuracoes/FormTemplatesTab';
 import { BonusCatalogTab } from '@/components/configuracoes/BonusCatalogTab';
+import { IntegracoesTab } from '@/components/configuracoes/IntegracoesTab';
 
 // ─── Products Tab ────────────────────────────────────────────
 function ProductsTab() {
@@ -342,6 +343,11 @@ export default function Configuracoes() {
               <Users className="h-4 w-4" />Usuários & Roles
             </TabsTrigger>
           )}
+          {isAdmin && (
+            <TabsTrigger value="integracoes" className="gap-1.5">
+              <Link2 className="h-4 w-4" />Integrações
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="produtos"><ProductsTab /></TabsContent>
@@ -350,6 +356,7 @@ export default function Configuracoes() {
         <TabsContent value="formularios"><FormTemplatesTab /></TabsContent>
         {isAdmin && <TabsContent value="bonus"><BonusCatalogTab /></TabsContent>}
         {isAdmin && <TabsContent value="usuarios"><UsersTab /></TabsContent>}
+        {isAdmin && <TabsContent value="integracoes"><IntegracoesTab /></TabsContent>}
       </Tabs>
     </div>
   );
