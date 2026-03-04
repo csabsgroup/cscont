@@ -1,41 +1,74 @@
 
 
-# Plan: Sidebar Accordion com Animacao Suave
+# Plan: Corrigir Vulnerabilidades de Seguranca (2 findings error)
 
-## O que muda
+## Finding 1: Edge Functions sem autenticacao
 
-Refatorar a sidebar de Configuracoes para usar um sistema de accordion com categorias expansiveis, substituindo o layout flat atual.
+Adicionar bloco de autenticacao JWT + verificacao de role (admin/manager/csm) em 5 edge functions, replicando o padrao ja usado em `execute-automations`. A acao `webhook` em cada funcao sera tratada separadamente — webhooks externos nao enviam JWT, entao serao processados sem auth (mantendo o comportamento atual para chamadas externas).
 
-## Mudancas em `src/pages/Configuracoes.tsx`
+### Funcoes afetadas e mudancas
 
-### Estado novo
-- Adicionar `expandedCategory: string | null` — controla qual categoria esta aberta
-- Na montagem: derivar a categoria pai a partir de `selectedSection` e definir `expandedCategory` automaticamente
+Para cada funcao abaixo, inserir apos o check de OPTIONS:
 
-### Categorias com subcategorias (Produtos, Formularios, Visao 360, Automacoes, Integracoes)
-- Clicaveis como toggle: ao clicar, `expandedCategory` alterna entre o nome da categoria e null
-- Estilo: `text-sm font-medium text-gray-700 py-2.5 px-3 cursor-pointer hover:bg-gray-50 rounded-lg`
-- Icone 16px a esquerda + texto + `ChevronRight` a direita (rotaciona 90 graus para `ChevronDown` quando aberto, `transition-transform duration-200`)
-- Quando aberta: `bg-gray-50`
-- Subcategorias aparecem dentro de um `div` com `overflow-hidden` e transicao de `max-height` (ou `grid-rows` animado) com `duration-200 ease-in-out`
-- Subcategorias: `text-sm text-gray-500 py-2 px-3 pl-10 hover:text-gray-700 hover:bg-gray-50 rounded-lg`
-- Subcategoria ativa: `text-red-700 bg-red-50 font-medium rounded-lg`
-- Ao clicar subcategoria: `setSelectedSection(key)`, manter categoria expandida
+1. Parse `Authorization` header e validar usuario via `getUser()`
+2. Verificar role via `get_user_role` RPC (permitir admin/manager/csm)
+3. Retornar 401/403 se falhar
+4. Para acoes `webhook`: processar sem auth (sao chamadas por servicos externos)
+5. Substituir `String(err)` no catch por `"Internal server error"`
 
-### Itens sem subcategoria (Catalogo de Bonus, Importar/Exportar, Portal, Usuarios, Auditoria)
-- Mesmo estilo de categoria mas SEM seta
-- Clique: `setSelectedSection(key)` + `setExpandedCategory(null)` (fecha qualquer aberta)
-- Ativo: `bg-red-50 text-red-700 font-medium`
+**Arquivos modificados:**
+- `supabase/functions/integration-whatsapp/index.ts`
+- `supabase/functions/integration-asaas/index.ts`
+- `supabase/functions/integration-slack/index.ts`
+- `supabase/functions/integration-piperun/index.ts`
+- `supabase/functions/integration-email/index.ts`
 
-### Accordion exclusivo
-- Apenas uma categoria aberta por vez (setar `expandedCategory` fecha a anterior)
+### Estrutura do bloco de auth (inserido apos OPTIONS check, antes de parse body)
 
-### Mobile
-- Manter dropdown/select existente, sem mudancas significativas — as categorias ja aparecem como grupos no SelectContent
+```typescript
+// Webhook bypass — external services don't send JWT
+const rawBody = await req.text();
+const body = JSON.parse(rawBody);
+if (body.action === "webhook") {
+  // process webhook without auth...
+}
 
-### Tecnica de animacao
-- Usar CSS `grid-template-rows: 0fr` → `1fr` com `transition-all duration-200 ease-in-out` no wrapper, e `overflow-hidden min-h-0` no conteudo interno. Isso garante animacao suave sem precisar calcular `max-height`.
+// Auth for all other actions
+const authHeader = req.headers.get("Authorization");
+if (!authHeader?.startsWith("Bearer ")) { return 401 }
+const userClient = createClient(url, anonKey, { headers: { Authorization: authHeader } });
+const { data: { user } } = await userClient.auth.getUser();
+if (!user) { return 401 }
+const { data: roleCheck } = await supabase.rpc("get_user_role", { _user_id: user.id });
+if (!["admin","manager","csm"].includes(roleCheck)) { return 403 }
+```
 
-## Arquivos modificados
-- `src/pages/Configuracoes.tsx` — refatorar a nav da sidebar (linhas ~488-520)
+Nota: como `req.json()` so pode ser chamado uma vez, o body sera parsed via `req.text()` + `JSON.parse()` para permitir o check de webhook antes do auth.
+
+## Finding 2: Transcripts expostos via `OR matched = false`
+
+Criar migracao SQL que:
+1. Remove a policy atual `"Users see transcripts of visible offices"`
+2. Recria sem o `OR matched = false`
+3. Adiciona policy separada para admins verem transcripts nao vinculados
+
+```sql
+DROP POLICY IF EXISTS "Users see transcripts of visible offices" ON public.meeting_transcripts;
+
+CREATE POLICY "Users see transcripts of visible offices" ON public.meeting_transcripts
+FOR SELECT TO authenticated USING (
+  meeting_id IN (SELECT id FROM public.meetings WHERE office_id IN (SELECT get_visible_office_ids(auth.uid())))
+);
+
+CREATE POLICY "Admin can see unmatched transcripts" ON public.meeting_transcripts
+FOR SELECT TO authenticated USING (
+  matched = false AND has_role(auth.uid(), 'admin')
+);
+```
+
+## Resumo
+
+- 5 edge functions corrigidas com auth JWT + RBAC
+- 1 migracao SQL para corrigir policy de transcripts
+- Total: 6 arquivos modificados
 
