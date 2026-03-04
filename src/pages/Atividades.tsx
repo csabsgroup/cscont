@@ -12,9 +12,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus, Loader2, CheckSquare, Calendar, AlertCircle } from 'lucide-react';
-import { format, isToday, isPast, isFuture } from 'date-fns';
+import { format, isToday, isPast, isFuture, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
+import { ActivityPopup } from '@/components/atividades/ActivityPopup';
 
 interface Activity {
   id: string;
@@ -27,13 +28,11 @@ interface Activity {
   type: string;
   priority: string;
   created_at: string;
+  observations?: string | null;
   offices?: { name: string } | null;
 }
 
-interface Office {
-  id: string;
-  name: string;
-}
+interface Office { id: string; name: string; }
 
 const priorityColors: Record<string, string> = {
   low: 'bg-muted text-muted-foreground',
@@ -43,18 +42,13 @@ const priorityColors: Record<string, string> = {
 };
 
 const priorityLabels: Record<string, string> = {
-  low: 'Baixa',
-  medium: 'Média',
-  high: 'Alta',
-  urgent: 'Urgente',
+  low: 'Baixa', medium: 'Média', high: 'Alta', urgent: 'Urgente',
 };
 
 const typeLabels: Record<string, string> = {
-  task: 'Tarefa',
-  follow_up: 'Follow-up',
-  onboarding: 'Onboarding',
-  renewal: 'Renovação',
-  other: 'Outro',
+  task: 'Tarefa', follow_up: 'Follow-up', onboarding: 'Onboarding', renewal: 'Renovação',
+  ligacao: 'Ligação', check_in: 'Check-in', email: 'E-mail', whatsapp: 'WhatsApp',
+  planejamento: 'Planejamento', other: 'Outro',
 };
 
 export default function Atividades() {
@@ -65,7 +59,6 @@ export default function Atividades() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [creating, setCreating] = useState(false);
 
-  // Form state
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [dueDate, setDueDate] = useState('');
@@ -80,7 +73,7 @@ export default function Atividades() {
       .select('*, offices(name)')
       .order('due_date', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: false });
-    setActivities((data as Activity[]) || []);
+    setActivities((data as any[]) || []);
     setLoading(false);
   }, []);
 
@@ -95,65 +88,40 @@ export default function Atividades() {
     if (!session?.user?.id) return;
     setCreating(true);
     const { error } = await supabase.from('activities').insert({
-      title,
-      description: description || null,
-      due_date: dueDate || null,
-      type: type as any,
-      priority: priority as any,
-      office_id: officeId || null,
-      user_id: session.user.id,
+      title, description: description || null, due_date: dueDate || null,
+      type: type as any, priority: priority as any,
+      office_id: officeId || null, user_id: session.user.id,
     });
-    if (error) {
-      toast.error('Erro: ' + error.message);
-    } else {
-      toast.success('Atividade criada!');
-      setDialogOpen(false);
-      resetForm();
-      fetchActivities();
-    }
+    if (error) toast.error('Erro: ' + error.message);
+    else { toast.success('Atividade criada!'); setDialogOpen(false); resetForm(); fetchActivities(); }
     setCreating(false);
   };
 
-  const toggleComplete = async (activity: Activity) => {
-    const { error } = await supabase.from('activities').update({
-      completed_at: activity.completed_at ? null : new Date().toISOString(),
-    }).eq('id', activity.id);
-    if (error) {
-      toast.error('Erro: ' + error.message);
-    } else {
-      fetchActivities();
-    }
-  };
-
   const resetForm = () => {
-    setTitle('');
-    setDescription('');
-    setDueDate('');
-    setType('task');
-    setPriority('medium');
-    setOfficeId('');
+    setTitle(''); setDescription(''); setDueDate(''); setType('task'); setPriority('medium'); setOfficeId('');
   };
 
-  const pending = activities.filter(a => !a.completed_at);
-  const completed = activities.filter(a => a.completed_at);
-  const today = pending.filter(a => a.due_date && isToday(new Date(a.due_date)));
-  const overdue = pending.filter(a => a.due_date && isPast(new Date(a.due_date)) && !isToday(new Date(a.due_date)));
+  const todayStart = startOfDay(new Date());
+  const hoje = activities.filter(a => !a.completed_at && a.due_date && isToday(new Date(a.due_date)));
+  const atrasadas = activities.filter(a => !a.completed_at && a.due_date && isPast(new Date(a.due_date)) && !isToday(new Date(a.due_date)));
+  const futuras = activities.filter(a => !a.completed_at && (!a.due_date || (isFuture(new Date(a.due_date)) && !isToday(new Date(a.due_date)))));
+  const concluidas = activities.filter(a => a.completed_at);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Atividades</h1>
-          <p className="text-sm text-muted-foreground">Sua rotina diária — {pending.length} pendente{pending.length !== 1 ? 's' : ''}</p>
+          <p className="text-sm text-muted-foreground">
+            Sua rotina diária — {activities.filter(a => !a.completed_at).length} pendente{activities.filter(a => !a.completed_at).length !== 1 ? 's' : ''}
+          </p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button><Plus className="mr-2 h-4 w-4" />Nova Atividade</Button>
           </DialogTrigger>
           <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Nova Atividade</DialogTitle>
-            </DialogHeader>
+            <DialogHeader><DialogTitle>Nova Atividade</DialogTitle></DialogHeader>
             <form onSubmit={handleCreate} className="space-y-4">
               <div className="space-y-2">
                 <Label>Título *</Label>
@@ -173,9 +141,7 @@ export default function Atividades() {
                   <Select value={officeId} onValueChange={setOfficeId}>
                     <SelectTrigger><SelectValue placeholder="Opcional" /></SelectTrigger>
                     <SelectContent>
-                      {offices.map(o => (
-                        <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
-                      ))}
+                      {offices.map(o => <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -186,9 +152,7 @@ export default function Atividades() {
                   <Select value={type} onValueChange={setType}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {Object.entries(typeLabels).map(([k, v]) => (
-                        <SelectItem key={k} value={k}>{v}</SelectItem>
-                      ))}
+                      {Object.entries(typeLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -197,9 +161,7 @@ export default function Atividades() {
                   <Select value={priority} onValueChange={setPriority}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {Object.entries(priorityLabels).map(([k, v]) => (
-                        <SelectItem key={k} value={k}>{v}</SelectItem>
-                      ))}
+                      {Object.entries(priorityLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -213,33 +175,34 @@ export default function Atividades() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Hoje</CardTitle>
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{today.length}</div>
-          </CardContent>
+          <CardContent><div className="text-2xl font-bold">{hoje.length}</div></CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Atrasadas</CardTitle>
             <AlertCircle className="h-4 w-4 text-destructive" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-destructive">{overdue.length}</div>
-          </CardContent>
+          <CardContent><div className="text-2xl font-bold text-destructive">{atrasadas.length}</div></CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Futuras</CardTitle>
+            <Calendar className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent><div className="text-2xl font-bold">{futuras.length}</div></CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Concluídas</CardTitle>
             <CheckSquare className="h-4 w-4 text-success" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{completed.length}</div>
-          </CardContent>
+          <CardContent><div className="text-2xl font-bold">{concluidas.length}</div></CardContent>
         </Card>
       </div>
 
@@ -248,51 +211,47 @@ export default function Atividades() {
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
         </div>
       ) : (
-        <Tabs defaultValue="pendentes">
+        <Tabs defaultValue="hoje">
           <TabsList>
-            <TabsTrigger value="pendentes">Pendentes ({pending.length})</TabsTrigger>
-            <TabsTrigger value="concluidas">Concluídas ({completed.length})</TabsTrigger>
+            <TabsTrigger value="hoje">Hoje ({hoje.length})</TabsTrigger>
+            <TabsTrigger value="atrasadas">Atrasadas ({atrasadas.length})</TabsTrigger>
+            <TabsTrigger value="futuras">Futuras ({futuras.length})</TabsTrigger>
+            <TabsTrigger value="concluidas">Concluídas ({concluidas.length})</TabsTrigger>
           </TabsList>
-          <TabsContent value="pendentes" className="space-y-2 mt-4">
-            {pending.length === 0 ? (
-              <Card>
-                <CardContent className="flex flex-col items-center justify-center py-12">
-                  <CheckSquare className="mb-3 h-10 w-10 text-muted-foreground/40" />
-                  <p className="text-sm text-muted-foreground">Nenhuma atividade pendente. 🎉</p>
-                </CardContent>
-              </Card>
-            ) : (
-              pending.map(a => <ActivityCard key={a.id} activity={a} onToggle={toggleComplete} />)
-            )}
-          </TabsContent>
-          <TabsContent value="concluidas" className="space-y-2 mt-4">
-            {completed.length === 0 ? (
-              <Card>
-                <CardContent className="py-8 text-center text-sm text-muted-foreground">
-                  Nenhuma atividade concluída ainda.
-                </CardContent>
-              </Card>
-            ) : (
-              completed.map(a => <ActivityCard key={a.id} activity={a} onToggle={toggleComplete} />)
-            )}
-          </TabsContent>
+          {(['hoje', 'atrasadas', 'futuras', 'concluidas'] as const).map(tab => {
+            const list = tab === 'hoje' ? hoje : tab === 'atrasadas' ? atrasadas : tab === 'futuras' ? futuras : concluidas;
+            return (
+              <TabsContent key={tab} value={tab} className="space-y-2 mt-4">
+                {list.length === 0 ? (
+                  <Card>
+                    <CardContent className="flex flex-col items-center justify-center py-12">
+                      <CheckSquare className="mb-3 h-10 w-10 text-muted-foreground/40" />
+                      <p className="text-sm text-muted-foreground">
+                        {tab === 'hoje' ? 'Nenhuma atividade para hoje. 🎉' :
+                         tab === 'atrasadas' ? 'Nenhuma atividade atrasada. ✅' :
+                         tab === 'futuras' ? 'Nenhuma atividade futura.' :
+                         'Nenhuma atividade concluída ainda.'}
+                      </p>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  list.map(a => <ActivityCard key={a.id} activity={a} onRefresh={fetchActivities} />)
+                )}
+              </TabsContent>
+            );
+          })}
         </Tabs>
       )}
     </div>
   );
 }
 
-function ActivityCard({ activity, onToggle }: { activity: Activity; onToggle: (a: Activity) => void }) {
+function ActivityCard({ activity, onRefresh }: { activity: Activity; onRefresh: () => void }) {
   const isOverdue = activity.due_date && isPast(new Date(activity.due_date)) && !isToday(new Date(activity.due_date)) && !activity.completed_at;
 
   return (
     <Card className={`transition-opacity ${activity.completed_at ? 'opacity-60' : ''}`}>
       <CardContent className="flex items-start gap-3 py-3 px-4">
-        <Checkbox
-          checked={!!activity.completed_at}
-          onCheckedChange={() => onToggle(activity)}
-          className="mt-1"
-        />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className={`text-sm font-medium ${activity.completed_at ? 'line-through' : ''}`}>
@@ -302,7 +261,7 @@ function ActivityCard({ activity, onToggle }: { activity: Activity; onToggle: (a
               {priorityLabels[activity.priority]}
             </Badge>
             <Badge variant="secondary" className="text-xs">
-              {typeLabels[activity.type]}
+              {typeLabels[activity.type] || activity.type}
             </Badge>
           </div>
           {activity.description && (
@@ -318,6 +277,7 @@ function ActivityCard({ activity, onToggle }: { activity: Activity; onToggle: (a
             )}
           </div>
         </div>
+        <ActivityPopup activity={activity} onRefresh={onRefresh} />
       </CardContent>
     </Card>
   );
