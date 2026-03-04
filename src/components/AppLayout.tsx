@@ -1,41 +1,82 @@
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/AppSidebar';
 import { useAuth } from '@/contexts/AuthContext';
-import { Badge } from '@/components/ui/badge';
+import { useLocation } from 'react-router-dom';
+import { Bell, Search } from 'lucide-react';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Input } from '@/components/ui/input';
 
 interface AppLayoutProps {
   children: React.ReactNode;
 }
 
+const pageNames: Record<string, string> = {
+  '/': 'Dashboard',
+  '/clientes': 'Clientes',
+  '/jornada': 'Jornada',
+  '/atividades': 'Atividades',
+  '/reunioes': 'Reuniões',
+  '/eventos': 'Eventos',
+  '/contratos': 'Contratos',
+  '/contatos': 'Contatos',
+  '/relatorios': 'Relatórios',
+  '/configuracoes': 'Configurações',
+};
+
 export function AppLayout({ children }: AppLayoutProps) {
   const { profile, role } = useAuth();
+  const location = useLocation();
 
-  const roleLabel: Record<string, string> = {
-    admin: 'Admin',
-    manager: 'Gestor',
-    csm: 'CSM',
-    viewer: 'Viewer',
-    client: 'Cliente',
-  };
+  const currentPage = pageNames[location.pathname] || 
+    (location.pathname.startsWith('/clientes/') ? 'Cliente 360' : 'Página');
+
+  const breadcrumb = location.pathname.startsWith('/clientes/') 
+    ? ['Clientes', 'Cliente 360']
+    : [currentPage];
+
+  const initials = profile?.full_name
+    ?.split(' ')
+    .map((n) => n[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase() || 'U';
 
   return (
     <SidebarProvider>
       <div className="flex min-h-screen w-full">
         <AppSidebar />
         <div className="flex flex-1 flex-col">
-          <header className="flex h-14 items-center justify-between border-b bg-card px-4">
-            <div className="flex items-center gap-2">
-              <SidebarTrigger />
+          <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border/60 bg-card px-4 shadow-sm">
+            <div className="flex items-center gap-3">
+              <SidebarTrigger className="text-muted-foreground hover:text-foreground" />
+              <nav className="hidden sm:flex items-center gap-1.5 text-sm text-muted-foreground">
+                {breadcrumb.map((crumb, i) => (
+                  <span key={i} className="flex items-center gap-1.5">
+                    {i > 0 && <span className="text-border">/</span>}
+                    <span className={i === breadcrumb.length - 1 ? 'font-medium text-foreground' : ''}>
+                      {crumb}
+                    </span>
+                  </span>
+                ))}
+              </nav>
             </div>
             <div className="flex items-center gap-3">
-              {role && (
-                <Badge variant="secondary" className="text-xs font-normal">
-                  {roleLabel[role] || role}
-                </Badge>
-              )}
-              <span className="text-sm text-muted-foreground">
-                {profile?.full_name || 'Usuário'}
-              </span>
+              <div className="relative hidden md:block">
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input 
+                  placeholder="Buscar..." 
+                  className="h-9 w-56 rounded-full bg-muted/50 border-0 pl-9 text-sm focus-visible:ring-1"
+                />
+              </div>
+              <button className="relative rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+                <Bell className="h-4 w-4" />
+                <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary" />
+              </button>
+              <Avatar className="h-8 w-8">
+                <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
             </div>
           </header>
           <main className="flex-1 overflow-auto p-6">{children}</main>

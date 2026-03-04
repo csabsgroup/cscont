@@ -49,8 +49,18 @@ export default function Cliente360() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[400px] items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      <div className="space-y-6">
+        <div className="flex items-center gap-3">
+          <div className="h-12 w-12 rounded-xl skeleton-shimmer" />
+          <div className="space-y-2 flex-1">
+            <div className="h-6 w-48 rounded skeleton-shimmer" />
+            <div className="h-4 w-32 rounded skeleton-shimmer" />
+          </div>
+        </div>
+        <div className="h-10 w-full rounded-lg skeleton-shimmer" />
+        <div className="rounded-xl border border-border/60 bg-card p-6 space-y-4">
+          {[...Array(4)].map((_, i) => <div key={i} className="h-5 rounded skeleton-shimmer" />)}
+        </div>
       </div>
     );
   }

@@ -179,7 +179,14 @@ export default function Jornada() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+        <div className="flex gap-4 overflow-x-auto pb-4">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="flex-shrink-0 w-[300px] rounded-xl border border-border/60 bg-card p-4 space-y-3">
+              <div className="h-5 w-24 rounded skeleton-shimmer" />
+              {[...Array(3)].map((_, j) => <div key={j} className="h-20 rounded-lg skeleton-shimmer" />)}
+            </div>
+          ))}
+        </div>
       ) : stages.length === 0 ? (
         <Card><CardContent className="flex flex-col items-center justify-center py-12">
           <Building2 className="mb-3 h-10 w-10 text-muted-foreground/40" />

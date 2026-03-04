@@ -71,8 +71,24 @@ export default function Dashboard() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <div><h1 className="text-2xl font-bold">Dashboard</h1></div>
-        <div className="flex items-center justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+        <div><h1 className="text-2xl font-bold">Dashboard</h1><p className="text-sm text-muted-foreground">Visão geral da sua carteira</p></div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="rounded-xl border border-border/60 bg-card p-6 space-y-3">
+              <div className="h-4 w-24 rounded skeleton-shimmer" />
+              <div className="h-8 w-16 rounded skeleton-shimmer" />
+              <div className="h-3 w-32 rounded skeleton-shimmer" />
+            </div>
+          ))}
+        </div>
+        <div className="grid gap-6 lg:grid-cols-2">
+          {[...Array(2)].map((_, i) => (
+            <div key={i} className="rounded-xl border border-border/60 bg-card p-6 space-y-3">
+              <div className="h-5 w-32 rounded skeleton-shimmer" />
+              {[...Array(3)].map((_, j) => <div key={j} className="h-12 rounded-lg skeleton-shimmer" />)}
+            </div>
+          ))}
+        </div>
       </div>
     );
   }

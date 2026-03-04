@@ -29,20 +29,24 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 
-const mainItems = [
+const operationItems = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard },
   { title: 'Clientes', url: '/clientes', icon: Building2 },
   { title: 'Jornada', url: '/jornada', icon: Kanban },
   { title: 'Atividades', url: '/atividades', icon: CheckSquare },
   { title: 'Reuniões', url: '/reunioes', icon: Video },
   { title: 'Eventos', url: '/eventos', icon: Calendar },
-  { title: 'Contratos', url: '/contratos', icon: FileText },
-  { title: 'Contatos', url: '/contatos', icon: Users },
 ];
 
-const secondaryItems = [
+const managementItems = [
+  { title: 'Contratos', url: '/contratos', icon: FileText },
+  { title: 'Contatos', url: '/contatos', icon: Users },
   { title: 'Relatórios', url: '/relatorios', icon: BarChart3 },
+];
+
+const configItems = [
   { title: 'Configurações', url: '/configuracoes', icon: Settings },
 ];
 
@@ -50,7 +54,7 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const location = useLocation();
-  const { profile, signOut } = useAuth();
+  const { profile, role, signOut } = useAuth();
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/';
@@ -64,90 +68,89 @@ export function AppSidebar() {
     .join('')
     .toUpperCase() || 'U';
 
+  const roleLabel: Record<string, string> = {
+    admin: 'Admin',
+    manager: 'Gestor',
+    csm: 'CSM',
+    viewer: 'Viewer',
+    client: 'Cliente',
+  };
+
+  const renderGroup = (label: string, items: typeof operationItems) => (
+    <SidebarGroup>
+      <SidebarGroupLabel className="text-xs font-medium uppercase tracking-wider text-muted-foreground/60 px-3">
+        {label}
+      </SidebarGroupLabel>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          {items.map((item) => (
+            <SidebarMenuItem key={item.title}>
+              <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
+                <NavLink
+                  to={item.url}
+                  end={item.url === '/'}
+                  className="rounded-lg px-3 py-2.5 text-muted-foreground transition-all duration-150 hover:bg-accent hover:text-foreground"
+                  activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium border-l-[3px] border-primary"
+                >
+                  <item.icon className="h-4 w-4" />
+                  {!collapsed && <span>{item.title}</span>}
+                </NavLink>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ))}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
+  );
+
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="py-4">
-        <div className="flex items-center gap-2 px-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+      <SidebarHeader className="py-6 px-5">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary shadow-sm">
             <span className="text-sm font-bold text-primary-foreground">C</span>
           </div>
           {!collapsed && (
             <div className="flex flex-col">
-              <span className="text-sm font-bold text-sidebar-foreground">Contador CEO</span>
-              <span className="text-[10px] text-sidebar-foreground/60">Customer Success</span>
+              <span className="text-sm font-bold text-foreground">Contador CEO</span>
+              <span className="text-[10px] text-muted-foreground">Customer Success</span>
             </div>
           )}
         </div>
       </SidebarHeader>
 
-      <SidebarSeparator />
+      <SidebarSeparator className="mx-4 bg-border/50" />
 
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Principal</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {mainItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
-                    <NavLink
-                      to={item.url}
-                      end={item.url === '/'}
-                      className="hover:bg-sidebar-accent/50"
-                      activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
-                    >
-                      <item.icon className="h-4 w-4" />
-                      {!collapsed && <span>{item.title}</span>}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarSeparator />
-
-        <SidebarGroup>
-          <SidebarGroupLabel>Sistema</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {secondaryItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
-                    <NavLink
-                      to={item.url}
-                      className="hover:bg-sidebar-accent/50"
-                      activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
-                    >
-                      <item.icon className="h-4 w-4" />
-                      {!collapsed && <span>{item.title}</span>}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+      <SidebarContent className="px-2">
+        {renderGroup('Operação', operationItems)}
+        <SidebarSeparator className="mx-2 bg-border/40" />
+        {renderGroup('Gestão', managementItems)}
+        <SidebarSeparator className="mx-2 bg-border/40" />
+        {renderGroup('Sistema', configItems)}
       </SidebarContent>
 
-      <SidebarFooter>
+      <SidebarFooter className="p-3">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
               onClick={signOut}
               tooltip="Sair"
-              className="hover:bg-sidebar-accent/50"
+              className="rounded-lg px-3 py-2.5 hover:bg-accent transition-all duration-150"
             >
-              <Avatar className="h-6 w-6">
-                <AvatarFallback className="bg-primary text-[10px] text-primary-foreground">
+              <Avatar className="h-7 w-7">
+                <AvatarFallback className="bg-primary/10 text-primary text-[10px] font-semibold">
                   {initials}
                 </AvatarFallback>
               </Avatar>
               {!collapsed && (
-                <div className="flex flex-1 items-center justify-between">
-                  <span className="truncate text-xs">{profile?.full_name || 'Usuário'}</span>
-                  <LogOut className="h-3.5 w-3.5 text-sidebar-foreground/50" />
+                <div className="flex flex-1 items-center justify-between min-w-0">
+                  <div className="flex flex-col min-w-0">
+                    <span className="truncate text-xs font-medium text-foreground">{profile?.full_name || 'Usuário'}</span>
+                    {role && (
+                      <span className="text-[10px] text-muted-foreground">{roleLabel[role] || role}</span>
+                    )}
+                  </div>
+                  <LogOut className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
                 </div>
               )}
             </SidebarMenuButton>

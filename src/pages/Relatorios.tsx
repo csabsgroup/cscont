@@ -82,7 +82,14 @@ export default function Relatorios() {
   if (loading) return (
     <div className="space-y-6">
       <div><h1 className="text-2xl font-bold">Relatórios</h1></div>
-      <div className="flex items-center justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+      <div className="grid gap-4 md:grid-cols-4">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="rounded-xl border border-border/60 bg-card p-6 space-y-3">
+            <div className="h-4 w-20 rounded skeleton-shimmer" />
+            <div className="h-8 w-16 rounded skeleton-shimmer" />
+          </div>
+        ))}
+      </div>
     </div>
   );
 

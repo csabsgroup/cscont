@@ -207,8 +207,13 @@ export default function Atividades() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        <div className="space-y-3">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="rounded-xl border border-border/60 bg-card p-4 space-y-2">
+              <div className="h-4 w-48 rounded skeleton-shimmer" />
+              <div className="h-3 w-32 rounded skeleton-shimmer" />
+            </div>
+          ))}
         </div>
       ) : (
         <Tabs defaultValue="hoje">
