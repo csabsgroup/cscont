@@ -52,7 +52,7 @@ const typeLabels: Record<string, string> = {
 };
 
 export default function Atividades() {
-  const { session } = useAuth();
+  const { session, isViewer } = useAuth();
   const [activities, setActivities] = useState<Activity[]>([]);
   const [offices, setOffices] = useState<Office[]>([]);
   const [loading, setLoading] = useState(true);
@@ -116,7 +116,7 @@ export default function Atividades() {
             Sua rotina diária — {activities.filter(a => !a.completed_at).length} pendente{activities.filter(a => !a.completed_at).length !== 1 ? 's' : ''}
           </p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        {!isViewer && <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button><Plus className="mr-2 h-4 w-4" />Nova Atividade</Button>
           </DialogTrigger>
@@ -171,7 +171,7 @@ export default function Atividades() {
               </Button>
             </form>
           </DialogContent>
-        </Dialog>
+        </Dialog>}
       </div>
 
       {/* Summary cards */}
@@ -235,7 +235,7 @@ export default function Atividades() {
                     </CardContent>
                   </Card>
                 ) : (
-                  list.map(a => <ActivityCard key={a.id} activity={a} onRefresh={fetchActivities} />)
+                  list.map(a => <ActivityCard key={a.id} activity={a} onRefresh={fetchActivities} isViewer={isViewer} />)
                 )}
               </TabsContent>
             );
@@ -246,7 +246,7 @@ export default function Atividades() {
   );
 }
 
-function ActivityCard({ activity, onRefresh }: { activity: Activity; onRefresh: () => void }) {
+function ActivityCard({ activity, onRefresh, isViewer }: { activity: Activity; onRefresh: () => void; isViewer?: boolean }) {
   const isOverdue = activity.due_date && isPast(new Date(activity.due_date)) && !isToday(new Date(activity.due_date)) && !activity.completed_at;
 
   return (
@@ -277,7 +277,7 @@ function ActivityCard({ activity, onRefresh }: { activity: Activity; onRefresh: 
             )}
           </div>
         </div>
-        <ActivityPopup activity={activity} onRefresh={onRefresh} />
+        <ActivityPopup activity={activity} onRefresh={onRefresh} readOnly={isViewer} />
       </CardContent>
     </Card>
   );

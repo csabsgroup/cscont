@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Loader2, Building2, GripVertical, Heart, Calendar, CreditCard } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 import { StatusBadge } from '@/components/clientes/StatusBadge';
 import { HealthBadge } from '@/components/clientes/HealthBadge';
 import { toast } from 'sonner';
@@ -23,6 +24,7 @@ interface OfficeInStage {
 }
 
 export default function Jornada() {
+  const { isViewer } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedProduct, setSelectedProduct] = useState('');
   const [stages, setStages] = useState<Stage[]>([]);
@@ -210,15 +212,17 @@ export default function Jornada() {
                               </div>
                             </div>
                             {/* Move dropdown */}
-                            <div className="mt-2" onClick={e => e.stopPropagation()}>
-                              <Select value={oj.journey_stage_id}
-                                onValueChange={(val) => setMoveDialog({ journey: oj, targetStage: val })}>
-                                <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  {stages.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                            </div>
+                            {!isViewer && (
+                              <div className="mt-2" onClick={e => e.stopPropagation()}>
+                                <Select value={oj.journey_stage_id}
+                                  onValueChange={(val) => setMoveDialog({ journey: oj, targetStage: val })}>
+                                  <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    {stages.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            )}
                           </Card>
                         );
                       })

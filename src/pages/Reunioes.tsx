@@ -40,7 +40,7 @@ const statusConfig: Record<string, { label: string; color: string }> = {
 };
 
 export default function Reunioes() {
-  const { session } = useAuth();
+  const { session, isViewer } = useAuth();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [offices, setOffices] = useState<Office[]>([]);
   const [loading, setLoading] = useState(true);
@@ -130,7 +130,7 @@ export default function Reunioes() {
             {meetings.filter(m => m.status === 'scheduled').length} agendada{meetings.filter(m => m.status === 'scheduled').length !== 1 ? 's' : ''} • {meetings.length} total
           </p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        {!isViewer && <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button><Plus className="mr-2 h-4 w-4" />Nova Reunião</Button>
           </DialogTrigger>
@@ -173,7 +173,7 @@ export default function Reunioes() {
               </Button>
             </form>
           </DialogContent>
-        </Dialog>
+        </Dialog>}
       </div>
 
       {loading ? (
@@ -212,11 +212,11 @@ export default function Reunioes() {
                       <Badge variant="outline" className={cfg.color}>{cfg.label}</Badge>
                     </TableCell>
                     <TableCell>
-                      <Switch checked={m.share_with_client} onCheckedChange={() => toggleShare(m)} />
+                      <Switch checked={m.share_with_client} onCheckedChange={() => toggleShare(m)} disabled={isViewer} />
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
-                        {m.status === 'scheduled' && (
+                        {!isViewer && m.status === 'scheduled' && (
                           <>
                             <Button size="sm" variant="ghost" onClick={() => markCompleted(m)} title="Concluir">
                               <CheckCircle2 className="h-4 w-4 text-success" />
@@ -226,7 +226,7 @@ export default function Reunioes() {
                             </Button>
                           </>
                         )}
-                        {m.status === 'completed' && (
+                        {!isViewer && m.status === 'completed' && (
                           <Button size="sm" variant="ghost" onClick={() => setFormFillMeeting(m)} title="Formulário">
                             <FileText className="h-4 w-4 text-primary" />
                           </Button>
@@ -267,7 +267,7 @@ export default function Reunioes() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <Switch checked={detailMeeting.share_with_client} onCheckedChange={() => { toggleShare(detailMeeting); setDetailMeeting({ ...detailMeeting, share_with_client: !detailMeeting.share_with_client }); }} />
+                <Switch checked={detailMeeting.share_with_client} onCheckedChange={() => { toggleShare(detailMeeting); setDetailMeeting({ ...detailMeeting, share_with_client: !detailMeeting.share_with_client }); }} disabled={isViewer} />
                 <Label className="text-sm">Compartilhar com cliente</Label>
               </div>
               <div className="space-y-2">
@@ -277,6 +277,7 @@ export default function Reunioes() {
                   rows={4}
                   onBlur={e => saveNotes(detailMeeting.id, e.target.value)}
                   placeholder="Escreva as notas da reunião..."
+                  disabled={isViewer}
                 />
               </div>
               <div className="space-y-2">
@@ -286,6 +287,7 @@ export default function Reunioes() {
                   rows={4}
                   onBlur={e => saveTranscript(detailMeeting.id, e.target.value)}
                   placeholder="Cole a transcrição aqui (Fireflies, etc.)..."
+                  disabled={isViewer}
                 />
               </div>
             </div>
