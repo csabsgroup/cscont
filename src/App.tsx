@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AppLayout } from "@/components/AppLayout";
+import { PortalLayout } from "@/components/portal/PortalLayout";
 import Auth from "@/pages/Auth";
 import Dashboard from "@/pages/Dashboard";
 import Cliente360 from "@/pages/Cliente360";
@@ -19,11 +20,19 @@ import Configuracoes from "@/pages/Configuracoes";
 import Relatorios from "@/pages/Relatorios";
 import ComingSoon from "@/pages/ComingSoon";
 import NotFound from "@/pages/NotFound";
+import PortalHome from "@/pages/portal/PortalHome";
+import PortalContrato from "@/pages/portal/PortalContrato";
+import PortalOKR from "@/pages/portal/PortalOKR";
+import PortalReunioes from "@/pages/portal/PortalReunioes";
+import PortalEventos from "@/pages/portal/PortalEventos";
+import PortalBonus from "@/pages/portal/PortalBonus";
+import PortalContatos from "@/pages/portal/PortalContatos";
+import PortalMembros from "@/pages/portal/PortalMembros";
 
 const queryClient = new QueryClient();
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { session, loading } = useAuth();
+  const { session, loading, isClient } = useAuth();
 
   if (loading) {
     return (
@@ -34,8 +43,26 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (!session) return <Navigate to="/auth" replace />;
+  if (isClient) return <Navigate to="/portal" replace />;
 
   return <AppLayout>{children}</AppLayout>;
+}
+
+function PortalRoute({ children }: { children: React.ReactNode }) {
+  const { session, loading, isClient } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (!session) return <Navigate to="/auth" replace />;
+  if (!isClient) return <Navigate to="/" replace />;
+
+  return <PortalLayout>{children}</PortalLayout>;
 }
 
 const App = () => (
@@ -58,6 +85,15 @@ const App = () => (
             <Route path="/contatos" element={<ProtectedRoute><ContatosGlobal /></ProtectedRoute>} />
             <Route path="/relatorios" element={<ProtectedRoute><Relatorios /></ProtectedRoute>} />
             <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
+            {/* Portal do Cliente */}
+            <Route path="/portal" element={<PortalRoute><PortalHome /></PortalRoute>} />
+            <Route path="/portal/contrato" element={<PortalRoute><PortalContrato /></PortalRoute>} />
+            <Route path="/portal/plano-de-acao" element={<PortalRoute><PortalOKR /></PortalRoute>} />
+            <Route path="/portal/reunioes" element={<PortalRoute><PortalReunioes /></PortalRoute>} />
+            <Route path="/portal/eventos" element={<PortalRoute><PortalEventos /></PortalRoute>} />
+            <Route path="/portal/bonus" element={<PortalRoute><PortalBonus /></PortalRoute>} />
+            <Route path="/portal/contatos" element={<PortalRoute><PortalContatos /></PortalRoute>} />
+            <Route path="/portal/membros" element={<PortalRoute><PortalMembros /></PortalRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
