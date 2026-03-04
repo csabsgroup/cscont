@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
+import logo from '@/assets/logo.png';
 
 export default function Auth() {
   const { session, loading } = useAuth();
@@ -52,9 +53,7 @@ export default function Auth() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary shadow-md">
-            <span className="text-2xl font-bold text-primary-foreground">C</span>
-          </div>
+          <img src={logo} alt="Contador CEO" className="mx-auto mb-2 h-14 w-auto" />
           <h1 className="text-2xl font-bold">Contador CEO</h1>
           <p className="text-sm text-muted-foreground">Plataforma de Customer Success</p>
         </div>

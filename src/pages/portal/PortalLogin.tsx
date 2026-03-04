@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import logo from '@/assets/logo.png';
 
 export default function PortalLogin() {
   const [email, setEmail] = useState('');
@@ -44,9 +45,7 @@ export default function PortalLogin() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary">
-            <span className="text-lg font-bold text-primary-foreground">C</span>
-          </div>
+          <img src={logo} alt="Contador CEO" className="mx-auto mb-2 h-12 w-auto" />
           <CardTitle className="text-xl">Portal do Cliente</CardTitle>
           <CardDescription>Entre com suas credenciais para acessar o portal</CardDescription>
         </CardHeader>
