@@ -11,9 +11,6 @@ import { IntegracoesTab } from '@/components/configuracoes/IntegracoesTab';
 import { TemplatesAutomacoesTab } from '@/components/configuracoes/TemplatesAutomacoesTab';
 import { PortalSettingsTab } from '@/components/configuracoes/PortalSettingsTab';
 import { Visao360ConfigTab } from '@/components/configuracoes/Visao360ConfigTab';
-import { AutomationDistributionTab } from '@/components/configuracoes/AutomationDistributionTab';
-import { AutomationOnboardingTab } from '@/components/configuracoes/AutomationOnboardingTab';
-import { AutomationStageTasksTab } from '@/components/configuracoes/AutomationStageTasksTab';
 import { AutomationRulesTab } from '@/components/configuracoes/AutomationRulesTab';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
@@ -352,10 +349,6 @@ const SIDEBAR_SECTIONS: SidebarSection[] = [
   { key: '360_campos', label: 'Campos e Indicadores', icon: BarChart3, category: 'Visão 360', adminOnly: true },
   { key: '360_abas', label: 'Abas Visíveis', icon: Eye, category: 'Visão 360', adminOnly: true },
   // Automações
-  { key: 'auto_distribuicao', label: 'Distribuição de Carteira', icon: Users, category: 'Automações', adminOnly: true },
-  { key: 'auto_onboarding', label: 'Atividades Automáticas', icon: ClipboardList, category: 'Automações', adminOnly: true },
-  { key: 'auto_etapas', label: 'Atividades por Etapa', icon: Bot, category: 'Automações', adminOnly: true },
-  { key: 'auto_playbooks', label: 'Playbooks de Health', icon: Heart, category: 'Automações', adminOnly: true },
   { key: 'auto_regras', label: 'Regras de Automação', icon: Workflow, category: 'Automações', adminOnly: true },
   // Integrações
   { key: 'int_gcal', label: 'Google Calendar', icon: Calendar, category: 'Integrações', adminOnly: true },
@@ -441,10 +434,6 @@ export default function Configuracoes() {
       case 'formularios': return <FormTemplatesTab />;
       case '360_campos': return <Visao360ConfigTab mode="campos" />;
       case '360_abas': return <Visao360ConfigTab mode="abas" />;
-      case 'auto_distribuicao': return <AutomationDistributionTab />;
-      case 'auto_onboarding': return <AutomationOnboardingTab />;
-      case 'auto_etapas': return <AutomationStageTasksTab />;
-      case 'auto_playbooks': return <HealthScoreTab />;
       case 'auto_regras': return <AutomationRulesTab />;
       case 'int_gcal': return <GoogleCalendarConfig setting={settings.find(s => s.provider === 'google_calendar')} onSave={upsertSetting} />;
       case 'int_slack': return <SlackConfig setting={settings.find(s => s.provider === 'slack')} onSave={upsertSetting} />;
@@ -509,7 +498,7 @@ export default function Configuracoes() {
   return (
     <div className="flex gap-0 -m-6 min-h-[calc(100vh-4rem)]">
       {/* Sidebar */}
-      <div className="w-[240px] flex-shrink-0 bg-white border-r border-border overflow-y-auto">
+      <div className="w-[240px] flex-shrink-0 bg-card border-r border-border overflow-y-auto">
         <div className="p-4 pb-2">
           <h2 className="text-lg font-semibold">Configurações</h2>
         </div>

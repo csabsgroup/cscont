@@ -7,8 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import {
-  Home, FileText, Target, Video, Calendar, Gift, Users, Contact, LogOut, Menu, X, FolderOpen,
+  Home, FileText, Target, Video, Calendar, Gift, Users, Contact, LogOut, Menu, X, FolderOpen, Sun, Moon,
 } from 'lucide-react';
+import { useTheme } from '@/contexts/ThemeContext';
 
 const allNavItems = [
   { to: '/portal', label: 'Início', icon: Home, settingKey: null },
@@ -24,6 +25,7 @@ const allNavItems = [
 
 export function PortalLayout({ children }: { children: React.ReactNode }) {
   const { signOut, profile, user } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -87,6 +89,13 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              onClick={toggleTheme}
+              className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              title={theme === 'light' ? 'Modo escuro' : 'Modo claro'}
+            >
+              {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4 text-yellow-500" />}
+            </button>
             <span className="text-sm text-muted-foreground hidden sm:inline">{profile?.full_name}</span>
             <Avatar className="h-8 w-8">
               <AvatarImage src={profile?.avatar_url || undefined} />

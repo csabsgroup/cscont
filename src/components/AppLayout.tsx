@@ -3,7 +3,8 @@ import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/AppSidebar';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocation } from 'react-router-dom';
-import { Bell, Search, User, LogOut } from 'lucide-react';
+import { Bell, Search, User, LogOut, Sun, Moon } from 'lucide-react';
+import { useTheme } from '@/contexts/ThemeContext';
 import { NavigationTabs } from '@/components/NavigationTabs';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
@@ -35,6 +36,7 @@ const pageNames: Record<string, string> = {
 
 export function AppLayout({ children }: AppLayoutProps) {
   const { profile, role, signOut } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const [profileOpen, setProfileOpen] = useState(false);
 
@@ -82,6 +84,13 @@ export function AppLayout({ children }: AppLayoutProps) {
               <button className="relative rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
                 <Bell className="h-4 w-4" />
                 <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary" />
+              </button>
+              <button
+                onClick={toggleTheme}
+                className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                title={theme === 'light' ? 'Modo escuro' : 'Modo claro'}
+              >
+                {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4 text-yellow-500" />}
               </button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
