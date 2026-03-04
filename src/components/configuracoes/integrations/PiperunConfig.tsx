@@ -63,6 +63,7 @@ export function PiperunConfig({ setting, onSave }: Props) {
       if (error) throw error;
       setTestResult(data);
       if (data.success) { toast.success('Conectado ao Piperun!'); loadPipelines(); }
+      else { toast.error(data.error || 'Falha ao conectar'); }
     } catch (e: any) { setTestResult({ success: false }); toast.error('Falha: ' + e.message); }
     setTesting(false);
   };
