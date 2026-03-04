@@ -2,17 +2,14 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Loader2, FileText, Heart, Users, Target, TrendingUp, Clock } from 'lucide-react';
-import { formatDistanceToNow, differenceInDays, differenceInMonths, format } from 'date-fns';
+import { FileText, Eye, ClipboardList, Paperclip, History, Phone, StickyNote, BarChart3, Target, Gift } from 'lucide-react';
+import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { ClienteHeader } from '@/components/clientes/ClienteHeader';
@@ -28,7 +25,11 @@ import { EditOfficeDialog } from '@/components/clientes/EditOfficeDialog';
 import { ClienteBonus } from '@/components/clientes/ClienteBonus';
 import { PortalPreviewModal } from '@/components/clientes/PortalPreviewModal';
 import { WhatsAppSendDialog } from '@/components/clientes/WhatsAppSendDialog';
+import { ClienteVisao360 } from '@/components/clientes/ClienteVisao360';
+import { ActivityCounterBadges, ActivityCounts } from '@/components/shared/ActivityCounterBadges';
 import { Constants } from '@/integrations/supabase/types';
+import { cn } from '@/lib/utils';
+
 
 export default function Cliente360() {
   const { id } = useParams<{ id: string }>();
@@ -43,6 +44,13 @@ export default function Cliente360() {
   const [stageName, setStageName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('visao360');
+
+  // Counts for tab badges
+  const [activitiesCount, setActivitiesCount] = useState(0);
+  const [filesCount, setFilesCount] = useState(0);
+  const [notesLines, setNotesLines] = useState(0);
+  const [activityCounts, setActivityCounts] = useState<ActivityCounts>({ todas: 0, atrasadas: 0, vencemHoje: 0, aVencer: 0, concluidas: 0 });
 
   // Quick action dialogs
   const [showReassign, setShowReassign] = useState(false);
@@ -84,6 +92,31 @@ export default function Cliente360() {
     setMeetings(meetingsRes.data || []);
     setActionPlans(plansRes.data || []);
     setStageName(journeyRes.data?.journey_stages?.name || null);
+
+    // Fetch counts for badges
+    const [activitiesRes, filesRes] = await Promise.all([
+      supabase.from('activities').select('id, completed_at, due_date').eq('office_id', id!),
+      supabase.from('shared_files').select('id', { count: 'exact', head: true }).eq('office_id', id!),
+    ]);
+    const acts = activitiesRes.data || [];
+    setActivitiesCount(acts.length);
+    setFilesCount(filesRes.count || 0);
+    setNotesLines(officeRes.data?.notes ? officeRes.data.notes.split('\n').filter((l: string) => l.trim()).length : 0);
+
+    // Activity counts
+    const today = new Date(); today.setHours(0,0,0,0);
+    let atrasadas = 0, vencemHoje = 0, aVencer = 0, concluidas = 0;
+    acts.forEach((a: any) => {
+      if (a.completed_at) { concluidas++; }
+      else if (a.due_date) {
+        const d = new Date(a.due_date); d.setHours(0,0,0,0);
+        if (d < today) atrasadas++;
+        else if (d.getTime() === today.getTime()) vencemHoje++;
+        else aVencer++;
+      } else aVencer++;
+    });
+    setActivityCounts({ todas: acts.length, atrasadas, vencemHoje, aVencer, concluidas });
+
     setLoading(false);
   }, [id]);
 
@@ -145,40 +178,26 @@ export default function Cliente360() {
     return <div className="flex min-h-[400px] items-center justify-center"><p className="text-muted-foreground">Escritório não encontrado.</p></div>;
   }
 
-  // KPI computations
-  const activeContract = contracts.find(c => c.status === 'ativo') || null;
-
-  // Contract KPIs
-  const daysToRenewal = activeContract?.renewal_date ? differenceInDays(new Date(activeContract.renewal_date), new Date()) : null;
-  const renewalColor = daysToRenewal === null ? 'text-muted-foreground' : daysToRenewal < 30 ? 'text-destructive' : daysToRenewal < 60 ? 'text-yellow-600' : 'text-green-600';
-
-  // Engagement KPIs
-  const completedMeetings = meetings.filter(m => m.status === 'completed');
-  const lastMeeting = meetings[0];
-  const daysSinceMeeting = lastMeeting ? differenceInDays(new Date(), new Date(lastMeeting.scheduled_at)) : null;
-
-  // OKR KPIs
-  const totalPlans = actionPlans.length;
-  const donePlans = actionPlans.filter(p => p.status === 'done').length;
-  const overduePlans = actionPlans.filter(p => p.status !== 'done' && p.status !== 'cancelled' && p.due_date && new Date(p.due_date) < new Date()).length;
-  const okrPercent = totalPlans > 0 ? Math.round((donePlans / totalPlans) * 100) : 0;
-  const nextDuePlan = actionPlans
-    .filter(p => p.status !== 'done' && p.status !== 'cancelled' && p.due_date)
-    .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())[0];
-
-  // Tempo de Vida
-  const monthsAsClient = office.onboarding_date ? differenceInMonths(new Date(), new Date(office.onboarding_date)) : null;
-  const contractCycles = contracts.length;
-  const firstContract = contracts[contracts.length - 1];
-  const ltv = contracts.reduce((sum: number, c: any) => sum + (c.value || 0), 0);
-
   const STATUS_LABELS: Record<string, string> = {
     ativo: 'Ativo', churn: 'Churn', nao_renovado: 'Não Renovado',
     nao_iniciado: 'Não Iniciado', upsell: 'Upsell', bonus_elite: 'Bonus Elite',
   };
 
+  const tabs360 = [
+    { key: 'visao360', label: 'Visão 360', icon: Eye },
+    { key: 'timeline', label: 'Atividades', icon: ClipboardList, count: activitiesCount },
+    { key: 'arquivos', label: 'Arquivos', icon: Paperclip, count: filesCount },
+    { key: 'contratos', label: 'Contratos', icon: FileText },
+    { key: 'historico', label: 'Histórico', icon: History },
+    { key: 'contatos', label: 'Contatos', icon: Phone, count: contacts.length },
+    { key: 'notas', label: 'Notas', icon: StickyNote, count: notesLines },
+    { key: 'metricas', label: 'Métricas', icon: BarChart3 },
+    { key: 'okr', label: 'Plano de Ação', icon: Target },
+    { key: 'bonus', label: 'Cashback', icon: Gift },
+  ];
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
       <ClienteHeader
         office={office}
@@ -193,161 +212,92 @@ export default function Cliente360() {
         onWhatsApp={() => setWhatsappOpen(true)}
       />
 
-      {/* KPI Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {/* Card 1: Contrato */}
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium flex items-center gap-2"><FileText className="h-4 w-4 text-primary" />Contrato</CardTitle></CardHeader>
-          <CardContent className="space-y-1.5 text-sm">
-            {activeContract ? (
-              <>
-                <div className="flex justify-between"><span className="text-muted-foreground">Valor total</span><span className="font-medium">R$ {(activeContract.value || 0).toLocaleString('pt-BR')}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Parcela</span><span>R$ {(activeContract.monthly_value || 0).toLocaleString('pt-BR')}</span></div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Parcelas</span>
-                  <span>{(activeContract.installments_total || 0) - (activeContract.installments_overdue || 0)}/{activeContract.installments_total || 0}</span>
-                </div>
-                {(activeContract.installments_overdue || 0) > 0 && (
-                  <div className="flex justify-between"><span className="text-muted-foreground">Vencidas</span><span className="text-destructive font-medium">{activeContract.installments_overdue}</span></div>
-                )}
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Renovação</span>
-                  <span className={renewalColor + ' font-medium'}>{daysToRenewal !== null ? `${daysToRenewal} dias` : '—'}</span>
-                </div>
-                {activeContract.end_date && (
-                  <div className="flex justify-between"><span className="text-muted-foreground">Fim</span><span>{format(new Date(activeContract.end_date), 'dd/MM/yyyy')}</span></div>
-                )}
-              </>
-            ) : (
-              <p className="text-muted-foreground">Sem contrato ativo</p>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Card 2: Saúde */}
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium flex items-center gap-2"><Heart className="h-4 w-4 text-primary" />Saúde</CardTitle></CardHeader>
-          <CardContent className="space-y-2">
-            {health ? (
-              <>
-                <div className="flex items-center gap-3">
-                  <span className="text-3xl font-bold">{health.score}</span>
-                  <Badge className={`text-xs ${health.band === 'green' ? 'bg-green-500/10 text-green-600 border-green-500/30' : health.band === 'yellow' ? 'bg-yellow-500/10 text-yellow-600 border-yellow-500/30' : 'bg-red-500/10 text-red-600 border-red-500/30'}`} variant="outline">
-                    {health.band === 'green' ? 'Verde' : health.band === 'yellow' ? 'Amarelo' : 'Vermelho'}
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground">Calculado em {format(new Date(health.calculated_at), 'dd/MM/yyyy', { locale: ptBR })}</p>
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">Sem dados de saúde</p>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Card 3: Engajamento */}
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium flex items-center gap-2"><Users className="h-4 w-4 text-primary" />Engajamento</CardTitle></CardHeader>
-          <CardContent className="space-y-1.5 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Última reunião</span>
-              <span>{lastMeeting ? formatDistanceToNow(new Date(lastMeeting.scheduled_at), { addSuffix: true, locale: ptBR }) : '—'}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Dias sem reunião</span>
-              <span className={daysSinceMeeting !== null && daysSinceMeeting > 30 ? 'text-destructive font-medium' : ''}>{daysSinceMeeting ?? '—'}</span>
-            </div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Total reuniões</span><span>{completedMeetings.length}</span></div>
-          </CardContent>
-        </Card>
-
-        {/* Card 4: Plano de Ação */}
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium flex items-center gap-2"><Target className="h-4 w-4 text-primary" />Plano de Ação</CardTitle></CardHeader>
-          <CardContent className="space-y-2">
-            <div className="flex items-center gap-3">
-              <Progress value={okrPercent} className="h-2 flex-1" />
-              <span className="text-sm font-medium">{okrPercent}%</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Tarefas</span><span>{donePlans}/{totalPlans}</span>
-            </div>
-            {overduePlans > 0 && (
-              <div className="flex justify-between text-sm"><span className="text-muted-foreground">Atrasadas</span><span className="text-destructive font-medium">{overduePlans}</span></div>
-            )}
-            {nextDuePlan && (
-              <div className="text-xs text-muted-foreground mt-1">Próxima: {nextDuePlan.title} — {format(new Date(nextDuePlan.due_date), 'dd/MM')}</div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Card 5: Percepção */}
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium flex items-center gap-2"><TrendingUp className="h-4 w-4 text-primary" />Percepção</CardTitle></CardHeader>
-          <CardContent className="space-y-1.5 text-sm">
-            <div className="flex justify-between"><span className="text-muted-foreground">Faturamento mês</span><span>—</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Faturamento ano</span><span>—</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Qtd clientes</span><span>—</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Qtd colaboradores</span><span>—</span></div>
-          </CardContent>
-        </Card>
-
-        {/* Card 6: Tempo de Vida */}
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium flex items-center gap-2"><Clock className="h-4 w-4 text-primary" />Tempo de Vida</CardTitle></CardHeader>
-          <CardContent className="space-y-1.5 text-sm">
-            <div className="flex justify-between"><span className="text-muted-foreground">Tempo como cliente</span><span>{monthsAsClient !== null ? `${monthsAsClient} meses` : '—'}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Ciclos</span><span>{contractCycles}</span></div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">1ª assinatura</span>
-              <span>{firstContract?.start_date ? format(new Date(firstContract.start_date), 'dd/MM/yyyy') : '—'}</span>
-            </div>
-            <div className="flex justify-between"><span className="text-muted-foreground">LTV</span><span className="font-medium">R$ {ltv.toLocaleString('pt-BR')}</span></div>
-          </CardContent>
-        </Card>
+      {/* Horizontal tabs */}
+      <div className="bg-white border-b border-gray-200 overflow-x-auto -mx-6 px-6">
+        <nav className="flex min-w-max">
+          {tabs360.map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={cn(
+                'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors whitespace-nowrap border-b-2',
+                activeTab === tab.key
+                  ? 'text-red-700 border-red-600 bg-red-50 rounded-t-lg'
+                  : 'text-gray-500 border-transparent hover:text-gray-700 hover:bg-gray-50'
+              )}
+            >
+              <tab.icon className="h-3.5 w-3.5" />
+              {tab.label}
+              {tab.count !== undefined && tab.count > 0 && (
+                <span className="ml-1 text-xs bg-muted px-1.5 py-0.5 rounded-full">{tab.count}</span>
+              )}
+            </button>
+          ))}
+        </nav>
       </div>
 
-      {/* Tabs */}
-      <Tabs defaultValue="timeline" className="space-y-4">
-        <TabsList className="flex-wrap">
-          <TabsTrigger value="timeline">Timeline</TabsTrigger>
-          <TabsTrigger value="okr">Plano de Ação</TabsTrigger>
-          <TabsTrigger value="reunioes">Reuniões</TabsTrigger>
-          <TabsTrigger value="jornada">Jornada</TabsTrigger>
-          <TabsTrigger value="contatos">Contatos ({contacts.length})</TabsTrigger>
-          <TabsTrigger value="contratos">Contratos ({contracts.length})</TabsTrigger>
-          <TabsTrigger value="metricas">Métricas</TabsTrigger>
-          <TabsTrigger value="notas">Notas</TabsTrigger>
-          <TabsTrigger value="bonus">Bônus/Cashback</TabsTrigger>
-        </TabsList>
+      {/* Tab content */}
+      {activeTab === 'visao360' && (
+        <ClienteVisao360
+          office={office}
+          health={health}
+          contracts={contracts}
+          meetings={meetings}
+          actionPlans={actionPlans}
+          csmProfile={csmProfile}
+          stageName={stageName}
+          contacts={contacts}
+          onNavigateTab={setActiveTab}
+        />
+      )}
 
-        <TabsContent value="timeline">
+      {activeTab === 'timeline' && (
+        <div className="space-y-4">
+          <ActivityCounterBadges counts={activityCounts} />
           <Card className="p-6"><ClienteTimeline officeId={office.id} readOnly={isViewer} /></Card>
-        </TabsContent>
-        <TabsContent value="okr">
-          <Card className="p-6"><ClienteOKR officeId={office.id} /></Card>
-        </TabsContent>
-        <TabsContent value="reunioes">
-          <Card className="p-6"><ClienteReunioes officeId={office.id} /></Card>
-        </TabsContent>
-        <TabsContent value="jornada">
-          <ClienteJornada officeId={office.id} productId={office.active_product_id} />
-        </TabsContent>
-        <TabsContent value="contatos">
-          <Card className="p-6"><ClienteContatos officeId={office.id} contacts={contacts} onRefresh={fetchAll} /></Card>
-        </TabsContent>
-        <TabsContent value="contratos">
-          <Card className="p-6"><ClienteContratos officeId={office.id} contracts={contracts} onRefresh={fetchAll} /></Card>
-        </TabsContent>
-        <TabsContent value="metricas">
-          <ClienteMetricas officeId={office.id} />
-        </TabsContent>
-        <TabsContent value="notas">
-          <Card className="p-6"><ClienteNotas officeId={office.id} initialNotes={office.notes} /></Card>
-        </TabsContent>
-        <TabsContent value="bonus">
-          <Card className="p-6"><ClienteBonus officeId={office.id} /></Card>
-        </TabsContent>
-      </Tabs>
+        </div>
+      )}
+
+      {activeTab === 'arquivos' && (
+        <Card className="p-6">
+          <p className="text-sm text-muted-foreground">Arquivos compartilhados do cliente</p>
+          {/* Existing shared files functionality would go here */}
+        </Card>
+      )}
+
+      {activeTab === 'contratos' && (
+        <Card className="p-6"><ClienteContratos officeId={office.id} contracts={contracts} onRefresh={fetchAll} /></Card>
+      )}
+
+      {activeTab === 'historico' && (
+        <Card className="p-6"><ClienteTimeline officeId={office.id} readOnly={isViewer} /></Card>
+      )}
+
+      {activeTab === 'contatos' && (
+        <Card className="p-6"><ClienteContatos officeId={office.id} contacts={contacts} onRefresh={fetchAll} /></Card>
+      )}
+
+      {activeTab === 'notas' && (
+        <Card className="p-6"><ClienteNotas officeId={office.id} initialNotes={office.notes} /></Card>
+      )}
+
+      {activeTab === 'metricas' && <ClienteMetricas officeId={office.id} />}
+
+      {activeTab === 'okr' && (
+        <Card className="p-6"><ClienteOKR officeId={office.id} /></Card>
+      )}
+
+      {activeTab === 'bonus' && (
+        <Card className="p-6"><ClienteBonus officeId={office.id} /></Card>
+      )}
+
+      {activeTab === 'reunioes' && (
+        <Card className="p-6"><ClienteReunioes officeId={office.id} /></Card>
+      )}
+
+      {activeTab === 'jornada' && (
+        <ClienteJornada officeId={office.id} productId={office.active_product_id} />
+      )}
 
       {/* Edit Office Dialog */}
       {!isViewer && <EditOfficeDialog office={office} open={editOpen} onOpenChange={setEditOpen} onSaved={fetchAll} />}
