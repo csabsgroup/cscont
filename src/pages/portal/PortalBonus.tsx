@@ -55,16 +55,56 @@ export default function PortalBonus() {
 
   const handleRequest = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!officeId) return;
+    if (!officeId || !user) return;
     setSaving(true);
-    const { error } = await supabase.from('bonus_requests').insert({
+
+    // Insert bonus request
+    const { data: newRequest, error } = await supabase.from('bonus_requests').insert({
       office_id: officeId,
       catalog_item_id: selectedItem,
       quantity: parseFloat(qty),
       notes: notes || null,
-    });
-    if (error) toast.error('Erro: ' + error.message);
-    else { toast.success('Solicitação enviada!'); setDialogOpen(false); setSelectedItem(''); setQty('1'); setNotes(''); fetchAll(); }
+    }).select('id').single();
+
+    if (error) {
+      toast.error('Erro: ' + error.message);
+      setSaving(false);
+      return;
+    }
+
+    // Auto-create activity for CSM
+    const { data: office } = await supabase.from('offices').select('csm_id, name').eq('id', officeId).single();
+    const catalogItem = catalog.find(c => c.id === selectedItem);
+
+    if (office?.csm_id) {
+      await supabase.from('activities').insert({
+        title: `Solicitação de bônus: ${catalogItem?.name || 'Item'} (${qty}x)`,
+        description: `O cliente ${office.name} solicitou ${qty}x ${catalogItem?.name}. ${notes ? 'Obs: ' + notes : ''}`,
+        user_id: office.csm_id,
+        office_id: officeId,
+        type: 'task' as any,
+        priority: 'high' as any,
+      });
+
+      // Try Slack notification
+      try {
+        await supabase.functions.invoke('integration-slack', {
+          body: {
+            action: 'sendNotification',
+            message: `🎁 *Nova solicitação de bônus*\nCliente: ${office.name}\nItem: ${catalogItem?.name} (${qty}x)\n${notes ? 'Obs: ' + notes : ''}`,
+          },
+        });
+      } catch {
+        // Slack not configured, ignore
+      }
+    }
+
+    toast.success('Solicitação enviada!');
+    setDialogOpen(false);
+    setSelectedItem('');
+    setQty('1');
+    setNotes('');
+    fetchAll();
     setSaving(false);
   };
 
@@ -116,7 +156,7 @@ export default function PortalBonus() {
               <TableHeader><TableRow><TableHead>Item</TableHead><TableHead>Qtd</TableHead><TableHead>Status</TableHead><TableHead>Data</TableHead></TableRow></TableHeader>
               <TableBody>
                 {requests.map(r => (
-                  <TableRow key={r.id}>
+                  <TableRow key={r.id} className={r.status === 'pending' ? 'bg-amber-50/50' : ''}>
                     <TableCell className="font-medium">{r.bonus_catalog?.name}</TableCell>
                     <TableCell>{r.quantity}</TableCell>
                     <TableCell><Badge variant={statusLabels[r.status]?.variant}>{statusLabels[r.status]?.label}</Badge></TableCell>

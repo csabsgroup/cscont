@@ -3,16 +3,19 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Calendar } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Loader2, Calendar, List, Grid3x3 } from 'lucide-react';
 import { format, isFuture, isPast } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { PortalCalendar } from '@/components/portal/PortalCalendar';
 
 export default function PortalEventos() {
   const { user } = useAuth();
   const [events, setEvents] = useState<any[]>([]);
+  const [meetings, setMeetings] = useState<any[]>([]);
   const [participation, setParticipation] = useState<Record<string, { confirmed: boolean }>>({});
   const [loading, setLoading] = useState(true);
-  const [officeId, setOfficeId] = useState<string | null>(null);
+  const [view, setView] = useState<'lista' | 'calendario'>('lista');
 
   useEffect(() => {
     if (!user) return;
@@ -20,22 +23,20 @@ export default function PortalEventos() {
       const { data: links } = await supabase.from('client_office_links').select('office_id').eq('user_id', user.id);
       const oid = links?.[0]?.office_id;
       if (!oid) { setLoading(false); return; }
-      setOfficeId(oid);
 
       const { data: office } = await supabase.from('offices').select('active_product_id').eq('id', oid).single();
       const productId = office?.active_product_id;
 
-      const [eventsRes, participantsRes] = await Promise.all([
+      const [eventsRes, participantsRes, meetingsRes] = await Promise.all([
         supabase.from('events').select('*').order('event_date', { ascending: true }),
         supabase.from('event_participants').select('event_id, confirmed').eq('office_id', oid),
+        supabase.from('meetings').select('*').eq('office_id', oid).eq('share_with_client', true).order('scheduled_at', { ascending: true }),
       ]);
 
-      // Build participation map
       const pMap: Record<string, { confirmed: boolean }> = {};
       (participantsRes.data || []).forEach(p => { pMap[p.event_id] = { confirmed: p.confirmed }; });
       setParticipation(pMap);
 
-      // Filter by eligible product
       const filtered = (eventsRes.data || []).filter(ev => {
         if (!productId) return true;
         const eligible = ev.eligible_product_ids as string[] | null;
@@ -44,6 +45,7 @@ export default function PortalEventos() {
       });
 
       setEvents(filtered);
+      setMeetings(meetingsRes.data || []);
       setLoading(false);
     })();
   }, [user]);
@@ -52,6 +54,24 @@ export default function PortalEventos() {
 
   const upcoming = events.filter(e => isFuture(new Date(e.event_date)));
   const past = events.filter(e => isPast(new Date(e.event_date)));
+
+  const calendarItems = [
+    ...events.map(ev => ({
+      id: ev.id,
+      title: ev.title,
+      date: new Date(ev.event_date),
+      type: 'event' as const,
+      subtype: ev.type === 'online' ? 'Online' : 'Presencial',
+      location: ev.location || undefined,
+    })),
+    ...meetings.map(m => ({
+      id: m.id,
+      title: m.title,
+      date: new Date(m.scheduled_at),
+      type: 'meeting' as const,
+      subtype: `${m.duration_minutes || 30}min`,
+    })),
+  ];
 
   const getParticipationBadge = (eventId: string, isPastEvent: boolean) => {
     const p = participation[eventId];
@@ -68,34 +88,60 @@ export default function PortalEventos() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Eventos</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Eventos</h1>
+        <div className="flex gap-1 rounded-lg border p-0.5">
+          <Button
+            size="sm"
+            variant={view === 'lista' ? 'default' : 'ghost'}
+            className="h-7 px-2 text-xs"
+            onClick={() => setView('lista')}
+          >
+            <List className="mr-1 h-3.5 w-3.5" /> Lista
+          </Button>
+          <Button
+            size="sm"
+            variant={view === 'calendario' ? 'default' : 'ghost'}
+            className="h-7 px-2 text-xs"
+            onClick={() => setView('calendario')}
+          >
+            <Grid3x3 className="mr-1 h-3.5 w-3.5" /> Calendário
+          </Button>
+        </div>
+      </div>
 
-      {events.length === 0 ? (
-        <Card><CardContent className="flex flex-col items-center py-8">
-          <Calendar className="h-8 w-8 text-muted-foreground/40 mb-2" />
-          <p className="text-sm text-muted-foreground">Nenhum evento disponível.</p>
-        </CardContent></Card>
+      {view === 'calendario' ? (
+        <PortalCalendar events={calendarItems} />
       ) : (
         <>
-          {upcoming.length > 0 && (
-            <div>
-              <h2 className="text-lg font-semibold mb-3">Próximos</h2>
-              <div className="grid gap-4 sm:grid-cols-2">
-                {upcoming.map(ev => (
-                  <EventCard key={ev.id} event={ev} upcoming participationBadge={getParticipationBadge(ev.id, false)} />
-                ))}
-              </div>
-            </div>
-          )}
-          {past.length > 0 && (
-            <div>
-              <h2 className="text-lg font-semibold mb-3 text-muted-foreground">Anteriores</h2>
-              <div className="grid gap-4 sm:grid-cols-2">
-                {past.map(ev => (
-                  <EventCard key={ev.id} event={ev} participationBadge={getParticipationBadge(ev.id, true)} />
-                ))}
-              </div>
-            </div>
+          {events.length === 0 && meetings.length === 0 ? (
+            <Card><CardContent className="flex flex-col items-center py-8">
+              <Calendar className="h-8 w-8 text-muted-foreground/40 mb-2" />
+              <p className="text-sm text-muted-foreground">Nenhum evento disponível.</p>
+            </CardContent></Card>
+          ) : (
+            <>
+              {upcoming.length > 0 && (
+                <div>
+                  <h2 className="text-lg font-semibold mb-3">Próximos</h2>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {upcoming.map(ev => (
+                      <EventCard key={ev.id} event={ev} upcoming participationBadge={getParticipationBadge(ev.id, false)} />
+                    ))}
+                  </div>
+                </div>
+              )}
+              {past.length > 0 && (
+                <div>
+                  <h2 className="text-lg font-semibold mb-3 text-muted-foreground">Anteriores</h2>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {past.map(ev => (
+                      <EventCard key={ev.id} event={ev} participationBadge={getParticipationBadge(ev.id, true)} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </>
       )}

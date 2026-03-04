@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, CheckCircle2, XCircle, Download } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Loader2, CheckCircle2, XCircle, Download, ArrowRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { IntegrationSetting } from '@/hooks/useIntegrationSettings';
@@ -12,6 +14,15 @@ interface Props {
   setting?: IntegrationSetting;
   onSave: (provider: string, updates: Partial<IntegrationSetting>) => Promise<void>;
 }
+
+const DEFAULT_MAPPINGS = [
+  { piperun: 'title', local: 'name', label: 'Nome' },
+  { piperun: 'person.email', local: 'email', label: 'E-mail' },
+  { piperun: 'person.phone', local: 'phone', label: 'Telefone' },
+  { piperun: 'value', local: 'contract_value', label: 'Valor do contrato' },
+  { piperun: 'person.city', local: 'city', label: 'Cidade' },
+  { piperun: 'person.state', local: 'state', label: 'Estado' },
+];
 
 export function PiperunConfig({ setting, onSave }: Props) {
   const config = setting?.config || {};
@@ -22,8 +33,12 @@ export function PiperunConfig({ setting, onSave }: Props) {
   const [pipelineId, setPipelineId] = useState(config.pipeline_id || '');
   const [stageId, setStageId] = useState(config.stage_id || '');
   const [autoImport, setAutoImport] = useState(config.auto_import || false);
+  const [filterWon, setFilterWon] = useState(config.filter_won !== false);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ imported: number; skipped: number } | null>(null);
+  const [mappings, setMappings] = useState<Array<{ piperun: string; local: string; label: string }>>(
+    config.field_mappings || DEFAULT_MAPPINGS
+  );
 
   const testConnection = async () => {
     setTesting(true);
@@ -52,11 +67,8 @@ export function PiperunConfig({ setting, onSave }: Props) {
   };
 
   useEffect(() => {
-    if (pipelineId) {
-      loadStages(pipelineId);
-    } else {
-      setStages([]);
-    }
+    if (pipelineId) loadStages(pipelineId);
+    else setStages([]);
   }, [pipelineId]);
 
   const loadStages = async (pid: string) => {
@@ -70,12 +82,22 @@ export function PiperunConfig({ setting, onSave }: Props) {
     if (setting?.is_connected) loadPipelines();
   }, [setting?.is_connected]);
 
+  const updateMapping = (index: number, field: 'piperun' | 'local', value: string) => {
+    setMappings(prev => prev.map((m, i) => i === index ? { ...m, [field]: value } : m));
+  };
+
   const importNow = async () => {
     if (!pipelineId || !stageId) { toast.error('Selecione funil e etapa'); return; }
     setImporting(true);
     try {
       const { data } = await supabase.functions.invoke('integration-piperun', {
-        body: { action: 'importDeals', pipeline_id: pipelineId, stage_id: stageId },
+        body: {
+          action: 'importDeals',
+          pipeline_id: pipelineId,
+          stage_id: stageId,
+          filter_won: filterWon,
+          field_mappings: mappings,
+        },
       });
       setImportResult(data);
       toast.success(`${data.imported} novos clientes importados, ${data.skipped} já existiam`);
@@ -88,7 +110,13 @@ export function PiperunConfig({ setting, onSave }: Props) {
   const handleSave = async () => {
     await onSave('piperun', {
       is_connected: testResult?.success || setting?.is_connected || false,
-      config: { pipeline_id: pipelineId, stage_id: stageId, auto_import: autoImport },
+      config: {
+        pipeline_id: pipelineId,
+        stage_id: stageId,
+        auto_import: autoImport,
+        filter_won: filterWon,
+        field_mappings: mappings,
+      },
     });
     toast.success('Configuração do Piperun salva!');
   };
@@ -132,8 +160,55 @@ export function PiperunConfig({ setting, onSave }: Props) {
       </div>
 
       <div className="flex items-center justify-between">
+        <Label>Filtrar apenas deals ganhos (status=won)</Label>
+        <Switch checked={filterWon} onCheckedChange={setFilterWon} />
+      </div>
+
+      <div className="flex items-center justify-between">
         <Label>Importação automática</Label>
         <Switch checked={autoImport} onCheckedChange={setAutoImport} />
+      </div>
+
+      {/* Field Mapping */}
+      <div className="space-y-2">
+        <Label className="text-sm font-semibold">Mapeamento de Campos</Label>
+        <div className="rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-xs">Campo Piperun</TableHead>
+                <TableHead className="text-xs w-8"></TableHead>
+                <TableHead className="text-xs">Campo Local</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {mappings.map((m, i) => (
+                <TableRow key={i}>
+                  <TableCell className="py-1.5">
+                    <Input
+                      value={m.piperun}
+                      onChange={e => updateMapping(i, 'piperun', e.target.value)}
+                      className="h-8 text-xs"
+                      placeholder="campo.piperun"
+                    />
+                  </TableCell>
+                  <TableCell className="py-1.5 text-center">
+                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground mx-auto" />
+                  </TableCell>
+                  <TableCell className="py-1.5">
+                    <Input
+                      value={m.local}
+                      onChange={e => updateMapping(i, 'local', e.target.value)}
+                      className="h-8 text-xs"
+                      placeholder="campo_local"
+                    />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+        <p className="text-[11px] text-muted-foreground">Use notação com ponto para campos aninhados (ex: person.email)</p>
       </div>
 
       <Button variant="outline" onClick={importNow} disabled={importing || !pipelineId || !stageId}>
