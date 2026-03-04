@@ -171,7 +171,16 @@ export default function Eventos() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+        <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
+          <div className="bg-muted/50 h-11 flex items-center px-4 gap-12">
+            {[...Array(5)].map((_, i) => <div key={i} className="h-3 w-16 rounded skeleton-shimmer" />)}
+          </div>
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="border-b border-border/50 px-4 py-3 flex items-center gap-12">
+              {[...Array(5)].map((_, j) => <div key={j} className="h-4 w-20 rounded skeleton-shimmer" />)}
+            </div>
+          ))}
+        </div>
       ) : events.length === 0 ? (
         <Card><CardContent className="flex flex-col items-center justify-center py-12">
           <Calendar className="mb-3 h-10 w-10 text-muted-foreground/40" />

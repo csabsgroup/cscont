@@ -49,10 +49,10 @@ export default function Auth() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/30 px-4">
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-primary">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary shadow-md">
             <span className="text-2xl font-bold text-primary-foreground">C</span>
           </div>
           <h1 className="text-2xl font-bold">Contador CEO</h1>

@@ -367,7 +367,7 @@ export default function Clientes() {
       <div className="flex items-center gap-3">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Buscar por nome, cidade, CSM..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          <Input placeholder="Buscar por nome, cidade, CSM..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 rounded-full bg-muted/50 border-0 focus-visible:ring-1" />
         </div>
         <Button variant={showFilters || hasActiveFilters ? 'default' : 'outline'} size="sm" onClick={() => setShowFilters(!showFilters)}>
           <Filter className="h-4 w-4 mr-1" />Filtros
@@ -419,7 +419,16 @@ export default function Clientes() {
 
       <Card>
         {loading ? (
-          <CardContent className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></CardContent>
+          <div className="p-4 space-y-0">
+            <div className="bg-muted/50 h-11 flex items-center px-4 gap-12 rounded-t-lg">
+              {visibleColumns.map((col) => <div key={col} className="h-3 w-16 rounded skeleton-shimmer" />)}
+            </div>
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="border-b border-border/50 px-4 py-3 flex items-center gap-12">
+                {visibleColumns.map((col) => <div key={col} className="h-4 w-20 rounded skeleton-shimmer" />)}
+              </div>
+            ))}
+          </div>
         ) : filtered.length === 0 ? (
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Building2 className="mb-3 h-10 w-10 text-muted-foreground/40" />
