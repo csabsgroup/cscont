@@ -1,136 +1,91 @@
 
 
-## Analise: Funcionalidades Implementadas vs. Pendentes
+## Plan: Implement Phases 3-5 (Formularios, Cashback/Bonus, Portal do Cliente)
 
-### Ja Implementado
-- Auth com RBAC (admin, manager, csm, viewer, client)
-- Tabelas: offices, contacts, contracts, activities, meetings, events, event_participants, journey_stages, office_journey, products, profiles, user_roles, manager_csm_links, client_office_links
-- Pages: Dashboard (dados reais), Clientes (busca+filtros), Cliente 360 (resumo/contatos/contratos/notas), Jornada (kanban), Atividades (CRUD), Reunioes (CRUD), Eventos (CRUD basico), Contratos Global, Contatos Global, Relatorios (graficos), Configuracoes (produtos/etapas/usuarios)
-- Branding vermelho/preto/branco, sidebar, RLS policies
-
-### Funcionalidades Faltantes (ordenadas por prioridade/impacto)
+Given the volume, I'll implement Phases 3, 4, and 5 together as they are interconnected (Portal depends on Bonus and Forms features).
 
 ---
 
-### FASE 1 — Health Score (sistema completo)
+### Phase 3 — Custom Forms
 
-**Database:**
-- Tabela `health_pillars` (product_id, name, weight, position)
-- Tabela `health_indicators` (pillar_id, name, weight, data_source, data_key)
-- Tabela `health_overrides` (product_id, condition_type, threshold, action: force_red/reduce_score)
-- Tabela `health_scores` (office_id, score, band: red/yellow/green, calculated_at, breakdown jsonb)
-- Tabela `health_playbooks` (product_id, band, activity_template jsonb)
+**Database migration:**
+- `form_templates` table: id, name, type (enum: kickoff, onboarding, nutricao, renovacao, expansao, sos, extra, apresentacao), product_id (nullable), fields (jsonb), post_actions (jsonb), created_by, created_at, updated_at
+- `form_submissions` table: id, template_id, office_id, meeting_id (nullable), user_id, data (jsonb), submitted_at
+- RLS: admin full access, CSM can create/view submissions for their offices, authenticated can view templates
 
-**Configuracoes:** Nova tab "Health Score" — CRUD de pilares, indicadores com pesos, overrides, playbooks por faixa/produto.
-
-**Calculo:** Edge function `calculate-health` que recebe office_id, busca pilares/indicadores do produto ativo, aplica neutralizacao, calcula score 0-100, aplica overrides, salva em health_scores.
-
-**UI:** Badge de health no Cliente 360, Clientes table, Kanban cards, Dashboard (health medio, distribuicao V/A/V, em risco).
+**UI:**
+- New "Formularios" tab in Configuracoes: template builder with field types (text, number, date, dropdown, multi, rating 1-5, NPS 0-10, boolean, file)
+- Reunioes page: when marking as "completed", show form selector and fill form
+- Form submissions stored as JSONB
 
 ---
 
-### FASE 2 — Cliente 360 completo (abas faltantes)
+### Phase 4 — Cashback/Bonus Catalog
 
-**Abas faltantes:**
-- **Timeline**: atividades + reunioes do escritorio, com popup para editar/concluir/reabrir/excluir
-- **Plano de Acao (OKR)**: tabela `action_plans` (office_id, title, description, due_date, status, observations). CRUD interno, % conclusao
-- **Reunioes**: historico de reunioes do escritorio dentro do 360
-- **Jornada**: etapa atual + historico de movimentacao (office_journey)
-- **Metricas**: LTV (soma ciclos), retencao, evolucao health
+**Database migration:**
+- `bonus_catalog` table: id, name, unit, default_validity_days, visible_in_portal, requires_approval, eligible_product_ids (uuid[]), created_at, updated_at
+- `bonus_grants` table: id, office_id, catalog_item_id, quantity, granted_at, expires_at, used, available
+- `bonus_requests` table: id, office_id, catalog_item_id, quantity, notes, status (enum: pending, approved, denied), reviewed_by (nullable), created_at, updated_at
+- RLS: admin full access on catalog; CSM can manage grants/requests for their offices; clients can view own grants and create requests
 
----
-
-### FASE 3 — Formularios Customizaveis
-
-**Database:**
-- Tabela `form_templates` (name, type: kickoff/nutricao/renovacao/etc, product_id, fields jsonb, post_actions jsonb)
-- Tabela `form_submissions` (template_id, office_id, meeting_id, user_id, data jsonb, submitted_at)
-
-**Configuracoes:** Nova tab "Formularios" — construtor de campos (texto, numero, data, dropdown, multi, rating, NPS, booleano, arquivo).
-
-**Reunioes:** ao marcar "realizada", selecionar formulario e preencher. Mapeamento para indicadores do Health Score.
+**UI:**
+- New "Catalogo de Bonus" tab in Configuracoes (admin)
+- New "Bonus/Cashback" tab in Cliente 360: show grants balance, requests history, create grant
+- Events `eligible_product_ids` column (uuid[]) added to events table for Phase 7 prep
 
 ---
 
-### FASE 4 — Cashback/Bonus (catalogo)
+### Phase 5 — Portal do Cliente (role=client)
 
-**Database:**
-- Tabela `bonus_catalog` (name, unit, default_validity_days, visible_in_portal, requires_approval, eligible_product_ids)
-- Tabela `bonus_grants` (office_id, catalog_item_id, quantity, granted_at, expires_at, used, available)
-- Tabela `bonus_requests` (office_id, catalog_item_id, quantity, notes, status: pending/approved/denied, reviewed_by)
+**Database migration:**
+- Add `shared_with_client boolean default false` to activities table (notes already have office-level visibility)
 
-**Configuracoes:** Nova tab "Catalogo de Bonus".
-**Cliente 360:** Nova aba "Bonus/Cashback" com saldo e solicitacoes.
+**UI — New layout + pages:**
+- `PortalLayout.tsx`: separate nav (no internal sidebar), with portal-specific menu
+- Portal routes under `/portal/*` with client-role guard
+- Pages:
+  - **Home**: summary cards (contract status, OKR progress, upcoming events)
+  - **Meu Contrato**: contract details, installments, renewal info
+  - **Plano de Acao**: view action_plans, edit only status + observations
+  - **Reunioes**: meetings with share_with_client=true, view notes/transcript
+  - **Eventos**: events for the client's product
+  - **Bonus/Cashback**: view balance, create requests
+  - **Contatos**: CSM and manager contact info
+  - **Membros Ativos**: directory of active offices in same product with visible_in_directory=true (photo, name, phone, instagram, email, city/state)
 
----
-
-### FASE 5 — Portal do Cliente (role=client)
-
-**Novo layout** separado do interno (sem sidebar interna, com navegacao propria).
-
-**Paginas:**
-- Home (resumo)
-- Meu Contrato (parcelas, renovacao)
-- Meu Plano de Acao (editar apenas status/observacoes)
-- Reunioes (apenas share_with_client=true) — requer campo `share_with_client` na tabela meetings
-- Eventos (do produto)
-- Bonus/Cashback (saldo + solicitacoes)
-- Arquivos compartilhados — requer campo `shared_with_client` na tabela de notas/arquivos
-- Contatos (CSM, Gestor)
-- Membros Ativos (diretorio: offices ativos do mesmo produto com visible_in_directory=true)
-
-**Database:** adicionar `share_with_client boolean default false` em meetings.
+**Routing:**
+- Add `/portal/*` routes in App.tsx with a `PortalRoute` guard that checks role=client
+- Redirect clients to `/portal` on login
 
 ---
 
-### FASE 6 — Dashboard avancado (itens faltantes)
+### Implementation Order
 
-Itens do prompt ainda nao cobertos:
-- Em risco (health vermelho)
-- NPS medio + cobertura
-- Health medio + distribuicao V/A/V
-- Sem percepcao coletada no mes
-- +30 dias sem reuniao
-- Proximos eventos
-- Ranking evolucao clientes
-- Agenda do dia (calendar)
-- Funil/etapas por produto
-- Rankings: top churn risk, top expansao
+1. Database migration (all tables + columns in one migration)
+2. Configuracoes: Forms tab + Bonus Catalog tab
+3. Reunioes: form integration on completion
+4. Cliente 360: Bonus/Cashback tab
+5. Portal layout + all portal pages
+6. App.tsx routing updates + client redirect logic
 
----
+### Files to create:
+- `src/components/configuracoes/FormTemplatesTab.tsx`
+- `src/components/configuracoes/BonusCatalogTab.tsx`
+- `src/components/clientes/ClienteBonus.tsx`
+- `src/components/portal/PortalLayout.tsx`
+- `src/pages/portal/PortalHome.tsx`
+- `src/pages/portal/PortalContrato.tsx`
+- `src/pages/portal/PortalOKR.tsx`
+- `src/pages/portal/PortalReunioes.tsx`
+- `src/pages/portal/PortalEventos.tsx`
+- `src/pages/portal/PortalBonus.tsx`
+- `src/pages/portal/PortalContatos.tsx`
+- `src/pages/portal/PortalMembros.tsx`
 
-### FASE 7 — Eventos com participacao automatica
-
-Ao criar evento, selecionar produto(s) elegiveis. Ao abrir confirmacao, puxar automaticamente TODOS os offices ativos dos produtos e criar registros em event_participants. Controle de presenca (convidado/confirmado/participou/faltou).
-
----
-
-### FASE 8 — Melhorias menores
-
-- **Atividades:** tabs Hoje/Atrasadas/Futuras/Concluidas (atualmente so Pendentes/Concluidas). Tipos expandidos (ligacao, follow-up, check-in, e-mail, whatsapp, reuniao, planejamento). Checklist/subtarefas. Popup menu com edicao.
-- **Reunioes:** flag share_with_client. Campo transcript.
-- **Jornada:** drag & drop real (atualmente e select). Filtros por saude, status, CSM. Card com health, dias renovacao, parcelas vencidas, ultima reuniao.
-- **Clientes:** colunas CSM, etapa, health, LTV, ultimo contato, proximo passo, parcelas vencidas, dias renovacao. Visoes salvas.
-- **Relatorios:** tabs (Visao executiva, Churn & retencao, Receita & LTV, Health/NPS, Cobertura, Jornada analytics, Inadimplencia, Evolucao). Filtro de periodo + comparacao.
-- **Configuracoes:** tabs faltantes — Health Score, Formularios, Templates/Automacoes, Catalogo de bonus, Integracoes.
-
----
-
-### FASE 9 — Integracoes (stubs)
-
-Tela de Integracoes em Configuracoes com cards para: Google Calendar, Asaas, Slack, Piperun, WhatsApp, Fireflies. Cada um mostrando status "Nao conectado" com botao de configurar + campos de API key/webhook.
-
----
-
-### FASE 10 — Seed Data
-
-Edge function ou migration com dados de exemplo: 10 escritorios, 20 socios, 30 atividades, 10 reunioes, 3 eventos, 3 produtos com jornadas e health configurados.
-
----
-
-## Recomendacao de Implementacao
-
-Dado o volume, recomendo implementar em **blocos de 2-3 fases por iteracao**, comecando por **Fase 1 (Health Score) + Fase 2 (Cliente 360 completo)** pois sao o nucleo do sistema de CS e desbloqueiam as fases seguintes (Dashboard avancado depende do Health Score, Portal depende do 360 completo).
-
-Cada fase envolve: migracao de banco → componentes UI → integracao com telas existentes.
+### Files to edit:
+- `src/pages/Configuracoes.tsx` (add Forms + Bonus tabs)
+- `src/pages/Reunioes.tsx` (form selector on completion)
+- `src/pages/Cliente360.tsx` (add Bonus tab)
+- `src/App.tsx` (portal routes + client redirect)
+- `src/contexts/AuthContext.tsx` (add portal redirect logic)
 
