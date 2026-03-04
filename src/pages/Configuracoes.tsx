@@ -14,6 +14,7 @@ import { Visao360ConfigTab } from '@/components/configuracoes/Visao360ConfigTab'
 import { AutomationDistributionTab } from '@/components/configuracoes/AutomationDistributionTab';
 import { AutomationOnboardingTab } from '@/components/configuracoes/AutomationOnboardingTab';
 import { AutomationStageTasksTab } from '@/components/configuracoes/AutomationStageTasksTab';
+import { AutomationRulesTab } from '@/components/configuracoes/AutomationRulesTab';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { GoogleCalendarConfig } from '@/components/configuracoes/integrations/GoogleCalendarConfig';
@@ -355,6 +356,7 @@ const SIDEBAR_SECTIONS: SidebarSection[] = [
   { key: 'auto_onboarding', label: 'Atividades Automáticas', icon: ClipboardList, category: 'Automações', adminOnly: true },
   { key: 'auto_etapas', label: 'Atividades por Etapa', icon: Bot, category: 'Automações', adminOnly: true },
   { key: 'auto_playbooks', label: 'Playbooks de Health', icon: Heart, category: 'Automações', adminOnly: true },
+  { key: 'auto_regras', label: 'Regras de Automação', icon: Workflow, category: 'Automações', adminOnly: true },
   // Integrações
   { key: 'int_gcal', label: 'Google Calendar', icon: Calendar, category: 'Integrações', adminOnly: true },
   { key: 'int_slack', label: 'Slack', icon: MessageSquare, category: 'Integrações', adminOnly: true },
@@ -443,6 +445,7 @@ export default function Configuracoes() {
       case 'auto_onboarding': return <AutomationOnboardingTab />;
       case 'auto_etapas': return <AutomationStageTasksTab />;
       case 'auto_playbooks': return <HealthScoreTab />;
+      case 'auto_regras': return <AutomationRulesTab />;
       case 'int_gcal': return <GoogleCalendarConfig setting={settings.find(s => s.provider === 'google_calendar')} onSave={upsertSetting} />;
       case 'int_slack': return <SlackConfig setting={settings.find(s => s.provider === 'slack')} onSave={upsertSetting} />;
       case 'int_asaas': return <AsaasConfig setting={settings.find(s => s.provider === 'asaas')} onSave={upsertSetting} />;
