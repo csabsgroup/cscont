@@ -1,81 +1,101 @@
 
 
-# Plan: Expand Piperun Field Mapping + Product-Triggered Automations
+# Plan: Automation Rules Engine — Triggers + Conditions
 
-## 1. Database Migration — Add Missing Columns
+## Context
 
-**offices** — add: `whatsapp`, `cep`, `address`, `cpf`, `segment`, `first_signature_date` (date), `faturamento_mensal` (numeric), `faturamento_anual` (numeric), `qtd_clientes` (integer), `qtd_colaboradores` (integer)
+The current system has hardcoded automation types (distribution, onboarding_tasks, stage_tasks) stored in `automation_rules` with `rule_type` + `config` JSONB. The new system replaces this with a generic trigger-condition-action engine.
 
-**contacts** — add: `whatsapp`, `cpf`, `contact_type` (text, for decisor/usuario/financeiro)
+## 1. Database Migration
 
-All nullable, no defaults needed.
+**New table: `automation_rules_v2`**
 
-## 2. Frontend — Expand CRM_FIELDS in PiperunConfig.tsx
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid PK | |
+| name | text NOT NULL | Rule name |
+| description | text | Optional |
+| is_active | boolean | Default true |
+| trigger_type | text NOT NULL | e.g. "office.created", "health.band_changed" |
+| trigger_params | jsonb | e.g. `{ "dias": 30 }` for time-based triggers |
+| conditions | jsonb | Array of condition objects |
+| condition_logic | text | "and" or "or", default "and" |
+| actions | jsonb | Array of action objects (for future use) |
+| product_id | uuid | Optional filter (nullable) |
+| created_by | uuid | |
+| created_at / updated_at | timestamptz | |
 
-Replace current 8-item `CRM_FIELDS` with grouped list covering all entities:
+RLS: Admin-only for ALL, authenticated SELECT.
 
-- **Escritorio** (~20 fields): name, email, whatsapp, phone, city, state, cep, address, cnpj, cpf, segment, active_product_id (with lightning icon), status, csm_id, first_signature_date, onboarding_date, faturamento_mensal, faturamento_anual, qtd_clientes, qtd_colaboradores, notes
-- **Contrato** (~6 fields): contracts.value, contracts.monthly_value, contracts.installments_total, contracts.start_date, contracts.end_date, contracts.status
-- **Contato Principal** (~9 fields): contacts.name, contacts.email, contacts.phone, contacts.whatsapp, contacts.instagram, contacts.role_title, contacts.contact_type, contacts.birthday, contacts.cpf
-- **Socio 2** (~7 fields): contacts_2.name/email/phone/whatsapp/role_title/cpf/birthday
-- **Socio 3** (~7 fields): contacts_3.name/email/phone/whatsapp/role_title/cpf/birthday
+Keep existing `automation_rules` table untouched for backward compatibility.
 
-Use `<SelectGroup>` with `<SelectLabel>` for visual grouping. The `active_product_id` option gets a lightning icon and special styling.
+## 2. Frontend — New Component `AutomationRulesTab.tsx`
 
-## 3. Product Value Mapping Section (new UI block)
+### Rule List View
+- Table showing all rules: Name, Trigger (badge), Active toggle, Edit/Delete buttons
+- "Nova Regra" button opens rule editor dialog
 
-Add a new section below field mappings: "Mapeamento de Produto ⚡"
+### Rule Editor (Dialog or full panel)
 
-- Array of rows: `[{ piperun_value: string, product_id: string }]`
-- Left side: free text input (what Piperun sends, e.g. "Start", "Programa Start CEO")
-- Right side: dropdown of products from `products` table
-- Saved in `config.product_value_mappings`
-- Warning banner if no mappings configured: "Sem mapeamento de produto, automacoes nao serao disparadas"
-- Validation on save: no duplicate CRM targets
+**Section 1 — Info**
+- Name (text input)
+- Description (optional textarea)
+- Active toggle
 
-## 4. Edge Function — Rewrite importDeals Logic
+**Section 2 — Trigger (SE)**
+- Dropdown with 15 triggers grouped by category:
+  - **Cliente**: T1 (office.created), T7 (office.status_changed), T15 (office.imported_piperun)
+  - **Jornada**: T2 (office.stage_changed)
+  - **Health Score**: T3 (health.band_changed)
+  - **Formulários**: T4 (form.submitted)
+  - **Reuniões**: T5 (meeting.completed), T9 (office.no_meeting)
+  - **Financeiro**: T6 (payment.overdue), T8 (office.renewal_approaching)
+  - **Bônus**: T10 (bonus.requested)
+  - **Atividades**: T11 (activity.overdue)
+  - **NPS**: T12 (nps.below_threshold)
+  - **Contrato/Contato**: T13 (contract.created), T14 (contact.created)
+- Dynamic params below trigger based on type (stage selectors, number inputs, form dropdown, etc.)
+- Badge indicating "Tempo real" vs "Cron diário" for each trigger
 
-Restructure the import loop in `integration-piperun/index.ts`:
+**Section 3 — Conditions (QUANDO)**
+- "+ Adicionar condição" button
+- Each condition row: `[Campo dropdown] [Operador dropdown] [Valor input/dropdown]`
+- Between conditions: AND/OR toggle
+- Fields available per the user's spec (Produto, Status, Health Score, CSM, Etapa, Cidade, Estado, Parcelas vencidas, Dias para renovação, etc.)
+- Operators change dynamically based on field type (text → igual/diferente/contém, number → maior/menor/entre, enum → igual/diferente/está em)
 
-**Step 1 — Build office object**: Map all `offices.*` fields from mappings.
-
-**Step 2 — Resolve product**: If `active_product_id` is mapped, get the raw value from the deal, look it up in `product_value_mappings` (case-insensitive match), set the `active_product_id`. If no match found, log warning, leave product null.
-
-**Step 3 — Insert office**: Insert into `offices` table, get back the new ID.
-
-**Step 4 — Create contract**: If any `contracts.*` fields are mapped, insert a contract row linked to the office. Use the resolved product_id.
-
-**Step 5 — Create contacts**: For each contact group (contacts, contacts_2, contacts_3), if any fields are mapped and have values, insert a contact row. Mark the first as `is_main_contact = true`.
-
-**Step 6 — Trigger automations**: If product was resolved, call the existing `execute-automations` function logic inline (or invoke it):
-- Distribution (assign CSM)
-- Onboarding tasks generation
-- Position in first journey stage
-- Calculate health score
-- Slack notification (if integrated)
-
-**Step 7 — Audit log**: Insert audit_logs entry with details.
-
-## 5. Updated Default Mappings
-
+**Data shape stored in `conditions` JSONB:**
+```json
+[
+  { "field": "product_id", "operator": "equals", "value": "uuid-here" },
+  { "field": "health_band", "operator": "equals", "value": "red" },
+  { "field": "installments_overdue", "operator": "greater_than", "value": 3 }
+]
 ```
-offices.name      ← title
-offices.email     ← person.email  
-offices.phone     ← person.phone
-offices.city      ← person.city
-offices.state     ← person.state
-offices.cnpj      ← organization.cnpj
-contracts.value   ← value
-contacts.name     ← person.name
-contacts.email    ← person.email
-contacts.phone    ← person.phone
+
+## 3. Navigation
+
+Add to `SIDEBAR_SECTIONS` in Configuracoes.tsx:
+```
+{ key: 'auto_regras', label: 'Regras de Automação', icon: Workflow, category: 'Automações', adminOnly: true }
 ```
 
-## Files to Modify
+Add to `renderContent()`:
+```
+case 'auto_regras': return <AutomationRulesTab />;
+```
+
+## 4. Files to Create/Modify
 
 | File | Action |
 |---|---|
-| SQL Migration | Add columns to offices + contacts |
-| `PiperunConfig.tsx` | Expand CRM_FIELDS with groups, add product mapping section, validation |
-| `integration-piperun/index.ts` | Rewrite importDeals to handle multi-entity mapping, product resolution, automation triggers |
+| SQL Migration | Create `automation_rules_v2` table with RLS |
+| `src/components/configuracoes/AutomationRulesTab.tsx` | **New** — Rule list + editor with trigger/condition UI |
+| `src/pages/Configuracoes.tsx` | Add sidebar entry + render case |
+
+## Notes
+
+- Actions (ENTÃO) will be implemented in a follow-up — for now the `actions` column stores an empty array
+- Time-based triggers (T8, T9, T11) need a cron Edge Function — will be planned separately
+- Existing automation_rules table stays intact; migration path will come later
 
