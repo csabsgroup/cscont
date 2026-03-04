@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
@@ -21,9 +22,21 @@ const navItems = [
 ];
 
 export function PortalLayout({ children }: { children: React.ReactNode }) {
-  const { signOut, profile } = useAuth();
+  const { signOut, profile, user } = useAuth();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [officeName, setOfficeName] = useState('');
+
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      const { data: links } = await supabase.from('client_office_links').select('office_id').eq('user_id', user.id);
+      const oid = links?.[0]?.office_id;
+      if (!oid) return;
+      const { data: office } = await supabase.from('offices').select('name').eq('id', oid).single();
+      if (office?.name) setOfficeName(office.name);
+    })();
+  }, [user]);
 
   const initials = profile?.full_name
     ?.split(' ')
@@ -45,7 +58,7 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
               <span className="text-sm font-bold text-primary-foreground">C</span>
             </div>
             <div className="flex flex-col">
-              <span className="text-sm font-bold text-foreground">Contador CEO</span>
+              <span className="text-sm font-bold text-foreground">{officeName || 'Portal do Cliente'}</span>
               <span className="hidden text-[10px] text-muted-foreground sm:inline">Portal do Cliente</span>
             </div>
           </div>

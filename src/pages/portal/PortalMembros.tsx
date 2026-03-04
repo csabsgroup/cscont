@@ -2,13 +2,15 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Loader2, Users, MapPin, Phone, Mail, Instagram } from 'lucide-react';
+import { Loader2, Users, MapPin, Phone, Mail, Instagram, Search } from 'lucide-react';
 
 export default function PortalMembros() {
   const { user } = useAuth();
   const [members, setMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     if (!user) return;
@@ -17,11 +19,9 @@ export default function PortalMembros() {
       const oid = links?.[0]?.office_id;
       if (!oid) { setLoading(false); return; }
 
-      // Get product of the office
       const { data: office } = await supabase.from('offices').select('active_product_id').eq('id', oid).single();
       if (!office?.active_product_id) { setLoading(false); return; }
 
-      // Get all active offices of same product that are visible
       const { data } = await supabase.from('offices')
         .select('id, name, photo_url, phone, email, instagram, city, state')
         .eq('active_product_id', office.active_product_id)
@@ -36,17 +36,33 @@ export default function PortalMembros() {
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
 
+  const q = search.toLowerCase();
+  const filtered = members.filter(m =>
+    m.name?.toLowerCase().includes(q) || m.city?.toLowerCase().includes(q)
+  );
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Membros Ativos</h1>
         <p className="text-sm text-muted-foreground">{members.length} membro{members.length !== 1 ? 's' : ''} do seu produto</p>
       </div>
-      {members.length === 0 ? (
+
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Buscar por nome ou cidade..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
+      {filtered.length === 0 ? (
         <Card><CardContent className="flex flex-col items-center py-8"><Users className="h-8 w-8 text-muted-foreground/40 mb-2" /><p className="text-sm text-muted-foreground">Nenhum membro encontrado.</p></CardContent></Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {members.map(m => (
+          {filtered.map(m => (
             <Card key={m.id}>
               <CardContent className="p-4">
                 <div className="flex items-center gap-3 mb-3">
