@@ -26,8 +26,60 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const body = await req.json();
+    const rawBody = await req.text();
+    const body = JSON.parse(rawBody);
     const { action } = body;
+
+    // Webhook bypass — external services don't send JWT
+    if (action === "webhook") {
+      const { event, payment } = body;
+      if (payment?.customer) {
+        const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+        const { data: offices } = await supabase
+          .from("offices")
+          .select("id")
+          .eq("asaas_customer_id", payment.customer);
+
+        if (offices?.length) {
+          const result = await asaasGet(`/payments?customer=${payment.customer}&status=OVERDUE`);
+          const totalOverdue = (result.data || []).reduce((s: number, p: any) => s + p.value, 0);
+          for (const office of offices) {
+            await supabase.from("offices").update({ asaas_total_overdue: totalOverdue }).eq("id", office.id);
+          }
+        }
+      }
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // --- Auth: validate JWT and require admin/manager/csm role ---
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const url = Deno.env.get("SUPABASE_URL")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const userClient = createClient(url, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user }, error: userErr } = await userClient.auth.getUser();
+    if (userErr || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const supabase = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data: roleCheck } = await supabase.rpc("get_user_role", { _user_id: user.id });
+    if (!roleCheck || !["admin", "manager", "csm"].includes(roleCheck)) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     if (action === "testConnection") {
       const result = await asaasGet("/finance/balance");
@@ -70,8 +122,6 @@ Deno.serve(async (req) => {
     }
 
     if (action === "syncAll") {
-      // Sync all offices with asaas_customer_id
-      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       const { data: offices } = await supabase
         .from("offices")
         .select("id, asaas_customer_id")
@@ -95,37 +145,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Webhook handler
-    if (action === "webhook") {
-      const { event, payment } = body;
-      if (payment?.customer) {
-        const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-        const { data: offices } = await supabase
-          .from("offices")
-          .select("id")
-          .eq("asaas_customer_id", payment.customer);
-
-        if (offices?.length) {
-          // Recalculate overdue for this customer
-          const result = await asaasGet(`/payments?customer=${payment.customer}&status=OVERDUE`);
-          const totalOverdue = (result.data || []).reduce((s: number, p: any) => s + p.value, 0);
-          for (const office of offices) {
-            await supabase.from("offices").update({ asaas_total_overdue: totalOverdue }).eq("id", office.id);
-          }
-        }
-      }
-      return new Response(JSON.stringify({ success: true }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     return new Response(
       JSON.stringify({ error: "Unknown action. Supported: testConnection, searchCustomer, getPayments, syncAll, webhook" }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
     console.error("[ASAAS]", err);
-    return new Response(JSON.stringify({ error: String(err) }), {
+    return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
