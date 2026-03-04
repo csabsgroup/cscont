@@ -15,11 +15,30 @@ function getToken() {
 }
 
 async function piperunGet(path: string) {
-  const res = await fetch(`${PIPERUN_BASE}${path}`, {
+  const separator = path.includes('?') ? '&' : '?';
+  const res = await fetch(`${PIPERUN_BASE}${path}${separator}show=200`, {
     headers: { token: getToken() },
   });
   if (!res.ok) throw new Error(`Piperun API error [${res.status}]: ${await res.text()}`);
   return res.json();
+}
+
+async function piperunGetAll(path: string) {
+  let page = 1;
+  let allData: any[] = [];
+  while (true) {
+    const separator = path.includes('?') ? '&' : '?';
+    const res = await fetch(`${PIPERUN_BASE}${path}${separator}show=200&page=${page}`, {
+      headers: { token: getToken() },
+    });
+    if (!res.ok) throw new Error(`Piperun API error [${res.status}]: ${await res.text()}`);
+    const json = await res.json();
+    const data = json.data || [];
+    allData = allData.concat(data);
+    if (!json.meta || page >= (json.meta.last_page || 1)) break;
+    page++;
+  }
+  return allData;
 }
 
 Deno.serve(async (req) => {
@@ -38,8 +57,8 @@ Deno.serve(async (req) => {
     }
 
     if (action === "listPipelines") {
-      const result = await piperunGet("/pipelines");
-      const pipelines = (result.data || []).map((p: any) => ({
+      const allPipelines = await piperunGetAll("/pipelines");
+      const pipelines = allPipelines.map((p: any) => ({
         id: p.id,
         name: p.name,
         stages: (p.stages || []).map((s: any) => ({ id: s.id, name: s.name })),
