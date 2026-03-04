@@ -242,6 +242,54 @@ export type Database = {
         }
         Relationships: []
       }
+      automation_rules_v2: {
+        Row: {
+          actions: Json
+          condition_logic: string
+          conditions: Json
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          product_id: string | null
+          trigger_params: Json
+          trigger_type: string
+          updated_at: string
+        }
+        Insert: {
+          actions?: Json
+          condition_logic?: string
+          conditions?: Json
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          product_id?: string | null
+          trigger_params?: Json
+          trigger_type: string
+          updated_at?: string
+        }
+        Update: {
+          actions?: Json
+          condition_logic?: string
+          conditions?: Json
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          product_id?: string | null
+          trigger_params?: Json
+          trigger_type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       bonus_catalog: {
         Row: {
           created_at: string
