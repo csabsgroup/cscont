@@ -1,67 +1,34 @@
 
 
-## Plan: Fullscreen Preview Modal + Import/Export Page
+## Plan: Add Company Logo Throughout the CRM
 
-### Funcionalidade 1 — Portal Preview as Fullscreen Modal
+The uploaded images are variations of the "CEO" logo (an infinity-style design). I'll use **Prancheta_3.png** (red version) as the primary logo and **Prancheta_5.png** (black version) as a secondary variant for contexts where red doesn't fit.
 
-**Current state:** Button in ClienteHeader opens `/portal/preview/:officeId` in a new tab. PortalPreview.tsx + PortalPreviewLayout.tsx handle the rendering. PortalContext already supports `previewOfficeId` and `isPreview`/`isReadOnly`.
+### Where the logo will be added
 
-**Changes:**
+Currently, 3 places show a placeholder red square with "C":
+
+1. **Sidebar header** (`AppSidebar.tsx`) — replace the red square "C" with the actual logo image
+2. **Auth/Login page** (`Auth.tsx`) — replace the red square "C" with the logo
+3. **Portal Login page** (`PortalLogin.tsx`) — replace the red square "C" with the logo
+4. **Portal Layout header** (`PortalLayout.tsx`) — the topbar already shows office logo, but we can add the platform logo as a secondary branding element
+
+### Files
 
 | File | Action |
 |------|--------|
-| `src/components/clientes/PortalPreviewModal.tsx` | **New** — Fullscreen modal using `createPortal`. Contains amber banner bar (h-12), sidebar with nav items (from portal_settings), and content area. Local `useState` for active page. Renders portal page components directly (PortalHome, PortalContrato, etc.) based on active page. Wrapped in `PortalProvider` with `previewOfficeId`. Animation: fade-in + slide-up 200ms. All content area has `pointer-events-none`. |
-| `src/components/clientes/ClienteHeader.tsx` | Change `openPreview` from `window.open` to `onPreviewOpen?.()` callback prop. Add `onPreviewOpen` to props interface. |
-| `src/pages/Cliente360.tsx` | Add `useState` for `previewOpen`, pass `onPreviewOpen` to ClienteHeader, render `<PortalPreviewModal>` conditionally. |
-| `src/App.tsx` | Remove the `/portal/preview/:officeId/*` route (line 95). Remove `PortalPreview` import. |
-| `src/pages/portal/PortalPreview.tsx` | **Delete** — no longer needed. |
-| `src/components/portal/PortalPreviewLayout.tsx` | **Delete** — replaced by PortalPreviewModal. |
+| `src/assets/logo.png` | Copy Prancheta_3.png (red logo) |
+| `src/assets/logo-dark.png` | Copy Prancheta_5.png (black logo) |
+| `src/components/AppSidebar.tsx` | Replace the `div` with "C" in `SidebarHeader` with an `<img>` of the logo (sized ~36px). When collapsed, show just the logo icon. |
+| `src/pages/Auth.tsx` | Replace the red square "C" placeholder with the logo image (~56px). |
+| `src/pages/portal/PortalLogin.tsx` | Replace the red square "C" placeholder with the logo image. |
+| `src/components/AppLayout.tsx` | No changes needed — topbar uses breadcrumbs, not logo. |
 
-**PortalPreviewModal internals:**
-- Props: `isOpen`, `onClose`, `officeId`, `officeName`
-- Uses `ReactDOM.createPortal(modal, document.body)`
-- Internal state: `activePage` (string) — switches between portal page components
-- Sidebar: reuses same nav item list filtered by portal_settings
-- Body scroll locked when open (overflow hidden on body)
-- ESC key closes modal
+### Implementation details
 
-### Funcionalidade 2 — Import/Export Tab in Configuracoes
-
-**New files:**
-
-| File | Purpose |
-|------|---------|
-| `src/components/configuracoes/ImportExportTab.tsx` | Main tab with two sections (Import cards + Export cards). Admin/Manager see both. CSM sees only Export. |
-| `src/components/import-export/ImportWizard.tsx` | 4-step wizard modal: Upload → Preview/Map → Validate → Execute. Generic, receives entity config. |
-| `src/components/import-export/ExportDialog.tsx` | Export modal: format selector (CSV/XLSX), entity-specific filters, generates file client-side. |
-| `src/lib/import-templates.ts` | Entity definitions: fields, required markers, validation rules, match strategies, template generator. |
-| `src/lib/export-helpers.ts` | Functions to query data with filters and generate CSV (via manual serialization) / XLSX (via SheetJS). |
-
-**Dependencies needed:** `papaparse` for CSV parsing, `xlsx` (SheetJS) for XLSX read/write.
-
-**Import entities:** Clientes, Contatos, Contratos, Reuniões, NPS/CSAT
-**Export entities:** Clientes, Contatos, Contratos, Reuniões, Atividades, OKR, Health Score
-
-**Import flow per entity:**
-1. Upload .csv/.xlsx (max 5MB, max 5000 rows)
-2. Auto-map columns by header name similarity + manual dropdown override
-3. Validate: required fields, format (dates, emails, numbers), enum values, reference existence (office by name, CSM by email)
-4. Show valid/error counts, highlight errors in red with tooltips
-5. Execute: batch upsert in chunks of 50, progress bar, audit log entry
-6. Result summary with error report download
-
-**Export flow:**
-- Select format (CSV/XLSX)
-- Apply optional filters (status, product, period, etc.)
-- CSM: auto-filter by own portfolio (csm_id)
-- Generate and download file
-
-**Configuracoes.tsx changes:**
-- Add new tab "Importar / Exportar" with `ArrowUpDown` icon
-- Visible for Admin, Manager, CSM
-- CSM sees only export section (handled inside ImportExportTab)
-
-### No DB changes needed
-
-All tables already exist. Import writes to existing tables (offices, contacts, contracts, meetings, form_submissions). Export reads from them.
+- Import logo as ES6 module: `import logo from "@/assets/logo.png"`
+- Sidebar header: `<img src={logo} alt="Contador CEO" className="h-9 w-auto" />`
+- Auth page: `<img src={logo} alt="Contador CEO" className="h-14 w-auto" />`
+- Portal login: `<img src={logo} alt="Contador CEO" className="h-12 w-auto" />`
+- Keep the text "Contador CEO" / "Customer Success" next to the logo where it currently exists
 
