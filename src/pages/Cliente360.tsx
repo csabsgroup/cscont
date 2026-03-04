@@ -9,27 +9,36 @@ import { ClienteResumo } from '@/components/clientes/ClienteResumo';
 import { ClienteContatos } from '@/components/clientes/ClienteContatos';
 import { ClienteContratos } from '@/components/clientes/ClienteContratos';
 import { ClienteNotas } from '@/components/clientes/ClienteNotas';
+import { ClienteTimeline } from '@/components/clientes/ClienteTimeline';
+import { ClienteOKR } from '@/components/clientes/ClienteOKR';
+import { ClienteReunioes } from '@/components/clientes/ClienteReunioes';
+import { ClienteJornada } from '@/components/clientes/ClienteJornada';
+import { ClienteMetricas } from '@/components/clientes/ClienteMetricas';
 import { EditOfficeDialog } from '@/components/clientes/EditOfficeDialog';
+import { HealthBadge } from '@/components/clientes/HealthBadge';
 
 export default function Cliente360() {
   const { id } = useParams<{ id: string }>();
   const [office, setOffice] = useState<any>(null);
   const [contacts, setContacts] = useState<any[]>([]);
   const [contracts, setContracts] = useState<any[]>([]);
+  const [health, setHealth] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
 
   const fetchAll = useCallback(async () => {
     if (!id) return;
     setLoading(true);
-    const [officeRes, contactsRes, contractsRes] = await Promise.all([
+    const [officeRes, contactsRes, contractsRes, healthRes] = await Promise.all([
       supabase.from('offices').select('*, products:active_product_id(name)').eq('id', id).single(),
       supabase.from('contacts').select('*').eq('office_id', id).order('is_main_contact', { ascending: false }).order('name'),
       supabase.from('contracts').select('*, products:product_id(name)').eq('office_id', id).order('created_at', { ascending: false }),
+      supabase.from('health_scores').select('*').eq('office_id', id).maybeSingle(),
     ]);
     if (officeRes.data) setOffice(officeRes.data);
     setContacts(contactsRes.data || []);
     setContracts(contractsRes.data || []);
+    setHealth(healthRes.data);
     setLoading(false);
   }, [id]);
 
@@ -56,13 +65,21 @@ export default function Cliente360() {
 
   return (
     <div className="space-y-6">
-      <ClienteHeader office={office} onEdit={() => setEditOpen(true)} />
+      <div className="flex items-center gap-3">
+        <div className="flex-1"><ClienteHeader office={office} onEdit={() => setEditOpen(true)} /></div>
+        <HealthBadge score={health?.score ?? null} band={health?.band ?? null} size="md" />
+      </div>
 
       <Tabs defaultValue="resumo" className="space-y-4">
-        <TabsList>
+        <TabsList className="flex-wrap">
           <TabsTrigger value="resumo">Resumo</TabsTrigger>
+          <TabsTrigger value="timeline">Timeline</TabsTrigger>
+          <TabsTrigger value="okr">Plano de Ação</TabsTrigger>
+          <TabsTrigger value="reunioes">Reuniões</TabsTrigger>
+          <TabsTrigger value="jornada">Jornada</TabsTrigger>
           <TabsTrigger value="contatos">Contatos ({contacts.length})</TabsTrigger>
           <TabsTrigger value="contratos">Contratos ({contracts.length})</TabsTrigger>
+          <TabsTrigger value="metricas">Métricas</TabsTrigger>
           <TabsTrigger value="notas">Notas</TabsTrigger>
         </TabsList>
 
@@ -70,22 +87,36 @@ export default function Cliente360() {
           <ClienteResumo office={office} activeContract={activeContract} mainContact={mainContact} />
         </TabsContent>
 
+        <TabsContent value="timeline">
+          <Card className="p-6"><ClienteTimeline officeId={office.id} /></Card>
+        </TabsContent>
+
+        <TabsContent value="okr">
+          <Card className="p-6"><ClienteOKR officeId={office.id} /></Card>
+        </TabsContent>
+
+        <TabsContent value="reunioes">
+          <Card className="p-6"><ClienteReunioes officeId={office.id} /></Card>
+        </TabsContent>
+
+        <TabsContent value="jornada">
+          <ClienteJornada officeId={office.id} productId={office.active_product_id} />
+        </TabsContent>
+
         <TabsContent value="contatos">
-          <Card className="p-6">
-            <ClienteContatos officeId={office.id} contacts={contacts} onRefresh={fetchAll} />
-          </Card>
+          <Card className="p-6"><ClienteContatos officeId={office.id} contacts={contacts} onRefresh={fetchAll} /></Card>
         </TabsContent>
 
         <TabsContent value="contratos">
-          <Card className="p-6">
-            <ClienteContratos officeId={office.id} contracts={contracts} onRefresh={fetchAll} />
-          </Card>
+          <Card className="p-6"><ClienteContratos officeId={office.id} contracts={contracts} onRefresh={fetchAll} /></Card>
+        </TabsContent>
+
+        <TabsContent value="metricas">
+          <ClienteMetricas officeId={office.id} />
         </TabsContent>
 
         <TabsContent value="notas">
-          <Card className="p-6">
-            <ClienteNotas officeId={office.id} initialNotes={office.notes} />
-          </Card>
+          <Card className="p-6"><ClienteNotas officeId={office.id} initialNotes={office.notes} /></Card>
         </TabsContent>
       </Tabs>
 
