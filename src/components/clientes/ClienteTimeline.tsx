@@ -12,7 +12,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 
-interface Props { officeId: string; }
+interface Props { officeId: string; readOnly?: boolean; }
 
 interface TimelineItem {
   id: string;
@@ -23,7 +23,7 @@ interface TimelineItem {
   description?: string | null;
 }
 
-export function ClienteTimeline({ officeId }: Props) {
+export function ClienteTimeline({ officeId, readOnly = false }: Props) {
   const [items, setItems] = useState<TimelineItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [editItem, setEditItem] = useState<TimelineItem | null>(null);
@@ -127,20 +127,22 @@ export function ClienteTimeline({ officeId }: Props) {
             </p>
             {item.description && <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{item.description}</p>}
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild><Button size="sm" variant="ghost"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => openEdit(item)}>Editar</DropdownMenuItem>
-              {isDone(item) ? (
-                <DropdownMenuItem onClick={() => handleReopen(item)}><RotateCcw className="mr-2 h-4 w-4" />Reabrir</DropdownMenuItem>
-              ) : (
-                <DropdownMenuItem onClick={() => handleComplete(item)}><CheckCircle2 className="mr-2 h-4 w-4" />Concluir</DropdownMenuItem>
-              )}
-              <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(item)}>
-                <Trash2 className="mr-2 h-4 w-4" />Excluir
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {!readOnly && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild><Button size="sm" variant="ghost"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => openEdit(item)}>Editar</DropdownMenuItem>
+                {isDone(item) ? (
+                  <DropdownMenuItem onClick={() => handleReopen(item)}><RotateCcw className="mr-2 h-4 w-4" />Reabrir</DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem onClick={() => handleComplete(item)}><CheckCircle2 className="mr-2 h-4 w-4" />Concluir</DropdownMenuItem>
+                )}
+                <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(item)}>
+                  <Trash2 className="mr-2 h-4 w-4" />Excluir
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </Card>
       ))}
 

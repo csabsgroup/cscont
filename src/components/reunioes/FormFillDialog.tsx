@@ -14,6 +14,7 @@ interface FormTemplate {
   name: string;
   type: string;
   fields: any[];
+  post_actions: any;
 }
 
 interface Props {
@@ -33,7 +34,7 @@ export function FormFillDialog({ open, onOpenChange, meetingId, officeId, onSubm
 
   useEffect(() => {
     if (open) {
-      supabase.from('form_templates').select('id, name, type, fields')
+      supabase.from('form_templates').select('id, name, type, fields, post_actions')
         .then(({ data }) => setTemplates((data as any[]) || []));
     }
   }, [open]);
@@ -44,15 +45,50 @@ export function FormFillDialog({ open, onOpenChange, meetingId, officeId, onSubm
   const handleSubmit = async () => {
     if (!session?.user?.id || !selectedTemplate) return;
     setSubmitting(true);
-    const { error } = await supabase.from('form_submissions').insert({
+
+    // Insert form submission
+    const { data: submission, error } = await supabase.from('form_submissions').insert({
       template_id: selectedTemplate,
       office_id: officeId,
       meeting_id: meetingId,
       user_id: session.user.id,
       data: formData,
-    });
-    if (error) toast.error('Erro: ' + error.message);
-    else { toast.success('Formulário salvo!'); onOpenChange(false); onSubmitted(); }
+    }).select('id').single();
+
+    if (error) {
+      toast.error('Erro: ' + error.message);
+      setSubmitting(false);
+      return;
+    }
+
+    toast.success('Formulário salvo!');
+
+    // Execute post-actions via edge function
+    if (submission?.id && currentTemplate?.post_actions && Object.keys(currentTemplate.post_actions).length > 0) {
+      try {
+        const { data: result, error: fnError } = await supabase.functions.invoke('execute-form-post-actions', {
+          body: {
+            submission_id: submission.id,
+            template_id: selectedTemplate,
+            office_id: officeId,
+          },
+        });
+        if (fnError) {
+          console.error('Post-actions error:', fnError);
+          toast.error('Formulário salvo, mas automações falharam');
+        } else if (result?.results) {
+          const actions = Object.keys(result.results).filter(k => !result.results[k].skipped);
+          if (actions.length > 0) {
+            toast.success(`Automações executadas: ${actions.join(', ')}`);
+          }
+        }
+      } catch (err) {
+        console.error('Post-actions invocation error:', err);
+      }
+    }
+
+    onOpenChange(false);
+    onSubmitted();
     setSubmitting(false);
   };
 

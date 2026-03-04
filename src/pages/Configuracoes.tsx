@@ -10,14 +10,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Loader2, Package, Route, Users, Trash2, Edit2, Heart, FileText, Gift, Link2 } from 'lucide-react';
+import { Plus, Loader2, Package, Route, Users, Trash2, Edit2, Heart, FileText, Gift, Link2, Zap, ShieldX } from 'lucide-react';
 import { toast } from 'sonner';
 import { HealthScoreTab } from '@/components/configuracoes/HealthScoreTab';
 import { FormTemplatesTab } from '@/components/configuracoes/FormTemplatesTab';
 import { BonusCatalogTab } from '@/components/configuracoes/BonusCatalogTab';
 import { IntegracoesTab } from '@/components/configuracoes/IntegracoesTab';
+import { TemplatesAutomacoesTab } from '@/components/configuracoes/TemplatesAutomacoesTab';
 
 // ─── Products Tab ────────────────────────────────────────────
 function ProductsTab() {
@@ -40,36 +41,22 @@ function ProductsTab() {
   useEffect(() => { fetch(); }, [fetch]);
 
   const openEdit = (p: any) => {
-    setEditProduct(p);
-    setName(p.name);
-    setDescription(p.description || '');
-    setIsActive(p.is_active);
-    setDialogOpen(true);
+    setEditProduct(p); setName(p.name); setDescription(p.description || ''); setIsActive(p.is_active); setDialogOpen(true);
   };
-
   const openNew = () => {
-    setEditProduct(null);
-    setName('');
-    setDescription('');
-    setIsActive(true);
-    setDialogOpen(true);
+    setEditProduct(null); setName(''); setDescription(''); setIsActive(true); setDialogOpen(true);
   };
 
   const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
+    e.preventDefault(); setSaving(true);
     if (editProduct) {
       const { error } = await supabase.from('products').update({ name, description: description || null, is_active: isActive }).eq('id', editProduct.id);
-      if (error) toast.error('Erro: ' + error.message);
-      else toast.success('Produto atualizado!');
+      if (error) toast.error('Erro: ' + error.message); else toast.success('Produto atualizado!');
     } else {
       const { error } = await supabase.from('products').insert({ name, description: description || null, is_active: isActive });
-      if (error) toast.error('Erro: ' + error.message);
-      else toast.success('Produto criado!');
+      if (error) toast.error('Erro: ' + error.message); else toast.success('Produto criado!');
     }
-    setSaving(false);
-    setDialogOpen(false);
-    fetch();
+    setSaving(false); setDialogOpen(false); fetch();
   };
 
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>;
@@ -82,29 +69,14 @@ function ProductsTab() {
       </div>
       <Card>
         <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nome</TableHead>
-              <TableHead>Descrição</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead></TableHead>
-            </TableRow>
-          </TableHeader>
+          <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Descrição</TableHead><TableHead>Status</TableHead><TableHead></TableHead></TableRow></TableHeader>
           <TableBody>
             {products.map(p => (
               <TableRow key={p.id}>
                 <TableCell className="font-medium">{p.name}</TableCell>
                 <TableCell className="text-muted-foreground text-sm">{p.description || '—'}</TableCell>
-                <TableCell>
-                  <Badge variant={p.is_active ? 'default' : 'secondary'}>
-                    {p.is_active ? 'Ativo' : 'Inativo'}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <Button size="sm" variant="ghost" onClick={() => openEdit(p)}>
-                    <Edit2 className="h-4 w-4" />
-                  </Button>
-                </TableCell>
+                <TableCell><Badge variant={p.is_active ? 'default' : 'secondary'}>{p.is_active ? 'Ativo' : 'Inativo'}</Badge></TableCell>
+                <TableCell><Button size="sm" variant="ghost" onClick={() => openEdit(p)}><Edit2 className="h-4 w-4" /></Button></TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -114,21 +86,10 @@ function ProductsTab() {
         <DialogContent>
           <DialogHeader><DialogTitle>{editProduct ? 'Editar Produto' : 'Novo Produto'}</DialogTitle></DialogHeader>
           <form onSubmit={handleSave} className="space-y-4">
-            <div className="space-y-2">
-              <Label>Nome *</Label>
-              <Input value={name} onChange={e => setName(e.target.value)} required />
-            </div>
-            <div className="space-y-2">
-              <Label>Descrição</Label>
-              <Textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} />
-            </div>
-            <div className="flex items-center gap-2">
-              <Switch checked={isActive} onCheckedChange={setIsActive} />
-              <Label>Ativo</Label>
-            </div>
-            <Button type="submit" className="w-full" disabled={saving}>
-              {saving ? 'Salvando...' : 'Salvar'}
-            </Button>
+            <div className="space-y-2"><Label>Nome *</Label><Input value={name} onChange={e => setName(e.target.value)} required /></div>
+            <div className="space-y-2"><Label>Descrição</Label><Textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} /></div>
+            <div className="flex items-center gap-2"><Switch checked={isActive} onCheckedChange={setIsActive} /><Label>Ativo</Label></div>
+            <Button type="submit" className="w-full" disabled={saving}>{saving ? 'Salvando...' : 'Salvar'}</Button>
           </form>
         </DialogContent>
       </Dialog>
@@ -152,12 +113,7 @@ function JourneyStagesTab() {
 
   useEffect(() => {
     supabase.from('products').select('id, name').eq('is_active', true).order('name')
-      .then(({ data }) => {
-        const prods = data || [];
-        setProducts(prods);
-        if (prods.length > 0) setSelectedProduct(prods[0].id);
-        setLoading(false);
-      });
+      .then(({ data }) => { const prods = data || []; setProducts(prods); if (prods.length > 0) setSelectedProduct(prods[0].id); setLoading(false); });
   }, []);
 
   const fetchStages = useCallback(async () => {
@@ -168,12 +124,8 @@ function JourneyStagesTab() {
 
   useEffect(() => { fetchStages(); }, [fetchStages]);
 
-  const openNew = () => {
-    setEditStage(null); setName(''); setDescription(''); setSlaDays(''); setPosition(String(stages.length)); setDialogOpen(true);
-  };
-  const openEdit = (s: any) => {
-    setEditStage(s); setName(s.name); setDescription(s.description || ''); setSlaDays(s.sla_days ? String(s.sla_days) : ''); setPosition(String(s.position)); setDialogOpen(true);
-  };
+  const openNew = () => { setEditStage(null); setName(''); setDescription(''); setSlaDays(''); setPosition(String(stages.length)); setDialogOpen(true); };
+  const openEdit = (s: any) => { setEditStage(s); setName(s.name); setDescription(s.description || ''); setSlaDays(s.sla_days ? String(s.sla_days) : ''); setPosition(String(s.position)); setDialogOpen(true); };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true);
@@ -207,9 +159,7 @@ function JourneyStagesTab() {
       ) : (
         <Card>
           <Table>
-            <TableHeader><TableRow>
-              <TableHead>Posição</TableHead><TableHead>Nome</TableHead><TableHead>Descrição</TableHead><TableHead>SLA (dias)</TableHead><TableHead></TableHead>
-            </TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead>Posição</TableHead><TableHead>Nome</TableHead><TableHead>Descrição</TableHead><TableHead>SLA (dias)</TableHead><TableHead></TableHead></TableRow></TableHeader>
             <TableBody>
               {stages.map(s => (
                 <TableRow key={s.id}>
@@ -275,7 +225,6 @@ function UsersTab() {
   };
 
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>;
-
   const roleLabels: Record<string, string> = { admin: 'Admin', manager: 'Gestor', csm: 'CSM', viewer: 'Viewer', client: 'Cliente' };
 
   return (
@@ -283,9 +232,7 @@ function UsersTab() {
       <p className="text-sm text-muted-foreground">{users.length} usuário{users.length !== 1 ? 's' : ''}</p>
       <Card>
         <Table>
-          <TableHeader><TableRow>
-            <TableHead>Nome</TableHead><TableHead>Telefone</TableHead><TableHead>Role</TableHead>
-          </TableRow></TableHeader>
+          <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Telefone</TableHead><TableHead>Role</TableHead></TableRow></TableHeader>
           <TableBody>
             {users.map(u => (
               <TableRow key={u.id}>
@@ -294,9 +241,7 @@ function UsersTab() {
                 <TableCell>
                   <Select value={u.role} onValueChange={(val) => updateRole(u.id, val)}>
                     <SelectTrigger className="w-[140px] h-8"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(roleLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-                    </SelectContent>
+                    <SelectContent>{Object.entries(roleLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
                   </Select>
                 </TableCell>
               </TableRow>
@@ -310,7 +255,32 @@ function UsersTab() {
 
 // ─── Main Page ───────────────────────────────────────────────
 export default function Configuracoes() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isManager, isViewer } = useAuth();
+
+  // Viewer blocked entirely
+  if (isViewer) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold">Configurações</h1>
+          <p className="text-sm text-muted-foreground">Gerencie produtos, etapas, health score e usuários</p>
+        </div>
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-16">
+            <ShieldX className="mb-3 h-10 w-10 text-muted-foreground/40" />
+            <p className="text-sm text-muted-foreground">Acesso restrito. Você não tem permissão para acessar configurações.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Manager: Produtos, Jornada, Formulários, Templates/Automações
+  // Admin: all tabs
+  const showHealth = isAdmin;
+  const showBonus = isAdmin;
+  const showUsers = isAdmin;
+  const showIntegracoes = isAdmin;
 
   return (
     <div className="space-y-6">
@@ -321,42 +291,24 @@ export default function Configuracoes() {
 
       <Tabs defaultValue="produtos" className="space-y-4">
         <TabsList className="flex-wrap">
-          <TabsTrigger value="produtos" className="gap-1.5">
-            <Package className="h-4 w-4" />Produtos
-          </TabsTrigger>
-          <TabsTrigger value="jornada" className="gap-1.5">
-            <Route className="h-4 w-4" />Etapas da Jornada
-          </TabsTrigger>
-          <TabsTrigger value="health" className="gap-1.5">
-            <Heart className="h-4 w-4" />Health Score
-          </TabsTrigger>
-          <TabsTrigger value="formularios" className="gap-1.5">
-            <FileText className="h-4 w-4" />Formulários
-          </TabsTrigger>
-          {isAdmin && (
-            <TabsTrigger value="bonus" className="gap-1.5">
-              <Gift className="h-4 w-4" />Catálogo de Bônus
-            </TabsTrigger>
-          )}
-          {isAdmin && (
-            <TabsTrigger value="usuarios" className="gap-1.5">
-              <Users className="h-4 w-4" />Usuários & Roles
-            </TabsTrigger>
-          )}
-          {isAdmin && (
-            <TabsTrigger value="integracoes" className="gap-1.5">
-              <Link2 className="h-4 w-4" />Integrações
-            </TabsTrigger>
-          )}
+          <TabsTrigger value="produtos" className="gap-1.5"><Package className="h-4 w-4" />Produtos</TabsTrigger>
+          <TabsTrigger value="jornada" className="gap-1.5"><Route className="h-4 w-4" />Etapas da Jornada</TabsTrigger>
+          {showHealth && <TabsTrigger value="health" className="gap-1.5"><Heart className="h-4 w-4" />Health Score</TabsTrigger>}
+          <TabsTrigger value="formularios" className="gap-1.5"><FileText className="h-4 w-4" />Formulários</TabsTrigger>
+          <TabsTrigger value="automacoes" className="gap-1.5"><Zap className="h-4 w-4" />Templates/Automações</TabsTrigger>
+          {showBonus && <TabsTrigger value="bonus" className="gap-1.5"><Gift className="h-4 w-4" />Catálogo de Bônus</TabsTrigger>}
+          {showUsers && <TabsTrigger value="usuarios" className="gap-1.5"><Users className="h-4 w-4" />Usuários & Roles</TabsTrigger>}
+          {showIntegracoes && <TabsTrigger value="integracoes" className="gap-1.5"><Link2 className="h-4 w-4" />Integrações</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="produtos"><ProductsTab /></TabsContent>
         <TabsContent value="jornada"><JourneyStagesTab /></TabsContent>
-        <TabsContent value="health"><HealthScoreTab /></TabsContent>
+        {showHealth && <TabsContent value="health"><HealthScoreTab /></TabsContent>}
         <TabsContent value="formularios"><FormTemplatesTab /></TabsContent>
-        {isAdmin && <TabsContent value="bonus"><BonusCatalogTab /></TabsContent>}
-        {isAdmin && <TabsContent value="usuarios"><UsersTab /></TabsContent>}
-        {isAdmin && <TabsContent value="integracoes"><IntegracoesTab /></TabsContent>}
+        <TabsContent value="automacoes"><TemplatesAutomacoesTab /></TabsContent>
+        {showBonus && <TabsContent value="bonus"><BonusCatalogTab /></TabsContent>}
+        {showUsers && <TabsContent value="usuarios"><UsersTab /></TabsContent>}
+        {showIntegracoes && <TabsContent value="integracoes"><IntegracoesTab /></TabsContent>}
       </Tabs>
     </div>
   );

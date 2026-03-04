@@ -1,19 +1,43 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, BarChart3, TrendingDown, DollarSign, Heart, Users, Route, AlertTriangle, TrendingUp } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Loader2, BarChart3, TrendingDown, DollarSign, Heart, Users, Route, AlertTriangle, TrendingUp, CalendarDays } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend, AreaChart, Area,
 } from 'recharts';
-import { differenceInDays, differenceInMonths, format } from 'date-fns';
+import { differenceInDays, differenceInMonths, format, subMonths, subDays, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear, subQuarters, subYears } from 'date-fns';
 
 const CHART_COLORS = ['hsl(346.8, 77.2%, 49.8%)', 'hsl(142.1, 76.2%, 36.3%)', 'hsl(45.4, 93.4%, 47.5%)', 'hsl(200, 70%, 50%)', 'hsl(280, 60%, 55%)', 'hsl(20, 80%, 55%)'];
 
 const STATUS_LABELS: Record<string, string> = { ativo: 'Ativo', churn: 'Churn', nao_renovado: 'Não Renovado', nao_iniciado: 'Não Iniciado', upsell: 'Upsell', bonus_elite: 'Bônus Elite' };
 const STATUS_COLORS: Record<string, string> = { ativo: 'hsl(142.1,76.2%,36.3%)', churn: 'hsl(0,84.2%,60.2%)', nao_renovado: 'hsl(45.4,93.4%,47.5%)', nao_iniciado: 'hsl(0,0%,65%)', upsell: 'hsl(346.8,77.2%,49.8%)', bonus_elite: 'hsl(280,60%,55%)' };
+
+type PeriodType = 'month' | 'quarter' | 'semester' | 'year';
+
+function getDateRange(period: PeriodType) {
+  const now = new Date();
+  switch (period) {
+    case 'month': return { start: startOfMonth(now), end: endOfMonth(now), prevStart: startOfMonth(subMonths(now, 1)), prevEnd: endOfMonth(subMonths(now, 1)) };
+    case 'quarter': return { start: startOfQuarter(now), end: endOfQuarter(now), prevStart: startOfQuarter(subQuarters(now, 1)), prevEnd: endOfQuarter(subQuarters(now, 1)) };
+    case 'semester': return { start: subMonths(startOfMonth(now), 5), end: now, prevStart: subMonths(startOfMonth(now), 11), prevEnd: subMonths(now, 6) };
+    case 'year': return { start: startOfYear(now), end: endOfYear(now), prevStart: startOfYear(subYears(now, 1)), prevEnd: endOfYear(subYears(now, 1)) };
+  }
+}
+
+function inRange(dateStr: string, start: Date, end: Date) {
+  const d = new Date(dateStr);
+  return d >= start && d <= end;
+}
+
+function delta(current: number, previous: number) {
+  if (previous === 0) return current > 0 ? '+100%' : '—';
+  const pct = ((current - previous) / previous * 100).toFixed(1);
+  return Number(pct) >= 0 ? `+${pct}%` : `${pct}%`;
+}
 
 export default function Relatorios() {
   const [offices, setOffices] = useState<any[]>([]);
@@ -23,11 +47,14 @@ export default function Relatorios() {
   const [journeys, setJourneys] = useState<any[]>([]);
   const [stages, setStages] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<any[]>([]);
+  const [formSubmissions, setFormSubmissions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState<PeriodType>('month');
+  const [showComparison, setShowComparison] = useState(true);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [oRes, cRes, mRes, hRes, jRes, sRes, pRes] = await Promise.all([
+    const [oRes, cRes, mRes, hRes, jRes, sRes, pRes, fRes] = await Promise.all([
       supabase.from('offices').select('*, products:active_product_id(name)'),
       supabase.from('contracts').select('*, products:product_id(name)'),
       supabase.from('meetings').select('*'),
@@ -35,6 +62,7 @@ export default function Relatorios() {
       supabase.from('office_journey').select('*'),
       supabase.from('journey_stages').select('*, products:product_id(name)'),
       supabase.from('profiles').select('id, full_name'),
+      supabase.from('form_submissions').select('id, data, template_id, office_id, submitted_at'),
     ]);
     setOffices(oRes.data || []);
     setContracts(cRes.data || []);
@@ -43,10 +71,13 @@ export default function Relatorios() {
     setJourneys(jRes.data || []);
     setStages(sRes.data || []);
     setProfiles(pRes.data || []);
+    setFormSubmissions(fRes.data || []);
     setLoading(false);
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const range = useMemo(() => getDateRange(period), [period]);
 
   if (loading) return (
     <div className="space-y-6">
@@ -54,6 +85,13 @@ export default function Relatorios() {
       <div className="flex items-center justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
     </div>
   );
+
+  // Filter by period
+  const officesInPeriod = offices.filter(o => inRange(o.created_at, range.start, range.end));
+  const officesPrev = offices.filter(o => inRange(o.created_at, range.prevStart, range.prevEnd));
+  const meetingsInPeriod = meetings.filter(m => inRange(m.scheduled_at, range.start, range.end));
+  const meetingsPrev = meetings.filter(m => inRange(m.scheduled_at, range.prevStart, range.prevEnd));
+  const contractsInPeriod = contracts.filter(c => c.start_date && inRange(c.start_date, range.start, range.end));
 
   const total = offices.length;
   const ativos = offices.filter(o => o.status === 'ativo' || o.status === 'bonus_elite').length;
@@ -73,11 +111,10 @@ export default function Relatorios() {
   const mrrByProduct = contracts.filter(c => c.status === 'ativo').reduce((acc: Record<string, number>, c) => { const n = c.products?.name || 'Sem produto'; acc[n] = (acc[n] || 0) + (c.monthly_value || 0); return acc; }, {});
   const mrrData = Object.entries(mrrByProduct).map(([name, mrr]) => ({ name, mrr }));
 
-  // LTV total
   const totalLTV = contracts.reduce((s, c) => s + (c.value || 0), 0);
   const activeMRR = contracts.filter(c => c.status === 'ativo').reduce((s, c) => s + (c.monthly_value || 0), 0);
 
-  // Health distribution
+  // Health
   const greenCount = healthScores.filter(h => h.band === 'green').length;
   const yellowCount = healthScores.filter(h => h.band === 'yellow').length;
   const redCount = healthScores.filter(h => h.band === 'red').length;
@@ -88,13 +125,23 @@ export default function Relatorios() {
     { name: 'Vermelho', value: redCount, color: 'hsl(0,84.2%,60.2%)' },
   ].filter(d => d.value > 0);
 
+  // NPS from form submissions (look for rating_nps fields)
+  const npsValues = formSubmissions.flatMap(f => {
+    const data = f.data as Record<string, any>;
+    if (!data) return [];
+    return Object.values(data).filter(v => typeof v === 'string' && !isNaN(Number(v)) && Number(v) >= 0 && Number(v) <= 10).map(v => Number(v));
+  });
+  const avgNps = npsValues.length > 0 ? (npsValues.reduce((s, v) => s + v, 0) / npsValues.length).toFixed(1) : '—';
+  const npsCoverage = offices.length > 0 ? Math.round((new Set(formSubmissions.map(f => f.office_id)).size / offices.length) * 100) : 0;
+
   // Meetings coverage
   const completedMeetings = meetings.filter(m => m.status === 'completed');
+  const completedInPeriod = meetingsInPeriod.filter(m => m.status === 'completed');
+  const completedPrev = meetingsPrev.filter(m => m.status === 'completed');
   const profileMap = new Map(profiles.map(p => [p.id, p.full_name || 'Sem nome']));
   const meetingsByCsm = completedMeetings.reduce((acc: Record<string, number>, m) => { const n = profileMap.get(m.user_id) || 'Desconhecido'; acc[n] = (acc[n] || 0) + 1; return acc; }, {});
   const meetingsByCsmData = Object.entries(meetingsByCsm).map(([name, count]) => ({ name, count }));
 
-  // No meeting 30+
   const lastMeetingMap: Record<string, string> = {};
   completedMeetings.forEach(m => { if (!lastMeetingMap[m.office_id] || m.scheduled_at > lastMeetingMap[m.office_id]) lastMeetingMap[m.office_id] = m.scheduled_at; });
   const activeOfficeIds = offices.filter(o => o.status === 'ativo').map(o => o.id);
@@ -106,13 +153,10 @@ export default function Relatorios() {
   const totalOverdueValue = overdueContracts.reduce((s, c) => s + (c.monthly_value || 0) * (c.installments_overdue || 0), 0);
   const overduePct = activeMRR > 0 ? ((totalOverdueValue / activeMRR) * 100).toFixed(1) : '0';
 
-  // Time to churn (avg months active before churn)
   const churnedOffices = offices.filter(o => o.status === 'churn');
   const avgTimeToChurn = churnedOffices.length > 0
-    ? Math.round(churnedOffices.reduce((s, o) => s + differenceInMonths(new Date(), new Date(o.created_at)), 0) / churnedOffices.length)
-    : 0;
+    ? Math.round(churnedOffices.reduce((s, o) => s + differenceInMonths(new Date(), new Date(o.created_at)), 0) / churnedOffices.length) : 0;
 
-  // Journey analytics
   const stageMap = new Map(stages.map(s => [s.id, s]));
   const journeyStageCount = journeys.reduce((acc: Record<string, number>, j) => {
     const s = stageMap.get(j.journey_stage_id);
@@ -122,15 +166,32 @@ export default function Relatorios() {
   }, {});
   const journeyData = Object.entries(journeyStageCount).map(([name, count]) => ({ name, count }));
 
-  // Monthly evolution
   const monthlyMap = offices.reduce((acc: Record<string, number>, o) => { const m = o.created_at?.substring(0, 7); if (m) acc[m] = (acc[m] || 0) + 1; return acc; }, {});
   const monthlyData = Object.entries(monthlyMap).sort(([a], [b]) => a.localeCompare(b)).map(([month, count]) => ({ month: month.split('-').reverse().join('/'), novos: count }));
 
+  const periodLabel: Record<PeriodType, string> = { month: 'Mês', quarter: 'Trimestre', semester: 'Semestre', year: 'Ano' };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Relatórios</h1>
-        <p className="text-sm text-muted-foreground">{offices.length} escritório{offices.length !== 1 ? 's' : ''}</p>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Relatórios</h1>
+          <p className="text-sm text-muted-foreground">{offices.length} escritório{offices.length !== 1 ? 's' : ''}</p>
+        </div>
+        <div className="flex gap-2 items-center">
+          <Select value={period} onValueChange={v => setPeriod(v as PeriodType)}>
+            <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="month">Mês</SelectItem>
+              <SelectItem value="quarter">Trimestre</SelectItem>
+              <SelectItem value="semester">Semestre</SelectItem>
+              <SelectItem value="year">Ano</SelectItem>
+            </SelectContent>
+          </Select>
+          <Badge variant={showComparison ? 'default' : 'outline'} className="cursor-pointer text-xs" onClick={() => setShowComparison(!showComparison)}>
+            vs anterior
+          </Badge>
+        </div>
       </div>
 
       <Tabs defaultValue="executiva" className="space-y-4">
@@ -149,8 +210,8 @@ export default function Relatorios() {
         <TabsContent value="executiva" className="space-y-6">
           <div className="grid gap-4 md:grid-cols-4">
             <KPI label="Total de Clientes" value={total} />
+            <KPI label={`Novos (${periodLabel[period]})`} value={officesInPeriod.length} comparison={showComparison ? delta(officesInPeriod.length, officesPrev.length) : undefined} />
             <KPI label="Ativos" value={ativos} className="text-success" />
-            <KPI label="Churn + Não Renovado" value={churnCount + naoRenovado} className="text-destructive" />
             <KPI label="Taxa de Retenção" value={`${retentionRate}%`} />
           </div>
           <div className="grid gap-6 lg:grid-cols-2">
@@ -209,11 +270,16 @@ export default function Relatorios() {
 
         {/* Health/NPS */}
         <TabsContent value="health" className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
             <KPI label="Health Médio" value={avgHealth} />
             <KPI label="Verde" value={greenCount} className="text-success" />
             <KPI label="Amarelo" value={yellowCount} className="text-warning" />
             <KPI label="Vermelho" value={redCount} className="text-destructive" />
+            <KPI label="NPS Médio" value={avgNps} />
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <KPI label="Cobertura NPS" value={`${npsCoverage}%`} />
+            <KPI label={`Reuniões no ${periodLabel[period]}`} value={completedInPeriod.length} comparison={showComparison ? delta(completedInPeriod.length, completedPrev.length) : undefined} />
           </div>
           <ChartCard title="Distribuição de Health">
             {healthDistData.length === 0 ? <EmptyChart /> : (
@@ -229,7 +295,7 @@ export default function Relatorios() {
         {/* Cobertura */}
         <TabsContent value="cobertura" className="space-y-6">
           <div className="grid gap-4 md:grid-cols-3">
-            <KPI label="Reuniões Realizadas" value={completedMeetings.length} />
+            <KPI label={`Reuniões (${periodLabel[period]})`} value={completedInPeriod.length} comparison={showComparison ? delta(completedInPeriod.length, completedPrev.length) : undefined} />
             <KPI label="Sem Reunião +30 dias" value={noMeeting30.length} className="text-warning" />
             <KPI label="% Cobertura" value={`${activeOfficeIds.length > 0 ? ((1 - noMeeting30.length / activeOfficeIds.length) * 100).toFixed(0) : 0}%`} />
           </div>
@@ -273,10 +339,7 @@ export default function Relatorios() {
                     const office = offices.find(o => o.id === c.office_id);
                     return (
                       <div key={c.id} className="flex items-center justify-between rounded-lg border p-3">
-                        <div>
-                          <p className="text-sm font-medium">{office?.name || 'Escritório'}</p>
-                          <p className="text-xs text-muted-foreground">{c.products?.name}</p>
-                        </div>
+                        <div><p className="text-sm font-medium">{office?.name || 'Escritório'}</p><p className="text-xs text-muted-foreground">{c.products?.name}</p></div>
                         <Badge variant="destructive">{c.installments_overdue} parcela{c.installments_overdue > 1 ? 's' : ''}</Badge>
                       </div>
                     );
@@ -304,11 +367,14 @@ export default function Relatorios() {
   );
 }
 
-function KPI({ label, value, className }: { label: string; value: string | number; className?: string }) {
+function KPI({ label, value, className, comparison }: { label: string; value: string | number; className?: string; comparison?: string }) {
   return (
     <Card>
       <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">{label}</CardTitle></CardHeader>
-      <CardContent><div className={`text-2xl font-bold ${className || ''}`}>{value}</div></CardContent>
+      <CardContent>
+        <div className={`text-2xl font-bold ${className || ''}`}>{value}</div>
+        {comparison && <p className={`text-xs mt-1 ${comparison.startsWith('+') ? 'text-success' : comparison.startsWith('-') ? 'text-destructive' : 'text-muted-foreground'}`}>{comparison} vs anterior</p>}
+      </CardContent>
     </Card>
   );
 }
