@@ -1,10 +1,18 @@
+import { useState } from 'react';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/AppSidebar';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocation } from 'react-router-dom';
-import { Bell, Search } from 'lucide-react';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Bell, Search, User, LogOut } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { UserProfileDialog } from '@/components/UserProfileDialog';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -24,8 +32,9 @@ const pageNames: Record<string, string> = {
 };
 
 export function AppLayout({ children }: AppLayoutProps) {
-  const { profile, role } = useAuth();
+  const { profile, role, signOut } = useAuth();
   const location = useLocation();
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const currentPage = pageNames[location.pathname] || 
     (location.pathname.startsWith('/clientes/') ? 'Cliente 360' : 'Página');
@@ -72,16 +81,34 @@ export function AppLayout({ children }: AppLayoutProps) {
                 <Bell className="h-4 w-4" />
                 <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary" />
               </button>
-              <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="rounded-full focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src={profile?.avatar_url || undefined} />
+                      <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+                        {initials}
+                      </AvatarFallback>
+                    </Avatar>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setProfileOpen(true)}>
+                    <User className="mr-2 h-4 w-4" />
+                    Meu Perfil
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={signOut}>
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Sair
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </header>
           <main className="flex-1 overflow-auto p-6">{children}</main>
         </div>
       </div>
+      <UserProfileDialog open={profileOpen} onOpenChange={setProfileOpen} />
     </SidebarProvider>
   );
 }
