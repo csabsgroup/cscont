@@ -53,10 +53,18 @@ export function PiperunConfig({ setting, onSave }: Props) {
 
   useEffect(() => {
     if (pipelineId) {
-      const pipeline = pipelines.find(p => String(p.id) === pipelineId);
-      setStages(pipeline?.stages || []);
+      loadStages(pipelineId);
+    } else {
+      setStages([]);
     }
-  }, [pipelineId, pipelines]);
+  }, [pipelineId]);
+
+  const loadStages = async (pid: string) => {
+    const { data } = await supabase.functions.invoke('integration-piperun', {
+      body: { action: 'listStages', pipeline_id: pid },
+    });
+    setStages(data?.stages || []);
+  };
 
   useEffect(() => {
     if (setting?.is_connected) loadPipelines();

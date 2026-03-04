@@ -70,8 +70,8 @@ Deno.serve(async (req) => {
 
     if (action === "listStages") {
       const { pipeline_id } = body;
-      const result = await piperunGet(`/stages?pipeline_id=${pipeline_id}`);
-      const stages = (result.data || []).map((s: any) => ({ id: s.id, name: s.name }));
+      const allStages = await piperunGetAll(`/stages?pipeline_id=${pipeline_id}`);
+      const stages = allStages.map((s: any) => ({ id: s.id, name: s.name }));
       return new Response(JSON.stringify({ stages }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
