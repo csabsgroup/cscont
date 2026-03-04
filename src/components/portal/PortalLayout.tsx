@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import {
-  Home, FileText, Target, Video, Calendar, Gift, Users, Contact, LogOut, Menu, X,
+  Home, FileText, Target, Video, Calendar, Gift, Users, Contact, LogOut, Menu, X, FolderOpen,
 } from 'lucide-react';
 
 const navItems = [
@@ -14,6 +14,7 @@ const navItems = [
   { to: '/portal/reunioes', label: 'Reuniões', icon: Video },
   { to: '/portal/eventos', label: 'Eventos', icon: Calendar },
   { to: '/portal/bonus', label: 'Bônus/Cashback', icon: Gift },
+  { to: '/portal/arquivos', label: 'Arquivos', icon: FolderOpen },
   { to: '/portal/contatos', label: 'Contatos', icon: Contact },
   { to: '/portal/membros', label: 'Membros Ativos', icon: Users },
 ];

@@ -28,6 +28,7 @@ import PortalEventos from "@/pages/portal/PortalEventos";
 import PortalBonus from "@/pages/portal/PortalBonus";
 import PortalContatos from "@/pages/portal/PortalContatos";
 import PortalMembros from "@/pages/portal/PortalMembros";
+import PortalArquivos from "@/pages/portal/PortalArquivos";
 
 const queryClient = new QueryClient();
 
@@ -94,6 +95,7 @@ const App = () => (
             <Route path="/portal/bonus" element={<PortalRoute><PortalBonus /></PortalRoute>} />
             <Route path="/portal/contatos" element={<PortalRoute><PortalContatos /></PortalRoute>} />
             <Route path="/portal/membros" element={<PortalRoute><PortalMembros /></PortalRoute>} />
+            <Route path="/portal/arquivos" element={<PortalRoute><PortalArquivos /></PortalRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
