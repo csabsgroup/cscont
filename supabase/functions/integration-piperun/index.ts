@@ -49,8 +49,37 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const body = await req.json();
+    const rawBody = await req.text();
+    const body = JSON.parse(rawBody);
     const { action } = body;
+
+    // --- Auth: validate JWT and require admin/manager/csm role ---
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const url = Deno.env.get("SUPABASE_URL")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const userClient = createClient(url, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user }, error: userErr } = await userClient.auth.getUser();
+    if (userErr || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const supabase = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data: roleCheck } = await supabase.rpc("get_user_role", { _user_id: user.id });
+    if (!roleCheck || !["admin", "manager", "csm"].includes(roleCheck)) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     if (action === "testConnection") {
       const result = await piperunGet("/pipelines");
@@ -91,8 +120,6 @@ Deno.serve(async (req) => {
       const result = await piperunGet(path);
       const deals = result.data || [];
 
-      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-
       const { data: existing } = await supabase.from("offices").select("piperun_deal_id").not("piperun_deal_id", "is", null);
       const existingIds = new Set((existing || []).map((o: any) => o.piperun_deal_id));
 
@@ -103,7 +130,6 @@ Deno.serve(async (req) => {
         const dealId = String(deal.id);
         if (existingIds.has(dealId)) { skipped++; continue; }
 
-        // Apply field mappings
         const office: Record<string, any> = {
           status: "nao_iniciado",
           active_product_id: default_product_id || null,
@@ -115,19 +141,17 @@ Deno.serve(async (req) => {
           for (const mapping of field_mappings) {
             const value = getNestedValue(deal, mapping.piperun);
             if (value !== undefined && value !== null) {
-              if (mapping.local === 'contract_value') continue; // handled separately
+              if (mapping.local === 'contract_value') continue;
               office[mapping.local] = value;
             }
           }
         } else {
-          // Fallback to default behavior
           const contact = deal.person || deal.organization || {};
           office.name = deal.title || contact.name || `Deal ${dealId}`;
           office.email = contact.email || null;
           office.phone = contact.phone || null;
         }
 
-        // Ensure name exists
         if (!office.name) office.name = `Deal ${dealId}`;
 
         const { error } = await supabase.from("offices").insert(office);
@@ -136,7 +160,6 @@ Deno.serve(async (req) => {
           console.error(`[PIPERUN] Failed to import deal ${dealId}:`, error);
         } else {
           imported++;
-          // Create contract if value mapped
           const contractValueMapping = field_mappings?.find((m: any) => m.local === 'contract_value');
           const contractValue = contractValueMapping ? getNestedValue(deal, contractValueMapping.piperun) : deal.value;
           if (contractValue && default_product_id) {
@@ -160,7 +183,6 @@ Deno.serve(async (req) => {
     }
 
     if (action === "listFields") {
-      // Fetch deal fields from Piperun API
       try {
         const result = await piperunGet("/deals?show=1");
         const sampleDeal = (result.data || [])[0] || {};
@@ -183,7 +205,6 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       } catch (e) {
-        // Fallback static fields
         return new Response(JSON.stringify({ fields: [] }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -196,7 +217,7 @@ Deno.serve(async (req) => {
     );
   } catch (err) {
     console.error("[PIPERUN]", err);
-    return new Response(JSON.stringify({ error: String(err) }), {
+    return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
