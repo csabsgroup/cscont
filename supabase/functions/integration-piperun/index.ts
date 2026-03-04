@@ -41,6 +41,10 @@ async function piperunGetAll(path: string) {
   return allData;
 }
 
+function getNestedValue(obj: any, path: string): any {
+  return path.split('.').reduce((o, k) => o?.[k], obj);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -78,15 +82,17 @@ Deno.serve(async (req) => {
     }
 
     if (action === "importDeals") {
-      const { pipeline_id, stage_id, default_product_id, default_csm_id } = body;
+      const { pipeline_id, stage_id, default_product_id, default_csm_id, filter_won, field_mappings } = body;
       if (!pipeline_id || !stage_id) throw new Error("pipeline_id and stage_id are required");
 
-      const result = await piperunGet(`/deals?pipeline_id=${pipeline_id}&stage_id=${stage_id}&show=100`);
+      let path = `/deals?pipeline_id=${pipeline_id}&stage_id=${stage_id}&show=100`;
+      if (filter_won) path += `&status=won`;
+
+      const result = await piperunGet(path);
       const deals = result.data || [];
 
       const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-      // Get existing piperun_deal_ids
       const { data: existing } = await supabase.from("offices").select("piperun_deal_id").not("piperun_deal_id", "is", null);
       const existingIds = new Set((existing || []).map((o: any) => o.piperun_deal_id));
 
@@ -97,29 +103,52 @@ Deno.serve(async (req) => {
         const dealId = String(deal.id);
         if (existingIds.has(dealId)) { skipped++; continue; }
 
-        const contact = deal.person || deal.organization || {};
-        const { error } = await supabase.from("offices").insert({
-          name: deal.title || contact.name || `Deal ${dealId}`,
-          email: contact.email || null,
-          phone: contact.phone || null,
+        // Apply field mappings
+        const office: Record<string, any> = {
           status: "nao_iniciado",
           active_product_id: default_product_id || null,
           csm_id: default_csm_id || null,
           piperun_deal_id: dealId,
-        });
+        };
+
+        if (field_mappings && Array.isArray(field_mappings)) {
+          for (const mapping of field_mappings) {
+            const value = getNestedValue(deal, mapping.piperun);
+            if (value !== undefined && value !== null) {
+              if (mapping.local === 'contract_value') continue; // handled separately
+              office[mapping.local] = value;
+            }
+          }
+        } else {
+          // Fallback to default behavior
+          const contact = deal.person || deal.organization || {};
+          office.name = deal.title || contact.name || `Deal ${dealId}`;
+          office.email = contact.email || null;
+          office.phone = contact.phone || null;
+        }
+
+        // Ensure name exists
+        if (!office.name) office.name = `Deal ${dealId}`;
+
+        const { error } = await supabase.from("offices").insert(office);
 
         if (error) {
           console.error(`[PIPERUN] Failed to import deal ${dealId}:`, error);
         } else {
           imported++;
-          // Optionally create contract
-          if (deal.value && default_product_id) {
-            await supabase.from("contracts").insert({
-              office_id: (await supabase.from("offices").select("id").eq("piperun_deal_id", dealId).single()).data?.id,
-              product_id: default_product_id,
-              value: deal.value,
-              status: "pendente",
-            }).catch(() => {});
+          // Create contract if value mapped
+          const contractValueMapping = field_mappings?.find((m: any) => m.local === 'contract_value');
+          const contractValue = contractValueMapping ? getNestedValue(deal, contractValueMapping.piperun) : deal.value;
+          if (contractValue && default_product_id) {
+            const { data: newOffice } = await supabase.from("offices").select("id").eq("piperun_deal_id", dealId).single();
+            if (newOffice) {
+              await supabase.from("contracts").insert({
+                office_id: newOffice.id,
+                product_id: default_product_id,
+                value: contractValue,
+                status: "pendente",
+              }).catch(() => {});
+            }
           }
         }
       }
