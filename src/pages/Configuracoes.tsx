@@ -1,26 +1,42 @@
-import { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
+import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Loader2, Package, Route, Users, Trash2, Edit2, Heart, FileText, Gift, Link2, Zap, ShieldX, Globe, ArrowUpDown } from 'lucide-react';
+import { Package, Route, Heart, FileText, Zap, Gift, Users, Link2, Globe, ArrowUpDown, ShieldX, Calendar, MessageSquare, CreditCard, Workflow, BarChart3, Eye, Bot, ClipboardList, ScrollText } from 'lucide-react';
 import { ImportExportTab } from '@/components/configuracoes/ImportExportTab';
-import { toast } from 'sonner';
 import { HealthScoreTab } from '@/components/configuracoes/HealthScoreTab';
 import { FormTemplatesTab } from '@/components/configuracoes/FormTemplatesTab';
 import { BonusCatalogTab } from '@/components/configuracoes/BonusCatalogTab';
 import { IntegracoesTab } from '@/components/configuracoes/IntegracoesTab';
 import { TemplatesAutomacoesTab } from '@/components/configuracoes/TemplatesAutomacoesTab';
 import { PortalSettingsTab } from '@/components/configuracoes/PortalSettingsTab';
+import { Visao360ConfigTab } from '@/components/configuracoes/Visao360ConfigTab';
+import { AutomationDistributionTab } from '@/components/configuracoes/AutomationDistributionTab';
+import { AutomationOnboardingTab } from '@/components/configuracoes/AutomationOnboardingTab';
+import { AutomationStageTasksTab } from '@/components/configuracoes/AutomationStageTasksTab';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { cn } from '@/lib/utils';
+import { GoogleCalendarConfig } from '@/components/configuracoes/integrations/GoogleCalendarConfig';
+import { SlackConfig } from '@/components/configuracoes/integrations/SlackConfig';
+import { AsaasConfig } from '@/components/configuracoes/integrations/AsaasConfig';
+import { PiperunConfig } from '@/components/configuracoes/integrations/PiperunConfig';
+import { FirefliesConfig } from '@/components/configuracoes/integrations/FirefliesConfig';
+import { WhatsAppConfig } from '@/components/configuracoes/integrations/WhatsAppConfig';
+import { useIntegrationSettings } from '@/hooks/useIntegrationSettings';
+
+// ─── Inline sub-components (Products, Stages, Users) ─────────
+import { useEffect, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Plus, Loader2, Trash2, Edit2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 // ─── Products Tab ────────────────────────────────────────────
 function ProductsTab() {
@@ -42,12 +58,8 @@ function ProductsTab() {
 
   useEffect(() => { fetch(); }, [fetch]);
 
-  const openEdit = (p: any) => {
-    setEditProduct(p); setName(p.name); setDescription(p.description || ''); setIsActive(p.is_active); setDialogOpen(true);
-  };
-  const openNew = () => {
-    setEditProduct(null); setName(''); setDescription(''); setIsActive(true); setDialogOpen(true);
-  };
+  const openEdit = (p: any) => { setEditProduct(p); setName(p.name); setDescription(p.description || ''); setIsActive(p.is_active); setDialogOpen(true); };
+  const openNew = () => { setEditProduct(null); setName(''); setDescription(''); setIsActive(true); setDialogOpen(true); };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true);
@@ -317,11 +329,72 @@ function UsersTab() {
   );
 }
 
+// ─── Sidebar config ──────────────────────────────────────────
+interface SidebarSection {
+  key: string;
+  label: string;
+  icon: any;
+  category: string;
+  adminOnly?: boolean;
+  managerVisible?: boolean;
+}
+
+const SIDEBAR_SECTIONS: SidebarSection[] = [
+  // Produtos
+  { key: 'produtos', label: 'Produtos', icon: Package, category: 'Produtos' },
+  { key: 'jornada', label: 'Jornadas', icon: Route, category: 'Produtos' },
+  { key: 'health', label: 'Health Score', icon: Heart, category: 'Produtos', adminOnly: true },
+  { key: 'automacoes', label: 'Templates', icon: Zap, category: 'Produtos' },
+  // Formulários
+  { key: 'formularios', label: 'Builder', icon: FileText, category: 'Formulários' },
+  // Visão 360
+  { key: '360_campos', label: 'Campos e Indicadores', icon: BarChart3, category: 'Visão 360', adminOnly: true },
+  { key: '360_abas', label: 'Abas Visíveis', icon: Eye, category: 'Visão 360', adminOnly: true },
+  // Automações
+  { key: 'auto_distribuicao', label: 'Distribuição de Carteira', icon: Users, category: 'Automações', adminOnly: true },
+  { key: 'auto_onboarding', label: 'Atividades Automáticas', icon: ClipboardList, category: 'Automações', adminOnly: true },
+  { key: 'auto_etapas', label: 'Atividades por Etapa', icon: Bot, category: 'Automações', adminOnly: true },
+  { key: 'auto_playbooks', label: 'Playbooks de Health', icon: Heart, category: 'Automações', adminOnly: true },
+  // Integrações
+  { key: 'int_gcal', label: 'Google Calendar', icon: Calendar, category: 'Integrações', adminOnly: true },
+  { key: 'int_slack', label: 'Slack', icon: MessageSquare, category: 'Integrações', adminOnly: true },
+  { key: 'int_asaas', label: 'Asaas', icon: CreditCard, category: 'Integrações', adminOnly: true },
+  { key: 'int_piperun', label: 'Piperun', icon: Workflow, category: 'Integrações', adminOnly: true },
+  { key: 'int_fireflies', label: 'Fireflies', icon: FileText, category: 'Integrações', adminOnly: true },
+  { key: 'int_whatsapp', label: 'WhatsApp', icon: MessageSquare, category: 'Integrações', adminOnly: true },
+  // Others
+  { key: 'bonus', label: 'Catálogo de Bônus', icon: Gift, category: 'Catálogo de Bônus', adminOnly: true },
+  { key: 'importexport', label: 'Importar / Exportar', icon: ArrowUpDown, category: 'Importar / Exportar' },
+  { key: 'portal', label: 'Portal do Cliente', icon: Globe, category: 'Portal do Cliente', managerVisible: true },
+  { key: 'usuarios', label: 'Usuários & Permissões', icon: Users, category: 'Usuários & Permissões', adminOnly: true },
+  { key: 'auditoria', label: 'Trilha de Auditoria', icon: ScrollText, category: 'Trilha de Auditoria', adminOnly: true },
+];
+
+const CATEGORY_ICONS: Record<string, any> = {
+  'Produtos': Package,
+  'Formulários': FileText,
+  'Visão 360': Eye,
+  'Automações': Bot,
+  'Integrações': Link2,
+  'Catálogo de Bônus': Gift,
+  'Importar / Exportar': ArrowUpDown,
+  'Portal do Cliente': Globe,
+  'Usuários & Permissões': Users,
+  'Trilha de Auditoria': ScrollText,
+};
+
+function getBreadcrumb(key: string): { category: string; label: string } {
+  const s = SIDEBAR_SECTIONS.find(sec => sec.key === key);
+  return s ? { category: s.category, label: s.label } : { category: '', label: '' };
+}
+
 // ─── Main Page ───────────────────────────────────────────────
 export default function Configuracoes() {
   const { isAdmin, isManager, isViewer } = useAuth();
+  const isMobile = useIsMobile();
+  const [selectedSection, setSelectedSection] = useState('produtos');
+  const { settings, upsertSetting } = useIntegrationSettings();
 
-  // Viewer blocked entirely
   if (isViewer) {
     return (
       <div className="space-y-6">
@@ -339,46 +412,123 @@ export default function Configuracoes() {
     );
   }
 
-  // Manager: Produtos, Jornada, Formulários, Templates/Automações
-  // Admin: all tabs
-  const showHealth = isAdmin;
-  const showBonus = isAdmin;
-  const showUsers = isAdmin;
-  const showIntegracoes = isAdmin;
-  const showPortal = isAdmin || isManager;
-  const showImportExport = isAdmin || isManager || (!isViewer);
+  const visibleSections = SIDEBAR_SECTIONS.filter(s => {
+    if (s.adminOnly && !isAdmin) return false;
+    if (s.managerVisible && !isAdmin && !isManager) return false;
+    return true;
+  });
+
+  const categories = Array.from(new Set(visibleSections.map(s => s.category)));
+
+  const breadcrumb = getBreadcrumb(selectedSection);
+
+  const renderContent = () => {
+    switch (selectedSection) {
+      case 'produtos': return <ProductsTab />;
+      case 'jornada': return <JourneyStagesTab />;
+      case 'health': return <HealthScoreTab />;
+      case 'automacoes': return <TemplatesAutomacoesTab />;
+      case 'formularios': return <FormTemplatesTab />;
+      case '360_campos': return <Visao360ConfigTab mode="campos" />;
+      case '360_abas': return <Visao360ConfigTab mode="abas" />;
+      case 'auto_distribuicao': return <AutomationDistributionTab />;
+      case 'auto_onboarding': return <AutomationOnboardingTab />;
+      case 'auto_etapas': return <AutomationStageTasksTab />;
+      case 'auto_playbooks': return <HealthScoreTab />;
+      case 'int_gcal': return <GoogleCalendarConfig setting={settings.find(s => s.provider === 'google_calendar')} onSave={upsertSetting} />;
+      case 'int_slack': return <SlackConfig setting={settings.find(s => s.provider === 'slack')} onSave={upsertSetting} />;
+      case 'int_asaas': return <AsaasConfig setting={settings.find(s => s.provider === 'asaas')} onSave={upsertSetting} />;
+      case 'int_piperun': return <PiperunConfig setting={settings.find(s => s.provider === 'piperun')} onSave={upsertSetting} />;
+      case 'int_fireflies': return <FirefliesConfig setting={settings.find(s => s.provider === 'fireflies')} onSave={upsertSetting} />;
+      case 'int_whatsapp': return <WhatsAppConfig setting={settings.find(s => s.provider === 'whatsapp')} onSave={upsertSetting} />;
+      case 'bonus': return <BonusCatalogTab />;
+      case 'importexport': return <ImportExportTab />;
+      case 'portal': return <PortalSettingsTab />;
+      case 'usuarios': return <UsersTab />;
+      case 'auditoria': return <div className="text-sm text-muted-foreground">Veja a trilha de auditoria na página dedicada.</div>;
+      default: return null;
+    }
+  };
+
+  // Mobile: dropdown selector
+  if (isMobile) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-2xl font-bold">Configurações</h1>
+          <p className="text-sm text-muted-foreground">Gerencie produtos, etapas, health score e usuários</p>
+        </div>
+        <Select value={selectedSection} onValueChange={setSelectedSection}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {categories.map(cat => (
+              <div key={cat}>
+                <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{cat}</div>
+                {visibleSections.filter(s => s.category === cat).map(s => (
+                  <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
+                ))}
+              </div>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="bg-muted/30 rounded-lg p-4">
+          {renderContent()}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Configurações</h1>
-        <p className="text-sm text-muted-foreground">Gerencie produtos, etapas, health score e usuários</p>
+    <div className="flex gap-0 -m-6 min-h-[calc(100vh-4rem)]">
+      {/* Sidebar */}
+      <div className="w-[240px] flex-shrink-0 bg-white border-r border-border overflow-y-auto">
+        <div className="p-4 pb-2">
+          <h2 className="text-lg font-semibold">Configurações</h2>
+        </div>
+        <nav className="px-2 pb-4">
+          {categories.map(cat => {
+            const CatIcon = CATEGORY_ICONS[cat];
+            const items = visibleSections.filter(s => s.category === cat);
+            // Single-item categories: render as direct item
+            const isSingle = items.length === 1 && items[0].label === cat;
+            return (
+              <div key={cat}>
+                {!isSingle && (
+                  <div className="flex items-center gap-1.5 mt-5 mb-1.5 px-3">
+                    {CatIcon && <CatIcon className="h-3.5 w-3.5 text-muted-foreground/60" />}
+                    <span className="text-[11px] uppercase text-muted-foreground/60 tracking-wider font-medium">{cat}</span>
+                  </div>
+                )}
+                {items.map(s => (
+                  <button
+                    key={s.key}
+                    onClick={() => setSelectedSection(s.key)}
+                    className={cn(
+                      'w-full flex items-center gap-2 text-sm py-2 px-3 rounded-lg transition-colors text-left',
+                      selectedSection === s.key
+                        ? 'bg-red-50 text-red-700 font-medium'
+                        : 'text-muted-foreground hover:bg-muted/50'
+                    )}
+                  >
+                    <s.icon className="h-4 w-4 flex-shrink-0" />
+                    <span className="truncate">{isSingle ? cat : s.label}</span>
+                  </button>
+                ))}
+              </div>
+            );
+          })}
+        </nav>
       </div>
 
-      <Tabs defaultValue="produtos" className="space-y-4">
-        <TabsList className="flex-wrap">
-          <TabsTrigger value="produtos" className="gap-1.5"><Package className="h-4 w-4" />Produtos</TabsTrigger>
-          <TabsTrigger value="jornada" className="gap-1.5"><Route className="h-4 w-4" />Etapas da Jornada</TabsTrigger>
-          {showHealth && <TabsTrigger value="health" className="gap-1.5"><Heart className="h-4 w-4" />Health Score</TabsTrigger>}
-          <TabsTrigger value="formularios" className="gap-1.5"><FileText className="h-4 w-4" />Formulários</TabsTrigger>
-          <TabsTrigger value="automacoes" className="gap-1.5"><Zap className="h-4 w-4" />Templates/Automações</TabsTrigger>
-          {showBonus && <TabsTrigger value="bonus" className="gap-1.5"><Gift className="h-4 w-4" />Catálogo de Bônus</TabsTrigger>}
-          {showUsers && <TabsTrigger value="usuarios" className="gap-1.5"><Users className="h-4 w-4" />Usuários & Roles</TabsTrigger>}
-          {showIntegracoes && <TabsTrigger value="integracoes" className="gap-1.5"><Link2 className="h-4 w-4" />Integrações</TabsTrigger>}
-          {showPortal && <TabsTrigger value="portal" className="gap-1.5"><Globe className="h-4 w-4" />Portal do Cliente</TabsTrigger>}
-          {showImportExport && <TabsTrigger value="importexport" className="gap-1.5"><ArrowUpDown className="h-4 w-4" />Importar / Exportar</TabsTrigger>}
-        </TabsList>
-
-        <TabsContent value="produtos"><ProductsTab /></TabsContent>
-        <TabsContent value="jornada"><JourneyStagesTab /></TabsContent>
-        {showHealth && <TabsContent value="health"><HealthScoreTab /></TabsContent>}
-        <TabsContent value="formularios"><FormTemplatesTab /></TabsContent>
-        <TabsContent value="automacoes"><TemplatesAutomacoesTab /></TabsContent>
-        {showBonus && <TabsContent value="bonus"><BonusCatalogTab /></TabsContent>}
-        {showUsers && <TabsContent value="usuarios"><UsersTab /></TabsContent>}
-        {showIntegracoes && <TabsContent value="integracoes"><IntegracoesTab /></TabsContent>}
-        {showPortal && <TabsContent value="portal"><PortalSettingsTab /></TabsContent>}
-        {showImportExport && <TabsContent value="importexport"><ImportExportTab /></TabsContent>}
-      </Tabs>
+      {/* Content */}
+      <div className="flex-1 bg-muted/20 p-6 overflow-y-auto">
+        {/* Breadcrumb */}
+        <div className="text-xs text-muted-foreground mb-1">
+          Configurações {breadcrumb.category && `› ${breadcrumb.category}`} {breadcrumb.label !== breadcrumb.category && `› ${breadcrumb.label}`}
+        </div>
+        <h2 className="text-xl font-semibold mb-4">{breadcrumb.label}</h2>
+        {renderContent()}
+      </div>
     </div>
   );
 }

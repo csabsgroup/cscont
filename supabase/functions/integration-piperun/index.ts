@@ -159,8 +159,39 @@ Deno.serve(async (req) => {
       );
     }
 
+    if (action === "listFields") {
+      // Fetch deal fields from Piperun API
+      try {
+        const result = await piperunGet("/deals?show=1");
+        const sampleDeal = (result.data || [])[0] || {};
+        
+        const extractFields = (obj: any, prefix = ""): Array<{key: string; label: string; example_value: string}> => {
+          const fields: Array<{key: string; label: string; example_value: string}> = [];
+          for (const [key, value] of Object.entries(obj)) {
+            const fullKey = prefix ? `${prefix}.${key}` : key;
+            if (value && typeof value === "object" && !Array.isArray(value)) {
+              fields.push(...extractFields(value, fullKey));
+            } else {
+              fields.push({ key: fullKey, label: fullKey, example_value: String(value ?? "") });
+            }
+          }
+          return fields;
+        };
+        
+        const fields = extractFields(sampleDeal);
+        return new Response(JSON.stringify({ fields }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch (e) {
+        // Fallback static fields
+        return new Response(JSON.stringify({ fields: [] }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     return new Response(
-      JSON.stringify({ error: "Unknown action. Supported: testConnection, listPipelines, listStages, importDeals" }),
+      JSON.stringify({ error: "Unknown action. Supported: testConnection, listPipelines, listStages, importDeals, listFields" }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {

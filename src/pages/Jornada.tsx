@@ -317,94 +317,108 @@ export default function Jornada() {
       ) : (
         /* BOARD VIEW */
         <DragDropContext onDragEnd={onDragEnd}>
-          <div className="flex gap-4 overflow-x-auto pb-4">
-            {stages.map(stage => {
-              const offices = officesByStage(stage.id);
-              return (
-                <div key={stage.id} className="flex-shrink-0 w-[300px]">
-                  {/* Column header */}
-                  <div className="bg-gray-200 rounded-t-lg py-2 px-3 flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-700">{stage.name}</span>
-                    <Badge variant="secondary" className="text-xs">{offices.length}</Badge>
-                  </div>
-                  {stage.sla_days && <div className="bg-gray-100 px-3 py-1 text-xs text-muted-foreground border-x border-border/40">SLA: {stage.sla_days}d</div>}
+          <div className="relative">
+            {/* Scroll shadow indicators */}
+            <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-background to-transparent z-10" />
+            <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-background to-transparent z-10" />
+            <div className="flex gap-3 overflow-x-auto pb-4 scroll-smooth px-1">
+              {stages.map(stage => {
+                const offices = officesByStage(stage.id);
+                return (
+                  <div key={stage.id} className="flex-shrink-0 w-[240px] max-w-[260px]">
+                    {/* Column header - compact */}
+                    <div className="bg-muted rounded-t-lg py-1.5 px-2 flex items-center justify-between">
+                      <span className="text-sm font-medium truncate">{stage.name}</span>
+                      <Badge variant="secondary" className="text-[10px] h-5 min-w-5 px-1">{offices.length}</Badge>
+                    </div>
 
-                  <Droppable droppableId={stage.id}>
-                    {(provided, snapshot) => (
-                      <div
-                        ref={provided.innerRef}
-                        {...provided.droppableProps}
-                        className={cn(
-                          'space-y-2 min-h-[200px] p-2 border border-t-0 border-border/40 rounded-b-lg bg-card transition-colors',
-                          snapshot.isDraggingOver && 'bg-accent/30'
-                        )}
-                      >
-                        {offices.length === 0 ? (
-                          <p className="text-xs text-muted-foreground/60 text-center py-8">Nenhum cliente</p>
-                        ) : offices.map((oj, index) => {
-                          const health = healthScores[oj.office_id];
-                          const act = activitiesMap[oj.office_id] || { total: 0, completed: 0 };
-                          const csm = oj.offices.csm_id ? csmProfiles[oj.offices.csm_id] : null;
-                          const taskPct = act.total > 0 ? Math.round((act.completed / act.total) * 100) : 0;
+                    <Droppable droppableId={stage.id}>
+                      {(provided, snapshot) => (
+                        <div
+                          ref={provided.innerRef}
+                          {...provided.droppableProps}
+                          className={cn(
+                            'space-y-1.5 min-h-[200px] p-1.5 border border-t-0 border-border/40 rounded-b-lg bg-card transition-colors',
+                            snapshot.isDraggingOver && 'bg-accent/30'
+                          )}
+                        >
+                          {offices.length === 0 ? (
+                            <p className="text-xs text-muted-foreground/60 text-center py-8">Nenhum cliente</p>
+                          ) : offices.map((oj, index) => {
+                            const health = healthScores[oj.office_id];
+                            const act = activitiesMap[oj.office_id] || { total: 0, completed: 0 };
+                            const csm = oj.offices.csm_id ? csmProfiles[oj.offices.csm_id] : null;
+                            const contract = contracts[oj.office_id];
+                            const taskPct = act.total > 0 ? Math.round((act.completed / act.total) * 100) : 0;
+                            const renewalDays = contract?.renewal_date ? differenceInDays(new Date(contract.renewal_date), new Date()) : null;
+                            const overdueInstallments = contract?.installments_overdue || 0;
 
-                          return (
-                            <Draggable key={oj.id} draggableId={oj.id} index={index} isDragDisabled={isViewer}>
-                              {(provided, snapshot) => (
-                                <div
-                                  ref={provided.innerRef}
-                                  {...provided.draggableProps}
-                                  {...provided.dragHandleProps}
-                                  className={cn(
-                                    'rounded-lg bg-white border border-border/50 cursor-pointer hover:shadow-md transition-shadow',
-                                    healthColor(health?.band ?? null),
-                                    snapshot.isDragging && 'shadow-lg ring-2 ring-primary/30'
-                                  )}
-                                  onClick={() => navigate(`/clientes/${oj.offices.id}`)}
-                                >
-                                  <div className="p-3 space-y-2">
-                                    {/* Row 1: Health + Name */}
-                                    <div className="flex items-center gap-2">
-                                      {health && (
-                                        <span className={cn('text-sm font-bold', healthTextColor(health.band))}>
-                                          {Math.round(health.score)}
-                                        </span>
-                                      )}
-                                      <span className="text-sm font-medium truncate flex-1">{oj.offices.name}</span>
-                                    </div>
-                                    {/* Row 2: CSM */}
-                                    {csm && (
-                                      <div className="flex items-center gap-2">
-                                        <div className="h-5 w-5 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-medium">
-                                          {getInitials(csm.full_name)}
-                                        </div>
-                                        <span className="text-xs text-muted-foreground truncate">{csm.full_name}</span>
-                                      </div>
+                            return (
+                              <Draggable key={oj.id} draggableId={oj.id} index={index} isDragDisabled={isViewer}>
+                                {(provided, snapshot) => (
+                                  <div
+                                    ref={provided.innerRef}
+                                    {...provided.draggableProps}
+                                    {...provided.dragHandleProps}
+                                    className={cn(
+                                      'rounded-lg bg-white border border-border/50 cursor-pointer hover:shadow-sm transition-shadow',
+                                      healthColor(health?.band ?? null),
+                                      snapshot.isDragging && 'shadow-lg ring-2 ring-primary/30'
                                     )}
-                                    {/* Row 3: Tasks progress */}
-                                    <div className="space-y-1">
-                                      <div className="flex items-center justify-between text-xs text-muted-foreground">
-                                        <span>Tarefas ({act.completed}/{act.total})</span>
-                                        <span>{taskPct}%</span>
+                                    onClick={() => navigate(`/clientes/${oj.offices.id}`)}
+                                  >
+                                    <div className="p-2.5 space-y-1.5">
+                                      {/* Line 1: Health + Name */}
+                                      <div className="flex items-center gap-1.5">
+                                        {health && (
+                                          <span className={cn('text-xs font-bold', healthTextColor(health.band))}>
+                                            {Math.round(health.score)}
+                                          </span>
+                                        )}
+                                        <span className="text-xs font-medium truncate flex-1">{oj.offices.name}</span>
                                       </div>
-                                      <Progress value={taskPct} className="h-1.5" />
-                                    </div>
-                                    {/* Row 4: Status */}
-                                    <div className="flex items-center gap-1.5">
-                                      <StatusBadge status={oj.offices.status} />
+                                      {/* Line 2: CSM avatar + Tasks + Progress */}
+                                      <div className="flex items-center gap-1.5">
+                                        {csm && (
+                                          <div
+                                            className="h-5 w-5 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[9px] font-medium flex-shrink-0"
+                                            title={csm.full_name || ''}
+                                          >
+                                            {getInitials(csm.full_name)}
+                                          </div>
+                                        )}
+                                        <span className="text-[10px] text-muted-foreground whitespace-nowrap">{act.completed}/{act.total}</span>
+                                        <Progress value={taskPct} className="h-1 flex-1" />
+                                      </div>
+                                      {/* Line 3: Optional badges */}
+                                      {(renewalDays !== null && renewalDays <= 30 || overdueInstallments > 0) && (
+                                        <div className="flex gap-1 flex-wrap">
+                                          {renewalDays !== null && renewalDays <= 30 && (
+                                            <Badge variant="outline" className="text-[9px] h-4 px-1 border-amber-300 text-amber-700">
+                                              {renewalDays}d renov
+                                            </Badge>
+                                          )}
+                                          {overdueInstallments > 0 && (
+                                            <Badge variant="outline" className="text-[9px] h-4 px-1 border-destructive/50 text-destructive">
+                                              {overdueInstallments} vencida{overdueInstallments > 1 ? 's' : ''}
+                                            </Badge>
+                                          )}
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
-                                </div>
-                              )}
-                            </Draggable>
-                          );
-                        })}
-                        {provided.placeholder}
-                      </div>
-                    )}
-                  </Droppable>
-                </div>
-              );
-            })}
+                                )}
+                              </Draggable>
+                            );
+                          })}
+                          {provided.placeholder}
+                        </div>
+                      )}
+                    </Droppable>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </DragDropContext>
       )}
