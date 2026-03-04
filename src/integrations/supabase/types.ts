@@ -68,6 +68,7 @@ export type Database = {
           description: string | null
           due_date: string | null
           id: string
+          observations: string | null
           office_id: string | null
           priority: Database["public"]["Enums"]["activity_priority"]
           shared_with_client: boolean
@@ -82,6 +83,7 @@ export type Database = {
           description?: string | null
           due_date?: string | null
           id?: string
+          observations?: string | null
           office_id?: string | null
           priority?: Database["public"]["Enums"]["activity_priority"]
           shared_with_client?: boolean
@@ -96,6 +98,7 @@ export type Database = {
           description?: string | null
           due_date?: string | null
           id?: string
+          observations?: string | null
           office_id?: string | null
           priority?: Database["public"]["Enums"]["activity_priority"]
           shared_with_client?: boolean
@@ -110,6 +113,41 @@ export type Database = {
             columns: ["office_id"]
             isOneToOne: false
             referencedRelation: "offices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      activity_checklists: {
+        Row: {
+          activity_id: string
+          completed: boolean
+          created_at: string
+          id: string
+          position: number
+          title: string
+        }
+        Insert: {
+          activity_id: string
+          completed?: boolean
+          created_at?: string
+          id?: string
+          position?: number
+          title: string
+        }
+        Update: {
+          activity_id?: string
+          completed?: boolean
+          created_at?: string
+          id?: string
+          position?: number
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_checklists_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
             referencedColumns: ["id"]
           },
         ]
@@ -1119,7 +1157,17 @@ export type Database = {
     Enums: {
       action_plan_status: "pending" | "in_progress" | "done" | "cancelled"
       activity_priority: "low" | "medium" | "high" | "urgent"
-      activity_type: "task" | "follow_up" | "onboarding" | "renewal" | "other"
+      activity_type:
+        | "task"
+        | "follow_up"
+        | "onboarding"
+        | "renewal"
+        | "other"
+        | "ligacao"
+        | "check_in"
+        | "email"
+        | "whatsapp"
+        | "planejamento"
       app_role: "admin" | "manager" | "csm" | "viewer" | "client"
       bonus_request_status: "pending" | "approved" | "denied"
       contract_status: "ativo" | "encerrado" | "cancelado" | "pendente"
@@ -1271,7 +1319,18 @@ export const Constants = {
     Enums: {
       action_plan_status: ["pending", "in_progress", "done", "cancelled"],
       activity_priority: ["low", "medium", "high", "urgent"],
-      activity_type: ["task", "follow_up", "onboarding", "renewal", "other"],
+      activity_type: [
+        "task",
+        "follow_up",
+        "onboarding",
+        "renewal",
+        "other",
+        "ligacao",
+        "check_in",
+        "email",
+        "whatsapp",
+        "planejamento",
+      ],
       app_role: ["admin", "manager", "csm", "viewer", "client"],
       bonus_request_status: ["pending", "approved", "denied"],
       contract_status: ["ativo", "encerrado", "cancelado", "pendente"],
