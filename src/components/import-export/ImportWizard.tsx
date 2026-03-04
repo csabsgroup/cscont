@@ -4,9 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Upload, Download, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { Upload, Download, CheckCircle2, AlertCircle, Loader2, Undo2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -35,7 +34,7 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
   const [validCount, setValidCount] = useState(0);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [result, setResult] = useState<{ success: number; errors: number; skipped: number } | null>(null);
+  const [result, setResult] = useState<{ success: number; errors: number; skipped: number; batchId?: string } | null>(null);
 
   const reset = () => {
     setStep('upload'); setFileHeaders([]); setRows([]); setMapping({});
@@ -103,23 +102,34 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
     });
 
     let success = 0, errorCount = 0, skipped = 0;
+    const insertedIds: string[] = [];
     const chunkSize = 50;
+
     for (let i = 0; i < mappedRows.length; i += chunkSize) {
       const chunk = mappedRows.slice(i, i + chunkSize);
-      try {
-        // Simple insert — entity-specific logic would go here
-        for (const row of chunk) {
-          try {
-            await insertRow(template, row);
-            success++;
-          } catch {
-            errorCount++;
-          }
+      for (const row of chunk) {
+        try {
+          const id = await insertRow(template, row);
+          if (id) insertedIds.push(id);
+          success++;
+        } catch {
+          errorCount++;
         }
-      } catch {
-        errorCount += chunk.length;
       }
       setProgress(Math.round(((i + chunk.length) / mappedRows.length) * 100));
+    }
+
+    // Save batch for undo
+    let batchId: string | undefined;
+    if (user && insertedIds.length > 0) {
+      const { data: batchData } = await supabase.from('import_batches' as any).insert({
+        user_id: user.id,
+        entity_type: template.key,
+        table_name: template.table,
+        record_ids: insertedIds,
+        record_count: insertedIds.length,
+      } as any).select('id').single();
+      batchId = (batchData as any)?.id;
     }
 
     // Audit log
@@ -132,9 +142,42 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
       });
     }
 
-    setResult({ success, errors: errorCount, skipped });
+    setResult({ success, errors: errorCount, skipped, batchId });
     setStep('execute');
     setImporting(false);
+  };
+
+  const handleUndoImport = async () => {
+    if (!result?.batchId) return;
+    setImporting(true);
+    try {
+      const { data: batch } = await supabase.from('import_batches' as any)
+        .select('*').eq('id', result.batchId).single();
+      if (!batch) throw new Error('Batch not found');
+      const ids = (batch as any).record_ids as string[];
+      const chunkSize = 50;
+      for (let i = 0; i < ids.length; i += chunkSize) {
+        await supabase.from((batch as any).table_name as any).delete().in('id', ids.slice(i, i + chunkSize));
+      }
+      await supabase.from('import_batches' as any)
+        .update({ undone_at: new Date().toISOString() } as any)
+        .eq('id', result.batchId);
+      if (user) {
+        await supabase.from('audit_logs').insert({
+          user_id: user.id,
+          entity_type: template.table,
+          action: 'undo_import',
+          details: { batch_id: result.batchId, count: ids.length },
+        });
+      }
+      toast.success('Importação desfeita com sucesso.');
+      reset();
+      onOpenChange(false);
+    } catch {
+      toast.error('Erro ao desfazer importação.');
+    } finally {
+      setImporting(false);
+    }
   };
 
   return (
@@ -222,7 +265,15 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
               {result.errors > 0 && <span className="text-destructive">{result.errors} erros</span>}
               {result.skipped > 0 && <span className="text-muted-foreground">{result.skipped} ignorados</span>}
             </div>
-            <Button onClick={() => { reset(); onOpenChange(false); }}>Fechar</Button>
+            <div className="flex justify-center gap-3">
+              {result.batchId && (
+                <Button variant="outline" onClick={handleUndoImport} disabled={importing} className="gap-1.5">
+                  {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Undo2 className="h-4 w-4" />}
+                  Desfazer importação
+                </Button>
+              )}
+              <Button onClick={() => { reset(); onOpenChange(false); }}>Fechar</Button>
+            </div>
           </div>
         )}
       </DialogContent>
@@ -230,23 +281,21 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
   );
 }
 
-async function insertRow(template: EntityTemplate, row: Record<string, any>) {
+async function insertRow(template: EntityTemplate, row: Record<string, any>): Promise<string | null> {
   const t = template.key;
 
   if (t === 'offices') {
-    // Resolve product by name
     let productId: string | null = null;
     if (row.product_name) {
       const { data } = await supabase.from('products').select('id').ilike('name', row.product_name.trim()).maybeSingle();
       productId = data?.id || null;
     }
-    // Resolve CSM by email
     let csmId: string | null = null;
     if (row.csm_email) {
       const { data } = await supabase.from('profiles').select('id').ilike('full_name', `%${row.csm_email.trim().split('@')[0]}%`).maybeSingle();
       csmId = data?.id || null;
     }
-    const { error } = await supabase.from('offices').insert({
+    const { data, error } = await supabase.from('offices').insert({
       name: row.name,
       email: row.email,
       phone: row.phone || null,
@@ -256,12 +305,13 @@ async function insertRow(template: EntityTemplate, row: Record<string, any>) {
       csm_id: csmId,
       status: row.status as any,
       activation_date: parseDateBR(row.activation_date),
-    });
+    }).select('id').single();
     if (error) throw error;
+    return data?.id || null;
   } else if (t === 'contacts') {
     const { data: office } = await supabase.from('offices').select('id').ilike('name', row.office_name.trim()).maybeSingle();
     if (!office) throw new Error('Office not found');
-    const { error } = await supabase.from('contacts').insert({
+    const { data, error } = await supabase.from('contacts').insert({
       office_id: office.id,
       name: row.name,
       role_title: row.role_title || null,
@@ -270,8 +320,9 @@ async function insertRow(template: EntityTemplate, row: Record<string, any>) {
       instagram: row.instagram || null,
       birthday: parseDateBR(row.birthday),
       is_main_contact: parseBoolean(row.is_main_contact || 'sim'),
-    });
+    }).select('id').single();
     if (error) throw error;
+    return data?.id || null;
   } else if (t === 'contracts') {
     const { data: office } = await supabase.from('offices').select('id').ilike('name', row.office_name.trim()).maybeSingle();
     if (!office) throw new Error('Office not found');
@@ -281,7 +332,7 @@ async function insertRow(template: EntityTemplate, row: Record<string, any>) {
       productId = data?.id || null;
     }
     if (!productId) throw new Error('Product not found');
-    const { error } = await supabase.from('contracts').insert({
+    const { data, error } = await supabase.from('contracts').insert({
       office_id: office.id,
       product_id: productId,
       start_date: parseDateBR(row.start_date),
@@ -291,19 +342,19 @@ async function insertRow(template: EntityTemplate, row: Record<string, any>) {
       installments_total: Number(row.installments_total) || 0,
       installments_overdue: Number(row.installments_overdue) || 0,
       status: row.status as any,
-    });
+    }).select('id').single();
     if (error) throw error;
+    return data?.id || null;
   } else if (t === 'meetings') {
     const { data: office } = await supabase.from('offices').select('id').ilike('name', row.office_name.trim()).maybeSingle();
     if (!office) throw new Error('Office not found');
-    // Resolve CSM
     let userId: string | null = null;
     if (row.csm_email) {
       const { data } = await supabase.from('profiles').select('id').ilike('full_name', `%${row.csm_email.trim().split('@')[0]}%`).maybeSingle();
       userId = data?.id || null;
     }
     if (!userId) throw new Error('User not found');
-    const { error } = await supabase.from('meetings').insert({
+    const { data, error } = await supabase.from('meetings').insert({
       office_id: office.id,
       user_id: userId,
       title: row.title || 'Reunião importada',
@@ -311,22 +362,24 @@ async function insertRow(template: EntityTemplate, row: Record<string, any>) {
       status: row.status as any,
       share_with_client: parseBoolean(row.share_with_client || 'nao'),
       notes: row.notes || null,
-    });
+    }).select('id').single();
     if (error) throw error;
+    return data?.id || null;
   } else if (t === 'nps_csat') {
     const { data: office } = await supabase.from('offices').select('id').ilike('name', row.office_name.trim()).maybeSingle();
     if (!office) throw new Error('Office not found');
-    // Find or use a generic NPS/CSAT template
     const { data: tmpl } = await supabase.from('form_templates').select('id').ilike('name', `%${row.survey_type}%`).maybeSingle();
     const templateId = tmpl?.id;
     if (!templateId) throw new Error('Template not found for ' + row.survey_type);
-    const { error } = await supabase.from('form_submissions').insert({
+    const { data, error } = await supabase.from('form_submissions').insert({
       office_id: office.id,
       template_id: templateId,
       user_id: (await supabase.auth.getUser()).data.user?.id || '',
       data: { type: row.survey_type, score: Number(row.score), comment: row.comment || '' },
       submitted_at: parseDateBR(row.submitted_at) || new Date().toISOString(),
-    });
+    }).select('id').single();
     if (error) throw error;
+    return data?.id || null;
   }
+  return null;
 }
