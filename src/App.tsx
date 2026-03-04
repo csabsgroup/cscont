@@ -16,6 +16,7 @@ import Eventos from "@/pages/Eventos";
 import ContratosGlobal from "@/pages/ContratosGlobal";
 import ContatosGlobal from "@/pages/ContatosGlobal";
 import Configuracoes from "@/pages/Configuracoes";
+import Relatorios from "@/pages/Relatorios";
 import ComingSoon from "@/pages/ComingSoon";
 import NotFound from "@/pages/NotFound";
 
@@ -55,7 +56,7 @@ const App = () => (
             <Route path="/eventos" element={<ProtectedRoute><Eventos /></ProtectedRoute>} />
             <Route path="/contratos" element={<ProtectedRoute><ContratosGlobal /></ProtectedRoute>} />
             <Route path="/contatos" element={<ProtectedRoute><ContatosGlobal /></ProtectedRoute>} />
-            <Route path="/relatorios" element={<ProtectedRoute><ComingSoon title="Relatórios" description="Análises e métricas" /></ProtectedRoute>} />
+            <Route path="/relatorios" element={<ProtectedRoute><Relatorios /></ProtectedRoute>} />
             <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
