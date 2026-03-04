@@ -200,28 +200,57 @@ function JourneyStagesTab() {
 // ─── Users Tab ───────────────────────────────────────────────
 function UsersTab() {
   const [users, setUsers] = useState<any[]>([]);
+  const [offices, setOffices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newName, setNewName] = useState('');
+  const [newRole, setNewRole] = useState('csm');
+  const [newOfficeId, setNewOfficeId] = useState('');
 
-  const fetch = useCallback(async () => {
+  const fetchUsers = useCallback(async () => {
     setLoading(true);
-    const { data: profiles } = await supabase.from('profiles').select('*').order('full_name');
-    const { data: roles } = await supabase.from('user_roles').select('*');
-    const roleMap = new Map((roles || []).map(r => [r.user_id, r.role]));
-    setUsers((profiles || []).map(p => ({ ...p, role: roleMap.get(p.id) || 'sem role' })));
+    const [pRes, rRes, oRes] = await Promise.all([
+      supabase.from('profiles').select('*').order('full_name'),
+      supabase.from('user_roles').select('*'),
+      supabase.from('offices').select('id, name').order('name'),
+    ]);
+    const roleMap = new Map((rRes.data || []).map(r => [r.user_id, r.role]));
+    setUsers((pRes.data || []).map(p => ({ ...p, role: roleMap.get(p.id) || 'sem role' })));
+    setOffices(oRes.data || []);
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetch(); }, [fetch]);
+  useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
-  const updateRole = async (userId: string, newRole: string) => {
+  const updateRole = async (userId: string, newRoleVal: string) => {
     const { data: existing } = await supabase.from('user_roles').select('id').eq('user_id', userId).single();
     if (existing) {
-      const { error } = await supabase.from('user_roles').update({ role: newRole as any }).eq('user_id', userId);
-      if (error) toast.error('Erro: ' + error.message); else { toast.success('Role atualizado!'); fetch(); }
+      const { error } = await supabase.from('user_roles').update({ role: newRoleVal as any }).eq('user_id', userId);
+      if (error) toast.error('Erro: ' + error.message); else { toast.success('Role atualizado!'); fetchUsers(); }
     } else {
-      const { error } = await supabase.from('user_roles').insert({ user_id: userId, role: newRole as any });
-      if (error) toast.error('Erro: ' + error.message); else { toast.success('Role atribuído!'); fetch(); }
+      const { error } = await supabase.from('user_roles').insert({ user_id: userId, role: newRoleVal as any });
+      if (error) toast.error('Erro: ' + error.message); else { toast.success('Role atribuído!'); fetchUsers(); }
     }
+  };
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreating(true);
+    const { data, error } = await supabase.functions.invoke('admin-create-user', {
+      body: { email: newEmail, password: newPassword, full_name: newName, role: newRole, office_id: newRole === 'client' ? newOfficeId : undefined },
+    });
+    if (error || data?.error) {
+      toast.error(data?.error || error?.message || 'Erro ao criar usuário');
+    } else {
+      toast.success('Usuário criado com sucesso!');
+      setCreateOpen(false);
+      setNewEmail(''); setNewPassword(''); setNewName(''); setNewRole('csm'); setNewOfficeId('');
+      fetchUsers();
+    }
+    setCreating(false);
   };
 
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>;
@@ -229,7 +258,10 @@ function UsersTab() {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">{users.length} usuário{users.length !== 1 ? 's' : ''}</p>
+      <div className="flex justify-between items-center">
+        <p className="text-sm text-muted-foreground">{users.length} usuário{users.length !== 1 ? 's' : ''}</p>
+        <Button size="sm" onClick={() => setCreateOpen(true)}><Plus className="mr-1 h-4 w-4" />Novo Usuário</Button>
+      </div>
       <Card>
         <Table>
           <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Telefone</TableHead><TableHead>Role</TableHead></TableRow></TableHeader>
@@ -249,6 +281,36 @@ function UsersTab() {
           </TableBody>
         </Table>
       </Card>
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Novo Usuário</DialogTitle></DialogHeader>
+          <form onSubmit={handleCreateUser} className="space-y-4">
+            <div className="space-y-2"><Label>Nome</Label><Input value={newName} onChange={e => setNewName(e.target.value)} /></div>
+            <div className="space-y-2"><Label>E-mail *</Label><Input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} required /></div>
+            <div className="space-y-2"><Label>Senha *</Label><Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required minLength={6} /></div>
+            <div className="space-y-2">
+              <Label>Role *</Label>
+              <Select value={newRole} onValueChange={setNewRole}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(roleLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            {newRole === 'client' && (
+              <div className="space-y-2">
+                <Label>Vincular ao Escritório</Label>
+                <Select value={newOfficeId} onValueChange={setNewOfficeId}>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>{offices.map(o => <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            )}
+            <Button type="submit" className="w-full" disabled={creating}>{creating ? 'Criando...' : 'Criar Usuário'}</Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

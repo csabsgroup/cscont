@@ -3,8 +3,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, FileText, Search } from 'lucide-react';
+import { FileText, Search } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
@@ -24,6 +25,7 @@ interface Contract {
   asaas_link: string | null;
   offices: { id: string; name: string };
   products: { name: string };
+  product_id: string;
 }
 
 function currency(val: number | null) {
@@ -38,26 +40,39 @@ function fmt(date: string | null) {
 
 export default function ContratosGlobal() {
   const [contracts, setContracts] = useState<Contract[]>([]);
+  const [products, setProducts] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [productFilter, setProductFilter] = useState('all');
+  const [startFrom, setStartFrom] = useState('');
+  const [startTo, setStartTo] = useState('');
   const navigate = useNavigate();
 
   const fetchContracts = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('contracts')
-      .select('*, offices(id, name), products:product_id(name)')
-      .order('created_at', { ascending: false });
-    setContracts((data as Contract[]) || []);
+    const [cRes, pRes] = await Promise.all([
+      supabase.from('contracts').select('*, offices(id, name), products:product_id(name)').order('created_at', { ascending: false }),
+      supabase.from('products').select('id, name').order('name'),
+    ]);
+    setContracts((cRes.data as Contract[]) || []);
+    setProducts(pRes.data || []);
     setLoading(false);
   }, []);
 
   useEffect(() => { fetchContracts(); }, [fetchContracts]);
 
-  const filtered = contracts.filter(c =>
-    c.offices?.name?.toLowerCase().includes(search.toLowerCase()) ||
-    c.products?.name?.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = contracts.filter(c => {
+    if (statusFilter !== 'all' && c.status !== statusFilter) return false;
+    if (productFilter !== 'all' && c.product_id !== productFilter) return false;
+    if (startFrom && c.start_date && c.start_date < startFrom) return false;
+    if (startTo && c.start_date && c.start_date > startTo) return false;
+    if (search) {
+      const s = search.toLowerCase();
+      return c.offices?.name?.toLowerCase().includes(s) || c.products?.name?.toLowerCase().includes(s);
+    }
+    return true;
+  });
 
   const ativos = contracts.filter(c => c.status === 'ativo').length;
   const vencidos = contracts.reduce((sum, c) => sum + (c.installments_overdue || 0), 0);
@@ -71,14 +86,30 @@ export default function ContratosGlobal() {
         </p>
       </div>
 
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Buscar por escritório ou produto..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="pl-9"
-        />
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input placeholder="Buscar por escritório ou produto..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[150px]"><SelectValue placeholder="Status" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os status</SelectItem>
+            <SelectItem value="ativo">Ativo</SelectItem>
+            <SelectItem value="pendente">Pendente</SelectItem>
+            <SelectItem value="encerrado">Encerrado</SelectItem>
+            <SelectItem value="cancelado">Cancelado</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={productFilter} onValueChange={setProductFilter}>
+          <SelectTrigger className="w-[180px]"><SelectValue placeholder="Produto" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os produtos</SelectItem>
+            {products.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Input type="date" placeholder="De" value={startFrom} onChange={e => setStartFrom(e.target.value)} className="w-[150px]" />
+        <Input type="date" placeholder="Até" value={startTo} onChange={e => setStartTo(e.target.value)} className="w-[150px]" />
       </div>
 
       {loading ? (
@@ -97,7 +128,7 @@ export default function ContratosGlobal() {
           <CardContent className="flex flex-col items-center justify-center py-12">
             <FileText className="mb-3 h-10 w-10 text-muted-foreground/40" />
             <p className="text-sm text-muted-foreground">
-              {search ? 'Nenhum contrato encontrado.' : 'Nenhum contrato registrado.'}
+              {search || statusFilter !== 'all' || productFilter !== 'all' ? 'Nenhum contrato encontrado.' : 'Nenhum contrato registrado.'}
             </p>
           </CardContent>
         </Card>
@@ -118,11 +149,7 @@ export default function ContratosGlobal() {
             </TableHeader>
             <TableBody>
               {filtered.map(c => (
-                <TableRow
-                  key={c.id}
-                  className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => navigate(`/clientes/${c.office_id}`)}
-                >
+                <TableRow key={c.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/clientes/${c.office_id}`)}>
                   <TableCell className="font-medium">{c.offices?.name}</TableCell>
                   <TableCell className="text-muted-foreground">{c.products?.name}</TableCell>
                   <TableCell className="text-muted-foreground">{currency(c.value)}</TableCell>
@@ -135,14 +162,10 @@ export default function ContratosGlobal() {
                         {c.installments_overdue} vencida{(c.installments_overdue || 0) > 1 ? 's' : ''}
                       </Badge>
                     ) : (
-                      <span className="text-muted-foreground text-sm">
-                        {c.installments_total || 0} total
-                      </span>
+                      <span className="text-muted-foreground text-sm">{c.installments_total || 0} total</span>
                     )}
                   </TableCell>
-                  <TableCell>
-                    <ContractStatusBadge status={c.status} />
-                  </TableCell>
+                  <TableCell><ContractStatusBadge status={c.status} /></TableCell>
                 </TableRow>
               ))}
             </TableBody>

@@ -10,6 +10,7 @@ import {
   BarChart3,
   Settings,
   LogOut,
+  ScrollText,
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useLocation } from 'react-router-dom';
@@ -48,6 +49,7 @@ const managementItems = [
 
 const configItems = [
   { title: 'Configurações', url: '/configuracoes', icon: Settings },
+  { title: 'Auditoria', url: '/auditoria', icon: ScrollText },
 ];
 
 export function AppSidebar() {

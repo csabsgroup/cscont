@@ -152,6 +152,36 @@ export type Database = {
           },
         ]
       }
+      audit_logs: {
+        Row: {
+          action: string
+          created_at: string
+          details: Json | null
+          entity_id: string | null
+          entity_type: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          details?: Json | null
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          details?: Json | null
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       bonus_catalog: {
         Row: {
           created_at: string
@@ -449,6 +479,7 @@ export type Database = {
           event_id: string
           id: string
           office_id: string | null
+          status: string
         }
         Insert: {
           confirmed?: boolean
@@ -457,6 +488,7 @@ export type Database = {
           event_id: string
           id?: string
           office_id?: string | null
+          status?: string
         }
         Update: {
           confirmed?: boolean
@@ -465,6 +497,7 @@ export type Database = {
           event_id?: string
           id?: string
           office_id?: string | null
+          status?: string
         }
         Relationships: [
           {

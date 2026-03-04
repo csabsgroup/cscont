@@ -71,7 +71,7 @@ export default function Eventos() {
     e.preventDefault();
     if (!session?.user?.id) return;
     setCreating(true);
-    const { error } = await supabase.from('events').insert({
+    const { data: created, error } = await supabase.from('events').insert({
       title, description: description || null,
       event_date: new Date(eventDate).toISOString(),
       end_date: endDate ? new Date(endDate).toISOString() : null,
@@ -79,15 +79,32 @@ export default function Eventos() {
       max_participants: maxParticipants ? parseInt(maxParticipants) : null,
       eligible_product_ids: selectedProductIds.length > 0 ? selectedProductIds : null,
       created_by: session.user.id,
-    });
-    if (error) toast.error('Erro: ' + error.message);
-    else {
+    }).select('id').single();
+    if (error) { toast.error('Erro: ' + error.message); setCreating(false); return; }
+
+    // Auto-pull active offices from eligible products
+    if (selectedProductIds.length > 0 && created) {
+      const { data: offices } = await supabase
+        .from('offices')
+        .select('id')
+        .in('active_product_id', selectedProductIds)
+        .eq('status', 'ativo');
+      if (offices && offices.length > 0) {
+        await supabase.from('event_participants').insert(
+          offices.map(o => ({ event_id: created.id, office_id: o.id, confirmed: false, status: 'convidado' }))
+        );
+        toast.success(`Evento criado com ${offices.length} participante(s)!`);
+      } else {
+        toast.success('Evento criado!');
+      }
+    } else {
       toast.success('Evento criado!');
-      setDialogOpen(false);
-      setTitle(''); setDescription(''); setEventDate(''); setEndDate('');
-      setLocation(''); setType('presencial'); setMaxParticipants(''); setSelectedProductIds([]);
-      fetchEvents();
     }
+
+    setDialogOpen(false);
+    setTitle(''); setDescription(''); setEventDate(''); setEndDate('');
+    setLocation(''); setType('presencial'); setMaxParticipants(''); setSelectedProductIds([]);
+    fetchEvents();
     setCreating(false);
   };
 

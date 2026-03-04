@@ -18,6 +18,7 @@ import ContratosGlobal from "@/pages/ContratosGlobal";
 import ContatosGlobal from "@/pages/ContatosGlobal";
 import Configuracoes from "@/pages/Configuracoes";
 import Relatorios from "@/pages/Relatorios";
+import AuditLogs from "@/pages/AuditLogs";
 import ComingSoon from "@/pages/ComingSoon";
 import NotFound from "@/pages/NotFound";
 import PortalHome from "@/pages/portal/PortalHome";
@@ -88,6 +89,7 @@ const App = () => (
             <Route path="/contatos" element={<ProtectedRoute><ContatosGlobal /></ProtectedRoute>} />
             <Route path="/relatorios" element={<ProtectedRoute><Relatorios /></ProtectedRoute>} />
             <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
+            <Route path="/auditoria" element={<ProtectedRoute><AuditLogs /></ProtectedRoute>} />
             {/* Portal do Cliente */}
             <Route path="/portal" element={<PortalRoute><PortalHome /></PortalRoute>} />
             <Route path="/portal/contrato" element={<PortalRoute><PortalContrato /></PortalRoute>} />
