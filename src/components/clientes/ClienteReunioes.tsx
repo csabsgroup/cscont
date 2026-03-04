@@ -3,11 +3,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Loader2, Calendar, Clock, Video, Eye, EyeOff } from 'lucide-react';
+import { Loader2, Calendar, Clock, Video, Eye, EyeOff, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
+import { TranscriptModal } from './TranscriptModal';
 
 interface Props { officeId: string; }
 
@@ -18,11 +20,24 @@ export function ClienteReunioes({ officeId }: Props) {
   const { isViewer } = useAuth();
   const [meetings, setMeetings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [transcriptIds, setTranscriptIds] = useState<Set<string>>(new Set());
+  const [transcriptMeetingId, setTranscriptMeetingId] = useState<string | null>(null);
 
   const fetchMeetings = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase.from('meetings').select('*').eq('office_id', officeId).order('scheduled_at', { ascending: false });
     setMeetings(data || []);
+
+    // Check which meetings have transcripts
+    if (data?.length) {
+      const ids = data.map(m => m.id);
+      const { data: transcripts } = await supabase
+        .from('meeting_transcripts')
+        .select('meeting_id')
+        .in('meeting_id', ids);
+      setTranscriptIds(new Set((transcripts || []).map(t => t.meeting_id).filter(Boolean)));
+    }
+
     setLoading(false);
   }, [officeId]);
 
@@ -66,6 +81,11 @@ export function ClienteReunioes({ officeId }: Props) {
               </div>
             </div>
             <div className="flex items-center gap-3">
+              {transcriptIds.has(m.id) && (
+                <Button variant="ghost" size="sm" onClick={() => setTranscriptMeetingId(m.id)} title="Ver transcrição Fireflies">
+                  <FileText className="h-4 w-4 text-primary" />
+                </Button>
+              )}
               {!isViewer && (
                 <div className="flex items-center gap-1.5" title={m.share_with_client ? 'Visível no portal' : 'Oculto no portal'}>
                   {m.share_with_client ? <Eye className="h-3.5 w-3.5 text-primary" /> : <EyeOff className="h-3.5 w-3.5 text-muted-foreground/40" />}
@@ -81,6 +101,14 @@ export function ClienteReunioes({ officeId }: Props) {
           </div>
         </Card>
       ))}
+
+      {transcriptMeetingId && (
+        <TranscriptModal
+          meetingId={transcriptMeetingId}
+          open={!!transcriptMeetingId}
+          onOpenChange={open => !open && setTranscriptMeetingId(null)}
+        />
+      )}
     </div>
   );
 }

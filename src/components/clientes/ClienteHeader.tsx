@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from './StatusBadge';
 import { HealthBadge } from './HealthBadge';
-import { ArrowLeft, Pencil, MoreVertical, UserCog, RefreshCw, StickyNote, Eye, Camera } from 'lucide-react';
+import { ArrowLeft, Pencil, MoreVertical, UserCog, RefreshCw, StickyNote, Eye, Camera, Phone } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -33,11 +33,12 @@ interface ClienteHeaderProps {
   onQuickNote?: () => void;
   onLogoUpdated?: () => void;
   onPreviewOpen?: () => void;
+  onWhatsApp?: () => void;
 }
 
 export function ClienteHeader({
   office, onEdit, health, stageName, csmProfile,
-  onReassignCSM, onChangeStatus, onQuickNote, onLogoUpdated, onPreviewOpen,
+  onReassignCSM, onChangeStatus, onQuickNote, onLogoUpdated, onPreviewOpen, onWhatsApp,
 }: ClienteHeaderProps) {
   const navigate = useNavigate();
   const { isViewer, isClient } = useAuth();
@@ -127,6 +128,12 @@ export function ClienteHeader({
           </div>
         )}
       </div>
+      {!isViewer && !isClient && onWhatsApp && (
+        <Button variant="outline" size="sm" onClick={onWhatsApp}>
+          <Phone className="mr-2 h-4 w-4" />
+          WhatsApp
+        </Button>
+      )}
       {!isViewer && !isClient && (
         <Button variant="outline" size="sm" onClick={openPreview}>
           <Eye className="mr-2 h-4 w-4" />

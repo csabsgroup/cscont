@@ -27,6 +27,7 @@ import { ClienteMetricas } from '@/components/clientes/ClienteMetricas';
 import { EditOfficeDialog } from '@/components/clientes/EditOfficeDialog';
 import { ClienteBonus } from '@/components/clientes/ClienteBonus';
 import { PortalPreviewModal } from '@/components/clientes/PortalPreviewModal';
+import { WhatsAppSendDialog } from '@/components/clientes/WhatsAppSendDialog';
 import { Constants } from '@/integrations/supabase/types';
 
 export default function Cliente360() {
@@ -53,6 +54,7 @@ export default function Cliente360() {
   const [quickNoteText, setQuickNoteText] = useState('');
   const [actionSaving, setActionSaving] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [whatsappOpen, setWhatsappOpen] = useState(false);
 
   const fetchAll = useCallback(async () => {
     if (!id) return;
@@ -188,6 +190,7 @@ export default function Cliente360() {
         onChangeStatus={() => { setSelectedStatus(office.status); setShowStatusChange(true); }}
         onQuickNote={() => setShowQuickNote(true)}
         onPreviewOpen={() => setPreviewOpen(true)}
+        onWhatsApp={() => setWhatsappOpen(true)}
       />
 
       {/* KPI Grid */}
@@ -398,6 +401,15 @@ export default function Cliente360() {
         onClose={() => setPreviewOpen(false)}
         officeId={office.id}
         officeName={office.name}
+      />
+
+      {/* WhatsApp Send Dialog */}
+      <WhatsAppSendDialog
+        open={whatsappOpen}
+        onOpenChange={setWhatsappOpen}
+        officeId={office.id}
+        officeName={office.name}
+        contacts={contacts.filter((c: any) => c.phone)}
       />
     </div>
   );
