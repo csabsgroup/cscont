@@ -32,11 +32,12 @@ interface ClienteHeaderProps {
   onChangeStatus?: () => void;
   onQuickNote?: () => void;
   onLogoUpdated?: () => void;
+  onPreviewOpen?: () => void;
 }
 
 export function ClienteHeader({
   office, onEdit, health, stageName, csmProfile,
-  onReassignCSM, onChangeStatus, onQuickNote, onLogoUpdated,
+  onReassignCSM, onChangeStatus, onQuickNote, onLogoUpdated, onPreviewOpen,
 }: ClienteHeaderProps) {
   const navigate = useNavigate();
   const { isViewer, isClient } = useAuth();
@@ -78,7 +79,7 @@ export function ClienteHeader({
   };
 
   const openPreview = () => {
-    window.open(`/portal/preview/${office.id}`, '_blank');
+    onPreviewOpen?.();
   };
 
   return (

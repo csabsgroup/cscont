@@ -12,7 +12,8 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Loader2, Package, Route, Users, Trash2, Edit2, Heart, FileText, Gift, Link2, Zap, ShieldX, Globe } from 'lucide-react';
+import { Plus, Loader2, Package, Route, Users, Trash2, Edit2, Heart, FileText, Gift, Link2, Zap, ShieldX, Globe, ArrowUpDown } from 'lucide-react';
+import { ImportExportTab } from '@/components/configuracoes/ImportExportTab';
 import { toast } from 'sonner';
 import { HealthScoreTab } from '@/components/configuracoes/HealthScoreTab';
 import { FormTemplatesTab } from '@/components/configuracoes/FormTemplatesTab';
@@ -345,6 +346,7 @@ export default function Configuracoes() {
   const showUsers = isAdmin;
   const showIntegracoes = isAdmin;
   const showPortal = isAdmin || isManager;
+  const showImportExport = isAdmin || isManager || (!isViewer);
   return (
     <div className="space-y-6">
       <div>
@@ -363,6 +365,7 @@ export default function Configuracoes() {
           {showUsers && <TabsTrigger value="usuarios" className="gap-1.5"><Users className="h-4 w-4" />Usuários & Roles</TabsTrigger>}
           {showIntegracoes && <TabsTrigger value="integracoes" className="gap-1.5"><Link2 className="h-4 w-4" />Integrações</TabsTrigger>}
           {showPortal && <TabsTrigger value="portal" className="gap-1.5"><Globe className="h-4 w-4" />Portal do Cliente</TabsTrigger>}
+          {showImportExport && <TabsTrigger value="importexport" className="gap-1.5"><ArrowUpDown className="h-4 w-4" />Importar / Exportar</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="produtos"><ProductsTab /></TabsContent>
@@ -374,6 +377,7 @@ export default function Configuracoes() {
         {showUsers && <TabsContent value="usuarios"><UsersTab /></TabsContent>}
         {showIntegracoes && <TabsContent value="integracoes"><IntegracoesTab /></TabsContent>}
         {showPortal && <TabsContent value="portal"><PortalSettingsTab /></TabsContent>}
+        {showImportExport && <TabsContent value="importexport"><ImportExportTab /></TabsContent>}
       </Tabs>
     </div>
   );

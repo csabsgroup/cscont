@@ -26,6 +26,7 @@ import { ClienteJornada } from '@/components/clientes/ClienteJornada';
 import { ClienteMetricas } from '@/components/clientes/ClienteMetricas';
 import { EditOfficeDialog } from '@/components/clientes/EditOfficeDialog';
 import { ClienteBonus } from '@/components/clientes/ClienteBonus';
+import { PortalPreviewModal } from '@/components/clientes/PortalPreviewModal';
 import { Constants } from '@/integrations/supabase/types';
 
 export default function Cliente360() {
@@ -51,6 +52,7 @@ export default function Cliente360() {
   const [selectedStatus, setSelectedStatus] = useState('');
   const [quickNoteText, setQuickNoteText] = useState('');
   const [actionSaving, setActionSaving] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const fetchAll = useCallback(async () => {
     if (!id) return;
@@ -185,6 +187,7 @@ export default function Cliente360() {
         onReassignCSM={openReassign}
         onChangeStatus={() => { setSelectedStatus(office.status); setShowStatusChange(true); }}
         onQuickNote={() => setShowQuickNote(true)}
+        onPreviewOpen={() => setPreviewOpen(true)}
       />
 
       {/* KPI Grid */}
@@ -388,6 +391,14 @@ export default function Cliente360() {
           <DialogFooter><Button onClick={saveQuickNote} disabled={actionSaving || !quickNoteText.trim()}>{actionSaving ? 'Salvando...' : 'Salvar'}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Portal Preview Modal */}
+      <PortalPreviewModal
+        isOpen={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        officeId={office.id}
+        officeName={office.name}
+      />
     </div>
   );
 }
