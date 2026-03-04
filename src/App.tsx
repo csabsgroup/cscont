@@ -9,6 +9,9 @@ import Auth from "@/pages/Auth";
 import Dashboard from "@/pages/Dashboard";
 import Cliente360 from "@/pages/Cliente360";
 import Clientes from "@/pages/Clientes";
+import Jornada from "@/pages/Jornada";
+import Atividades from "@/pages/Atividades";
+import Reunioes from "@/pages/Reunioes";
 import ComingSoon from "@/pages/ComingSoon";
 import NotFound from "@/pages/NotFound";
 
@@ -42,9 +45,9 @@ const App = () => (
             <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
             <Route path="/clientes/:id" element={<ProtectedRoute><Cliente360 /></ProtectedRoute>} />
-            <Route path="/jornada" element={<ProtectedRoute><ComingSoon title="Jornada" description="Kanban por produto" /></ProtectedRoute>} />
-            <Route path="/atividades" element={<ProtectedRoute><ComingSoon title="Atividades" description="Sua rotina diária" /></ProtectedRoute>} />
-            <Route path="/reunioes" element={<ProtectedRoute><ComingSoon title="Reuniões" description="Gestão de reuniões" /></ProtectedRoute>} />
+            <Route path="/jornada" element={<ProtectedRoute><Jornada /></ProtectedRoute>} />
+            <Route path="/atividades" element={<ProtectedRoute><Atividades /></ProtectedRoute>} />
+            <Route path="/reunioes" element={<ProtectedRoute><Reunioes /></ProtectedRoute>} />
             <Route path="/eventos" element={<ProtectedRoute><ComingSoon title="Eventos" description="Eventos do programa" /></ProtectedRoute>} />
             <Route path="/contratos" element={<ProtectedRoute><ComingSoon title="Contratos" description="Gestão de contratos" /></ProtectedRoute>} />
             <Route path="/contatos" element={<ProtectedRoute><ComingSoon title="Contatos" description="Sócios e contatos" /></ProtectedRoute>} />
