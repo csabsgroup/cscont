@@ -535,6 +535,38 @@ export type Database = {
         }
         Relationships: []
       }
+      form_action_executions: {
+        Row: {
+          action_key: string
+          executed_at: string
+          id: string
+          result: Json
+          submission_id: string
+        }
+        Insert: {
+          action_key: string
+          executed_at?: string
+          id?: string
+          result?: Json
+          submission_id: string
+        }
+        Update: {
+          action_key?: string
+          executed_at?: string
+          id?: string
+          result?: Json
+          submission_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "form_action_executions_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "form_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       form_submissions: {
         Row: {
           data: Json
@@ -744,6 +776,51 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "health_pillars_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      health_playbook_executions: {
+        Row: {
+          band: Database["public"]["Enums"]["health_band"]
+          created_activity_ids: Json
+          executed_at: string
+          id: string
+          office_id: string
+          period_key: string
+          product_id: string
+        }
+        Insert: {
+          band: Database["public"]["Enums"]["health_band"]
+          created_activity_ids?: Json
+          executed_at?: string
+          id?: string
+          office_id: string
+          period_key: string
+          product_id: string
+        }
+        Update: {
+          band?: Database["public"]["Enums"]["health_band"]
+          created_activity_ids?: Json
+          executed_at?: string
+          id?: string
+          office_id?: string
+          period_key?: string
+          product_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "health_playbook_executions_office_id_fkey"
+            columns: ["office_id"]
+            isOneToOne: false
+            referencedRelation: "offices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "health_playbook_executions_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
@@ -980,6 +1057,61 @@ export type Database = {
             columns: ["office_id"]
             isOneToOne: true
             referencedRelation: "offices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      office_stage_history: {
+        Row: {
+          change_type: string
+          changed_by: string
+          created_at: string
+          from_stage_id: string | null
+          id: string
+          office_id: string
+          reason: string | null
+          to_stage_id: string
+        }
+        Insert: {
+          change_type?: string
+          changed_by: string
+          created_at?: string
+          from_stage_id?: string | null
+          id?: string
+          office_id: string
+          reason?: string | null
+          to_stage_id: string
+        }
+        Update: {
+          change_type?: string
+          changed_by?: string
+          created_at?: string
+          from_stage_id?: string | null
+          id?: string
+          office_id?: string
+          reason?: string | null
+          to_stage_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "office_stage_history_from_stage_id_fkey"
+            columns: ["from_stage_id"]
+            isOneToOne: false
+            referencedRelation: "journey_stages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "office_stage_history_office_id_fkey"
+            columns: ["office_id"]
+            isOneToOne: false
+            referencedRelation: "offices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "office_stage_history_to_stage_id_fkey"
+            columns: ["to_stage_id"]
+            isOneToOne: false
+            referencedRelation: "journey_stages"
             referencedColumns: ["id"]
           },
         ]

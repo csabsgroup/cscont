@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
 import { Loader2 } from 'lucide-react';
@@ -20,6 +21,7 @@ import { ClienteBonus } from '@/components/clientes/ClienteBonus';
 
 export default function Cliente360() {
   const { id } = useParams<{ id: string }>();
+  const { isViewer } = useAuth();
   const [office, setOffice] = useState<any>(null);
   const [contacts, setContacts] = useState<any[]>([]);
   const [contracts, setContracts] = useState<any[]>([]);
@@ -67,7 +69,7 @@ export default function Cliente360() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <div className="flex-1"><ClienteHeader office={office} onEdit={() => setEditOpen(true)} /></div>
+        <div className="flex-1"><ClienteHeader office={office} onEdit={isViewer ? undefined : () => setEditOpen(true)} /></div>
         <HealthBadge score={health?.score ?? null} band={health?.band ?? null} size="md" />
       </div>
 
@@ -90,7 +92,7 @@ export default function Cliente360() {
         </TabsContent>
 
         <TabsContent value="timeline">
-          <Card className="p-6"><ClienteTimeline officeId={office.id} /></Card>
+          <Card className="p-6"><ClienteTimeline officeId={office.id} readOnly={isViewer} /></Card>
         </TabsContent>
 
         <TabsContent value="okr">
@@ -126,7 +128,7 @@ export default function Cliente360() {
         </TabsContent>
       </Tabs>
 
-      <EditOfficeDialog office={office} open={editOpen} onOpenChange={setEditOpen} onSaved={fetchAll} />
+      {!isViewer && <EditOfficeDialog office={office} open={editOpen} onOpenChange={setEditOpen} onSaved={fetchAll} />}
     </div>
   );
 }

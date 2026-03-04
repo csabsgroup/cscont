@@ -7,14 +7,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
-import { Loader2, Building2, GripVertical, Heart, Calendar, CreditCard } from 'lucide-react';
+import { Loader2, Building2, Heart } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { StatusBadge } from '@/components/clientes/StatusBadge';
 import { HealthBadge } from '@/components/clientes/HealthBadge';
 import { toast } from 'sonner';
 import { differenceInDays } from 'date-fns';
+import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 
 interface Product { id: string; name: string; }
 interface Stage { id: string; name: string; position: number; description: string | null; sla_days: number | null; }
@@ -24,7 +24,7 @@ interface OfficeInStage {
 }
 
 export default function Jornada() {
-  const { isViewer } = useAuth();
+  const { isViewer, session } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedProduct, setSelectedProduct] = useState('');
   const [stages, setStages] = useState<Stage[]>([]);
@@ -33,11 +33,10 @@ export default function Jornada() {
   const [contracts, setContracts] = useState<Record<string, any>>({});
   const [lastMeetings, setLastMeetings] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
-  const [moveDialog, setMoveDialog] = useState<{ journey: OfficeInStage; targetStage: string } | null>(null);
+  const [moveDialog, setMoveDialog] = useState<{ journey: OfficeInStage; targetStage: string; fromStage: string } | null>(null);
   const [moveReason, setMoveReason] = useState('');
   const navigate = useNavigate();
 
-  // Filters
   const [filterHealth, setFilterHealth] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
 
@@ -71,7 +70,6 @@ export default function Jornada() {
     (contractsRes.data || []).forEach((c: any) => { cMap[c.office_id] = c; });
     setContracts(cMap);
 
-    // Fetch last meeting per office
     const officeIds = (journeysRes.data as any[] || []).map((oj: any) => oj.office_id);
     if (officeIds.length > 0) {
       const { data: mData } = await supabase.from('meetings')
@@ -90,15 +88,49 @@ export default function Jornada() {
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const confirmMove = async () => {
-    if (!moveDialog) return;
+    if (!moveDialog || !moveReason.trim()) {
+      toast.error('Motivo obrigatório!');
+      return;
+    }
+    // Update journey
     const { error } = await supabase.from('office_journey').update({
       journey_stage_id: moveDialog.targetStage,
       entered_at: new Date().toISOString(),
-      notes: moveReason || null,
+      notes: moveReason,
     }).eq('id', moveDialog.journey.id);
-    if (error) toast.error('Erro: ' + error.message);
-    else { toast.success('Cliente movido!'); fetchAll(); }
-    setMoveDialog(null); setMoveReason('');
+
+    if (error) {
+      toast.error('Erro: ' + error.message);
+    } else {
+      // Record history
+      await supabase.from('office_stage_history' as any).insert({
+        office_id: moveDialog.journey.office_id,
+        from_stage_id: moveDialog.fromStage,
+        to_stage_id: moveDialog.targetStage,
+        changed_by: session?.user?.id,
+        reason: moveReason,
+        change_type: 'manual',
+      });
+      toast.success('Cliente movido!');
+      fetchAll();
+    }
+    setMoveDialog(null);
+    setMoveReason('');
+  };
+
+  const onDragEnd = (result: DropResult) => {
+    if (isViewer) return;
+    const { destination, source, draggableId } = result;
+    if (!destination || destination.droppableId === source.droppableId) return;
+
+    const journey = officeJourneys.find(oj => oj.id === draggableId);
+    if (!journey) return;
+
+    setMoveDialog({
+      journey,
+      targetStage: destination.droppableId,
+      fromStage: source.droppableId,
+    });
   };
 
   const officesByStage = (stageId: string) => {
@@ -154,89 +186,96 @@ export default function Jornada() {
           <p className="text-sm text-muted-foreground">Nenhuma etapa configurada para este produto.</p>
         </CardContent></Card>
       ) : (
-        <div className="flex gap-4 overflow-x-auto pb-4">
-          {stages.map(stage => {
-            const offices = officesByStage(stage.id);
-            return (
-              <div key={stage.id} className="flex-shrink-0 w-[300px]">
-                <Card className="h-full">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-sm font-medium">{stage.name}</CardTitle>
-                      <Badge variant="secondary" className="text-xs">{offices.length}</Badge>
-                    </div>
-                    {stage.sla_days && <p className="text-xs text-muted-foreground">SLA: {stage.sla_days} dias</p>}
-                  </CardHeader>
-                  <CardContent className="space-y-2 min-h-[200px]">
-                    {offices.length === 0 ? (
-                      <p className="text-xs text-muted-foreground/60 text-center py-8">Nenhum cliente</p>
-                    ) : (
-                      offices.map(oj => {
-                        const health = healthScores[oj.office_id];
-                        const contract = contracts[oj.office_id];
-                        const lastMeeting = lastMeetings[oj.office_id];
-                        const daysRenewal = contract?.renewal_date ? differenceInDays(new Date(contract.renewal_date), new Date()) : null;
-                        const daysSinceMeeting = lastMeeting ? differenceInDays(new Date(), new Date(lastMeeting)) : null;
+        <DragDropContext onDragEnd={onDragEnd}>
+          <div className="flex gap-4 overflow-x-auto pb-4">
+            {stages.map(stage => {
+              const offices = officesByStage(stage.id);
+              return (
+                <div key={stage.id} className="flex-shrink-0 w-[300px]">
+                  <Card className="h-full">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-sm font-medium">{stage.name}</CardTitle>
+                        <Badge variant="secondary" className="text-xs">{offices.length}</Badge>
+                      </div>
+                      {stage.sla_days && <p className="text-xs text-muted-foreground">SLA: {stage.sla_days} dias</p>}
+                    </CardHeader>
+                    <Droppable droppableId={stage.id}>
+                      {(provided, snapshot) => (
+                        <CardContent
+                          ref={provided.innerRef}
+                          {...provided.droppableProps}
+                          className={`space-y-2 min-h-[200px] transition-colors ${snapshot.isDraggingOver ? 'bg-accent/30' : ''}`}
+                        >
+                          {offices.length === 0 ? (
+                            <p className="text-xs text-muted-foreground/60 text-center py-8">Nenhum cliente</p>
+                          ) : (
+                            offices.map((oj, index) => {
+                              const health = healthScores[oj.office_id];
+                              const contract = contracts[oj.office_id];
+                              const lastMeeting = lastMeetings[oj.office_id];
+                              const daysRenewal = contract?.renewal_date ? differenceInDays(new Date(contract.renewal_date), new Date()) : null;
+                              const daysSinceMeeting = lastMeeting ? differenceInDays(new Date(), new Date(lastMeeting)) : null;
 
-                        return (
-                          <Card key={oj.id} className="cursor-pointer hover:shadow-md transition-shadow p-3"
-                            onClick={() => navigate(`/clientes/${oj.offices.id}`)}>
-                            <div className="flex items-start gap-2">
-                              <GripVertical className="h-4 w-4 text-muted-foreground/40 mt-0.5 flex-shrink-0" />
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <p className="text-sm font-medium truncate">{oj.offices.name}</p>
-                                  {health && <HealthBadge band={health.band as any} score={health.score} />}
-                                </div>
-                                <p className="text-xs text-muted-foreground">
-                                  {[oj.offices.city, oj.offices.state].filter(Boolean).join('/') || '—'}
-                                </p>
-                                <div className="mt-1 flex items-center gap-2 flex-wrap">
-                                  <StatusBadge status={oj.offices.status} />
-                                  {daysRenewal !== null && (
-                                    <span className={`text-xs ${daysRenewal <= 30 ? 'text-warning font-medium' : 'text-muted-foreground'}`}>
-                                      🔄 {daysRenewal}d
-                                    </span>
+                              return (
+                                <Draggable key={oj.id} draggableId={oj.id} index={index} isDragDisabled={isViewer}>
+                                  {(provided, snapshot) => (
+                                    <Card
+                                      ref={provided.innerRef}
+                                      {...provided.draggableProps}
+                                      {...provided.dragHandleProps}
+                                      className={`cursor-pointer hover:shadow-md transition-shadow p-3 ${snapshot.isDragging ? 'shadow-lg ring-2 ring-primary/30' : ''}`}
+                                      onClick={() => navigate(`/clientes/${oj.offices.id}`)}
+                                    >
+                                      <div className="flex items-start gap-2">
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center gap-2">
+                                            <p className="text-sm font-medium truncate">{oj.offices.name}</p>
+                                            {health && <HealthBadge band={health.band as any} score={health.score} />}
+                                          </div>
+                                          <p className="text-xs text-muted-foreground">
+                                            {[oj.offices.city, oj.offices.state].filter(Boolean).join('/') || '—'}
+                                          </p>
+                                          <div className="mt-1 flex items-center gap-2 flex-wrap">
+                                            <StatusBadge status={oj.offices.status} />
+                                            {daysRenewal !== null && (
+                                              <span className={`text-xs ${daysRenewal <= 30 ? 'text-warning font-medium' : 'text-muted-foreground'}`}>
+                                                🔄 {daysRenewal}d
+                                              </span>
+                                            )}
+                                            {(contract?.installments_overdue || 0) > 0 && (
+                                              <span className="text-xs text-destructive font-medium">
+                                                💳 {contract.installments_overdue} vencida{contract.installments_overdue > 1 ? 's' : ''}
+                                              </span>
+                                            )}
+                                            {daysSinceMeeting !== null && (
+                                              <span className={`text-xs ${daysSinceMeeting > 30 ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
+                                                📅 {daysSinceMeeting}d
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </Card>
                                   )}
-                                  {(contract?.installments_overdue || 0) > 0 && (
-                                    <span className="text-xs text-destructive font-medium">
-                                      💳 {contract.installments_overdue} vencida{contract.installments_overdue > 1 ? 's' : ''}
-                                    </span>
-                                  )}
-                                  {daysSinceMeeting !== null && (
-                                    <span className={`text-xs ${daysSinceMeeting > 30 ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
-                                      📅 {daysSinceMeeting}d
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                            {/* Move dropdown */}
-                            {!isViewer && (
-                              <div className="mt-2" onClick={e => e.stopPropagation()}>
-                                <Select value={oj.journey_stage_id}
-                                  onValueChange={(val) => setMoveDialog({ journey: oj, targetStage: val })}>
-                                  <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
-                                  <SelectContent>
-                                    {stages.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            )}
-                          </Card>
-                        );
-                      })
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-            );
-          })}
-        </div>
+                                </Draggable>
+                              );
+                            })
+                          )}
+                          {provided.placeholder}
+                        </CardContent>
+                      )}
+                    </Droppable>
+                  </Card>
+                </div>
+              );
+            })}
+          </div>
+        </DragDropContext>
       )}
 
       {/* Move reason dialog */}
-      <Dialog open={!!moveDialog} onOpenChange={(open) => !open && setMoveDialog(null)}>
+      <Dialog open={!!moveDialog} onOpenChange={(open) => { if (!open) { setMoveDialog(null); setMoveReason(''); } }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Mover Cliente</DialogTitle></DialogHeader>
           <div className="space-y-4">
@@ -245,13 +284,13 @@ export default function Jornada() {
               <strong>{stages.find(s => s.id === moveDialog?.targetStage)?.name}</strong>
             </p>
             <div className="space-y-2">
-              <Label>Motivo da movimentação</Label>
+              <Label>Motivo da movimentação *</Label>
               <Textarea value={moveReason} onChange={e => setMoveReason(e.target.value)}
-                placeholder="Descreva o motivo..." rows={3} />
+                placeholder="Descreva o motivo (obrigatório)..." rows={3} />
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={() => setMoveDialog(null)}>Cancelar</Button>
-              <Button className="flex-1" onClick={confirmMove}>Confirmar</Button>
+              <Button variant="outline" className="flex-1" onClick={() => { setMoveDialog(null); setMoveReason(''); }}>Cancelar</Button>
+              <Button className="flex-1" onClick={confirmMove} disabled={!moveReason.trim()}>Confirmar</Button>
             </div>
           </div>
         </DialogContent>
