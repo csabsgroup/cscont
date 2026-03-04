@@ -10,16 +10,34 @@ const PIPERUN_BASE = "https://api.pipe.run/v1";
 
 function getToken() {
   const token = Deno.env.get("PIPERUN_API_TOKEN");
-  if (!token) throw new Error("PIPERUN_API_TOKEN not configured");
+  if (!token) throw new Error("PIPERUN_API_TOKEN_NOT_CONFIGURED");
   return token;
 }
 
+function classifyError(err: any): { status: number; message: string } {
+  const msg = String(err?.message || err);
+  if (msg.includes("PIPERUN_API_TOKEN_NOT_CONFIGURED")) {
+    return { status: 200, message: "Token do Piperun não configurado. Adicione o secret PIPERUN_API_TOKEN nas configurações." };
+  }
+  const match = msg.match(/Piperun API \[(\d+)\]/);
+  if (match) {
+    const code = Number(match[1]);
+    if (code === 401 || code === 403) return { status: 200, message: "Token do Piperun inválido ou sem permissão. Verifique o API Token." };
+    if (code === 503 || code === 502 || code === 504) return { status: 200, message: `API do Piperun temporariamente indisponível (${code}). Tente novamente em alguns minutos.` };
+    return { status: 200, message: `Erro na API do Piperun (${code}). Tente novamente.` };
+  }
+  return { status: 200, message: "Erro interno ao conectar com o Piperun. Verifique os logs." };
+}
+
 async function piperunGet(path: string) {
-  const separator = path.includes('?') ? '&' : '?';
-  const res = await fetch(`${PIPERUN_BASE}${path}${separator}show=200`, {
-    headers: { token: getToken() },
-  });
-  if (!res.ok) throw new Error(`Piperun API error [${res.status}]: ${await res.text()}`);
+  const url = `${PIPERUN_BASE}${path}${path.includes('?') ? '&' : '?'}show=200`;
+  console.log(`[PIPERUN] GET ${url}`);
+  const res = await fetch(url, { headers: { token: getToken() } });
+  console.log(`[PIPERUN] Response status: ${res.status}`);
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Piperun API [${res.status}]: ${body.substring(0, 200)}`);
+  }
   return res.json();
 }
 
@@ -28,10 +46,14 @@ async function piperunGetAll(path: string) {
   let allData: any[] = [];
   while (true) {
     const separator = path.includes('?') ? '&' : '?';
-    const res = await fetch(`${PIPERUN_BASE}${path}${separator}show=200&page=${page}`, {
-      headers: { token: getToken() },
-    });
-    if (!res.ok) throw new Error(`Piperun API error [${res.status}]: ${await res.text()}`);
+    const url = `${PIPERUN_BASE}${path}${separator}show=200&page=${page}`;
+    console.log(`[PIPERUN] GET ALL ${url} (page ${page})`);
+    const res = await fetch(url, { headers: { token: getToken() } });
+    console.log(`[PIPERUN] Response status: ${res.status}`);
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Piperun API [${res.status}]: ${body.substring(0, 200)}`);
+    }
     const json = await res.json();
     const data = json.data || [];
     allData = allData.concat(data);
@@ -82,11 +104,22 @@ Deno.serve(async (req) => {
     }
 
     if (action === "testConnection") {
-      const result = await piperunGet("/pipelines");
-      return new Response(
-        JSON.stringify({ success: true, pipelines_count: result.data?.length || 0 }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      try {
+        console.log("[PIPERUN] Testing connection...");
+        console.log("[PIPERUN] Token found:", !!Deno.env.get("PIPERUN_API_TOKEN"));
+        const result = await piperunGet("/pipelines");
+        return new Response(
+          JSON.stringify({ success: true, pipelines_count: result.data?.length || 0 }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      } catch (e: any) {
+        console.error("[PIPERUN] testConnection error:", e.message);
+        const classified = classifyError(e);
+        return new Response(
+          JSON.stringify({ success: false, error: classified.message }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     if (action === "listPipelines") {
@@ -215,10 +248,11 @@ Deno.serve(async (req) => {
       JSON.stringify({ error: "Unknown action. Supported: testConnection, listPipelines, listStages, importDeals, listFields" }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (err) {
-    console.error("[PIPERUN]", err);
-    return new Response(JSON.stringify({ error: "Internal server error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+  } catch (err: any) {
+    console.error("[PIPERUN] Unhandled error:", err?.message || err);
+    const classified = classifyError(err);
+    return new Response(JSON.stringify({ success: false, error: classified.message }), {
+      status: classified.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
