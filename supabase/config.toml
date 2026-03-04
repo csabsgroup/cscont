@@ -2,3 +2,33 @@ project_id = "fdkaxkuehhnqdkduiwsy"
 
 [functions.admin-create-user]
 verify_jwt = false
+
+[functions.execute-health-playbook]
+verify_jwt = false
+
+[functions.execute-form-post-actions]
+verify_jwt = false
+
+[functions.calculate-health-score]
+verify_jwt = false
+
+[functions.integration-email]
+verify_jwt = false
+
+[functions.integration-whatsapp]
+verify_jwt = false
+
+[functions.integration-google-calendar]
+verify_jwt = false
+
+[functions.integration-asaas]
+verify_jwt = false
+
+[functions.integration-slack]
+verify_jwt = false
+
+[functions.integration-piperun]
+verify_jwt = false
+
+[functions.integration-fireflies]
+verify_jwt = false

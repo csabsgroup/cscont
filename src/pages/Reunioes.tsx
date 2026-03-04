@@ -16,6 +16,7 @@ import { format, isAfter, isBefore, startOfDay, endOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { FormFillDialog } from '@/components/reunioes/FormFillDialog';
+import { recalculateHealth } from '@/lib/health-engine';
 
 interface Meeting {
   id: string;
@@ -115,15 +116,21 @@ export default function Reunioes() {
     if (formFillMeeting) {
       await supabase.from('meetings').update({ status: 'completed' as any }).eq('id', formFillMeeting.id);
       toast.success('Reunião marcada como concluída!');
+      recalculateHealth(formFillMeeting.office_id);
       setFormFillMeeting(null);
       fetchMeetings();
     }
   };
 
   const updateStatus = async (id: string, status: string) => {
+    const meeting = meetings.find(m => m.id === id);
     const { error } = await supabase.from('meetings').update({ status: status as any }).eq('id', id);
     if (error) toast.error('Erro: ' + error.message);
-    else { toast.success('Status atualizado!'); fetchMeetings(); }
+    else {
+      toast.success('Status atualizado!');
+      if (meeting) recalculateHealth(meeting.office_id);
+      fetchMeetings();
+    }
   };
 
   const toggleShare = async (m: Meeting) => {
