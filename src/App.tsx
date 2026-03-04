@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AppLayout } from "@/components/AppLayout";
 import Auth from "@/pages/Auth";
 import Dashboard from "@/pages/Dashboard";
+import Cliente360 from "@/pages/Cliente360";
 import Clientes from "@/pages/Clientes";
 import ComingSoon from "@/pages/ComingSoon";
 import NotFound from "@/pages/NotFound";
@@ -40,7 +41,7 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
-            <Route path="/clientes/:id" element={<ProtectedRoute><ComingSoon title="Cliente 360" description="Visão detalhada do escritório" /></ProtectedRoute>} />
+            <Route path="/clientes/:id" element={<ProtectedRoute><Cliente360 /></ProtectedRoute>} />
             <Route path="/jornada" element={<ProtectedRoute><ComingSoon title="Jornada" description="Kanban por produto" /></ProtectedRoute>} />
             <Route path="/atividades" element={<ProtectedRoute><ComingSoon title="Atividades" description="Sua rotina diária" /></ProtectedRoute>} />
             <Route path="/reunioes" element={<ProtectedRoute><ComingSoon title="Reuniões" description="Gestão de reuniões" /></ProtectedRoute>} />
