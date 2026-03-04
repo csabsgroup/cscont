@@ -29,7 +29,7 @@ import {
   SidebarSeparator,
   useSidebar,
 } from '@/components/ui/sidebar';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 
 const operationItems = [
@@ -140,6 +140,7 @@ export function AppSidebar() {
               className="rounded-lg px-3 py-2.5 hover:bg-accent transition-all duration-150"
             >
               <Avatar className="h-7 w-7">
+                <AvatarImage src={profile?.avatar_url || undefined} />
                 <AvatarFallback className="bg-primary/10 text-primary text-[10px] font-semibold">
                   {initials}
                 </AvatarFallback>

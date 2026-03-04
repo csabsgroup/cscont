@@ -31,6 +31,7 @@ import PortalContatos from "@/pages/portal/PortalContatos";
 import PortalMembros from "@/pages/portal/PortalMembros";
 import PortalArquivos from "@/pages/portal/PortalArquivos";
 import PortalLogin from "@/pages/portal/PortalLogin";
+import PortalPreview from "@/pages/portal/PortalPreview";
 
 const queryClient = new QueryClient();
 
@@ -90,6 +91,8 @@ const App = () => (
             <Route path="/relatorios" element={<ProtectedRoute><Relatorios /></ProtectedRoute>} />
             <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
             <Route path="/auditoria" element={<ProtectedRoute><AuditLogs /></ProtectedRoute>} />
+            {/* Portal Preview */}
+            <Route path="/portal/preview/:officeId/*" element={<PortalPreview />} />
             {/* Portal do Cliente */}
             <Route path="/portal" element={<PortalRoute><PortalHome /></PortalRoute>} />
             <Route path="/portal/contrato" element={<PortalRoute><PortalContrato /></PortalRoute>} />

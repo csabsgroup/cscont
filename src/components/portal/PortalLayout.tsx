@@ -1,31 +1,35 @@
 import { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { usePortalSettings } from '@/hooks/usePortalSettings';
 import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import {
   Home, FileText, Target, Video, Calendar, Gift, Users, Contact, LogOut, Menu, X, FolderOpen,
 } from 'lucide-react';
 
-const navItems = [
-  { to: '/portal', label: 'Início', icon: Home },
-  { to: '/portal/contrato', label: 'Meu Contrato', icon: FileText },
-  { to: '/portal/plano-de-acao', label: 'Plano de Ação', icon: Target },
-  { to: '/portal/reunioes', label: 'Reuniões', icon: Video },
-  { to: '/portal/eventos', label: 'Eventos', icon: Calendar },
-  { to: '/portal/bonus', label: 'Bônus/Cashback', icon: Gift },
-  { to: '/portal/arquivos', label: 'Arquivos', icon: FolderOpen },
-  { to: '/portal/contatos', label: 'Contatos', icon: Contact },
-  { to: '/portal/membros', label: 'Membros Ativos', icon: Users },
+const allNavItems = [
+  { to: '/portal', label: 'Início', icon: Home, settingKey: null },
+  { to: '/portal/contrato', label: 'Meu Contrato', icon: FileText, settingKey: 'portal_show_contract' },
+  { to: '/portal/plano-de-acao', label: 'Plano de Ação', icon: Target, settingKey: 'portal_show_okr' },
+  { to: '/portal/reunioes', label: 'Reuniões', icon: Video, settingKey: 'portal_show_meetings' },
+  { to: '/portal/eventos', label: 'Eventos', icon: Calendar, settingKey: 'portal_show_events' },
+  { to: '/portal/bonus', label: 'Bônus/Cashback', icon: Gift, settingKey: 'portal_show_bonus' },
+  { to: '/portal/arquivos', label: 'Arquivos', icon: FolderOpen, settingKey: 'portal_show_files' },
+  { to: '/portal/contatos', label: 'Contatos', icon: Contact, settingKey: 'portal_show_contacts' },
+  { to: '/portal/membros', label: 'Membros Ativos', icon: Users, settingKey: 'portal_show_members' },
 ];
 
 export function PortalLayout({ children }: { children: React.ReactNode }) {
   const { signOut, profile, user } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [officeName, setOfficeName] = useState('');
+  const [officeLogo, setOfficeLogo] = useState<string | null>(null);
+  const { settings, loading: settingsLoading } = usePortalSettings();
 
   useEffect(() => {
     if (!user) return;
@@ -33,10 +37,25 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
       const { data: links } = await supabase.from('client_office_links').select('office_id').eq('user_id', user.id);
       const oid = links?.[0]?.office_id;
       if (!oid) return;
-      const { data: office } = await supabase.from('offices').select('name').eq('id', oid).single();
+      const { data: office } = await supabase.from('offices').select('name, logo_url, photo_url').eq('id', oid).single();
       if (office?.name) setOfficeName(office.name);
+      setOfficeLogo(office?.logo_url || office?.photo_url || null);
     })();
   }, [user]);
+
+  // Filter nav items based on settings
+  const navItems = allNavItems.filter(
+    (item) => !item.settingKey || settings[item.settingKey]
+  );
+
+  // Redirect if current page is disabled
+  useEffect(() => {
+    if (settingsLoading) return;
+    const current = allNavItems.find((item) => item.to === location.pathname);
+    if (current?.settingKey && !settings[current.settingKey]) {
+      navigate('/portal', { replace: true });
+    }
+  }, [location.pathname, settings, settingsLoading, navigate]);
 
   const initials = profile?.full_name
     ?.split(' ')
@@ -44,6 +63,8 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
     .slice(0, 2)
     .join('')
     .toUpperCase() || 'U';
+
+  const officeInitials = officeName?.slice(0, 2).toUpperCase() || 'C';
 
   return (
     <div className="min-h-screen bg-background">
@@ -54,9 +75,12 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
             <Button variant="ghost" size="sm" className="md:hidden" onClick={() => setMobileOpen(!mobileOpen)}>
               {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </Button>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <span className="text-sm font-bold text-primary-foreground">C</span>
-            </div>
+            <Avatar className="h-8 w-8">
+              <AvatarImage src={officeLogo || undefined} />
+              <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+                {officeInitials}
+              </AvatarFallback>
+            </Avatar>
             <div className="flex flex-col">
               <span className="text-sm font-bold text-foreground">{officeName || 'Portal do Cliente'}</span>
               <span className="hidden text-[10px] text-muted-foreground sm:inline">Portal do Cliente</span>
@@ -65,6 +89,7 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-3">
             <span className="text-sm text-muted-foreground hidden sm:inline">{profile?.full_name}</span>
             <Avatar className="h-8 w-8">
+              <AvatarImage src={profile?.avatar_url || undefined} />
               <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
                 {initials}
               </AvatarFallback>

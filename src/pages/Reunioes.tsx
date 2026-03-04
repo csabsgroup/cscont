@@ -11,7 +11,7 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Video, CheckCircle2, XCircle, FileText } from 'lucide-react';
+import { Plus, Video, CheckCircle2, XCircle, FileText, Eye, EyeOff } from 'lucide-react';
 import { format, isAfter, isBefore, startOfDay, endOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -294,7 +294,11 @@ export default function Reunioes() {
                       <Badge variant="outline" className={cfg.color}>{cfg.label}</Badge>
                     </TableCell>
                     <TableCell>
-                      <Switch checked={m.share_with_client} onCheckedChange={() => toggleShare(m)} disabled={isViewer} />
+                      {m.share_with_client ? (
+                        <Eye className="h-4 w-4 text-primary" />
+                      ) : (
+                        <EyeOff className="h-4 w-4 text-muted-foreground/40" />
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">

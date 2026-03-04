@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePortalSettings } from '@/hooks/usePortalSettings';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, FileText, Target, Calendar, Heart, Gift, Video } from 'lucide-react';
@@ -9,6 +10,7 @@ import { ptBR } from 'date-fns/locale';
 
 export default function PortalHome() {
   const { user } = useAuth();
+  const { settings } = usePortalSettings();
   const [loading, setLoading] = useState(true);
   const [officeName, setOfficeName] = useState('');
   const [stats, setStats] = useState({
@@ -93,98 +95,110 @@ export default function PortalHome() {
       <h1 className="text-2xl font-bold">Bem-vindo, {officeName || 'Portal'}</h1>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {/* Contract */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Contrato</CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{stats.contractStatus}</p>
-            {stats.productName && <p className="text-xs text-muted-foreground">{stats.productName}</p>}
-            {stats.contractEnd && <p className="text-xs text-muted-foreground">Até {format(new Date(stats.contractEnd), 'dd/MM/yyyy')}</p>}
-          </CardContent>
-        </Card>
+        {settings.portal_show_contract && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Contrato</CardTitle>
+              <FileText className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-bold">{stats.contractStatus}</p>
+              {stats.productName && <p className="text-xs text-muted-foreground">{stats.productName}</p>}
+              {stats.contractEnd && <p className="text-xs text-muted-foreground">Até {format(new Date(stats.contractEnd), 'dd/MM/yyyy')}</p>}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Health Score */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Health Score</CardTitle>
-            <Heart className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {stats.healthScore !== null ? (
-              <div className="flex items-center gap-2">
-                <p className="text-2xl font-bold">{stats.healthScore}</p>
-                <Badge className={`${healthColor} text-white border-0`}>
-                  {stats.healthBand === 'green' ? 'Saudável' : stats.healthBand === 'yellow' ? 'Atenção' : 'Crítico'}
-                </Badge>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">Sem dados</p>
-            )}
-          </CardContent>
-        </Card>
+        {settings.portal_show_health && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Health Score</CardTitle>
+              <Heart className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              {stats.healthScore !== null ? (
+                <div className="flex items-center gap-2">
+                  <p className="text-2xl font-bold">{stats.healthScore}</p>
+                  <Badge className={`${healthColor} text-white border-0`}>
+                    {stats.healthBand === 'green' ? 'Saudável' : stats.healthBand === 'yellow' ? 'Atenção' : 'Crítico'}
+                  </Badge>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Sem dados</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* OKR Progress */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Plano de Ação</CardTitle>
-            <Target className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{stats.okrProgress}%</p>
-            <div className="mt-2 h-2 w-full rounded-full bg-muted">
-              <div className="h-2 rounded-full bg-primary transition-all" style={{ width: `${stats.okrProgress}%` }} />
-            </div>
-          </CardContent>
-        </Card>
+        {settings.portal_show_okr && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Plano de Ação</CardTitle>
+              <Target className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-bold">{stats.okrProgress}%</p>
+              <div className="mt-2 h-2 w-full rounded-full bg-muted">
+                <div className="h-2 rounded-full bg-primary transition-all" style={{ width: `${stats.okrProgress}%` }} />
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Bonus */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Bônus Disponível</CardTitle>
-            <Gift className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{stats.bonusAvailable}</p>
-          </CardContent>
-        </Card>
+        {settings.portal_show_bonus_balance && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Bônus Disponível</CardTitle>
+              <Gift className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-bold">{stats.bonusAvailable}</p>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Next Event */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Próximo Evento</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {stats.nextEvent ? (
-              <>
-                <p className="text-sm font-semibold">{stats.nextEvent.title}</p>
-                <p className="text-xs text-muted-foreground">{format(new Date(stats.nextEvent.date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">Nenhum evento próximo</p>
-            )}
-          </CardContent>
-        </Card>
+        {settings.portal_show_next_event && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Próximo Evento</CardTitle>
+              <Calendar className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              {stats.nextEvent ? (
+                <>
+                  <p className="text-sm font-semibold">{stats.nextEvent.title}</p>
+                  <p className="text-xs text-muted-foreground">{format(new Date(stats.nextEvent.date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">Nenhum evento próximo</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Next Meeting */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Próxima Reunião</CardTitle>
-            <Video className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {stats.nextMeeting ? (
-              <>
-                <p className="text-sm font-semibold">{stats.nextMeeting.title}</p>
-                <p className="text-xs text-muted-foreground">{format(new Date(stats.nextMeeting.date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">Nenhuma reunião agendada</p>
-            )}
-          </CardContent>
-        </Card>
+        {settings.portal_show_next_meeting && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Próxima Reunião</CardTitle>
+              <Video className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              {stats.nextMeeting ? (
+                <>
+                  <p className="text-sm font-semibold">{stats.nextMeeting.title}</p>
+                  <p className="text-xs text-muted-foreground">{format(new Date(stats.nextMeeting.date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">Nenhuma reunião agendada</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );

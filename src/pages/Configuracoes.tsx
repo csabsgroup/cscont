@@ -12,13 +12,14 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Loader2, Package, Route, Users, Trash2, Edit2, Heart, FileText, Gift, Link2, Zap, ShieldX } from 'lucide-react';
+import { Plus, Loader2, Package, Route, Users, Trash2, Edit2, Heart, FileText, Gift, Link2, Zap, ShieldX, Globe } from 'lucide-react';
 import { toast } from 'sonner';
 import { HealthScoreTab } from '@/components/configuracoes/HealthScoreTab';
 import { FormTemplatesTab } from '@/components/configuracoes/FormTemplatesTab';
 import { BonusCatalogTab } from '@/components/configuracoes/BonusCatalogTab';
 import { IntegracoesTab } from '@/components/configuracoes/IntegracoesTab';
 import { TemplatesAutomacoesTab } from '@/components/configuracoes/TemplatesAutomacoesTab';
+import { PortalSettingsTab } from '@/components/configuracoes/PortalSettingsTab';
 
 // ─── Products Tab ────────────────────────────────────────────
 function ProductsTab() {
@@ -343,7 +344,7 @@ export default function Configuracoes() {
   const showBonus = isAdmin;
   const showUsers = isAdmin;
   const showIntegracoes = isAdmin;
-
+  const showPortal = isAdmin || isManager;
   return (
     <div className="space-y-6">
       <div>
@@ -361,6 +362,7 @@ export default function Configuracoes() {
           {showBonus && <TabsTrigger value="bonus" className="gap-1.5"><Gift className="h-4 w-4" />Catálogo de Bônus</TabsTrigger>}
           {showUsers && <TabsTrigger value="usuarios" className="gap-1.5"><Users className="h-4 w-4" />Usuários & Roles</TabsTrigger>}
           {showIntegracoes && <TabsTrigger value="integracoes" className="gap-1.5"><Link2 className="h-4 w-4" />Integrações</TabsTrigger>}
+          {showPortal && <TabsTrigger value="portal" className="gap-1.5"><Globe className="h-4 w-4" />Portal do Cliente</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="produtos"><ProductsTab /></TabsContent>
@@ -371,6 +373,7 @@ export default function Configuracoes() {
         {showBonus && <TabsContent value="bonus"><BonusCatalogTab /></TabsContent>}
         {showUsers && <TabsContent value="usuarios"><UsersTab /></TabsContent>}
         {showIntegracoes && <TabsContent value="integracoes"><IntegracoesTab /></TabsContent>}
+        {showPortal && <TabsContent value="portal"><PortalSettingsTab /></TabsContent>}
       </Tabs>
     </div>
   );

@@ -1160,6 +1160,7 @@ export type Database = {
           email: string | null
           id: string
           instagram: string | null
+          logo_url: string | null
           name: string
           notes: string | null
           onboarding_date: string | null
@@ -1181,6 +1182,7 @@ export type Database = {
           email?: string | null
           id?: string
           instagram?: string | null
+          logo_url?: string | null
           name: string
           notes?: string | null
           onboarding_date?: string | null
@@ -1202,6 +1204,7 @@ export type Database = {
           email?: string | null
           id?: string
           instagram?: string | null
+          logo_url?: string | null
           name?: string
           notes?: string | null
           onboarding_date?: string | null
@@ -1222,6 +1225,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      portal_settings: {
+        Row: {
+          id: string
+          setting_key: string
+          setting_value: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          id?: string
+          setting_key: string
+          setting_value?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          id?: string
+          setting_key?: string
+          setting_value?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
       }
       products: {
         Row: {
