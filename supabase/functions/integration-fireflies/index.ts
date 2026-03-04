@@ -29,33 +29,55 @@ async function firefliesQuery(query: string, variables?: Record<string, any>) {
   return result.data;
 }
 
+async function authenticateRequest(req: Request): Promise<{ userId: string } | Response> {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const url = Deno.env.get("SUPABASE_URL")!;
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const userClient = createClient(url, anonKey, {
+    global: { headers: { Authorization: authHeader } },
+  });
+  const { data: { user }, error } = await userClient.auth.getUser();
+  if (error || !user) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const serviceClient = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const { data: roleCheck } = await serviceClient.rpc("get_user_role", { _user_id: user.id });
+  if (!roleCheck || !["admin", "manager", "csm"].includes(roleCheck)) {
+    return new Response(JSON.stringify({ error: "Forbidden" }), {
+      status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  return { userId: user.id };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const body = await req.json();
+    const rawBody = await req.text();
+    const body = JSON.parse(rawBody);
     const { action } = body;
 
-    if (action === "testConnection") {
-      const data = await firefliesQuery(`{ user { name email } }`);
-      return new Response(
-        JSON.stringify({ success: true, user: data.user }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
+    // Webhook action — called by external Fireflies service, no JWT
     if (action === "webhook") {
-      // Fireflies sends POST when transcript is ready
       const { meeting_id: fireflies_id, title, date, transcript, summary, action_items, attendees } = body;
 
       const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-      // Try to match with existing meeting
       let matched = false;
       let matchedMeetingId: string | null = null;
 
       if (title) {
-        // Match by title containing office name
         const { data: meetings } = await supabase
           .from("meetings")
           .select("id, title, office_id, scheduled_at")
@@ -72,7 +94,6 @@ Deno.serve(async (req) => {
             }
           }
 
-          // Try date match if no title match (±30 min)
           if (!matched && date) {
             const transcriptDate = new Date(date).getTime();
             for (const m of meetings) {
@@ -87,7 +108,6 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Save transcript
       await supabase.from("meeting_transcripts").insert({
         meeting_id: matchedMeetingId,
         fireflies_meeting_id: fireflies_id || null,
@@ -102,6 +122,18 @@ Deno.serve(async (req) => {
 
       return new Response(
         JSON.stringify({ success: true, matched, meeting_id: matchedMeetingId }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // All other actions require authentication
+    const authResult = await authenticateRequest(req);
+    if (authResult instanceof Response) return authResult;
+
+    if (action === "testConnection") {
+      const data = await firefliesQuery(`{ user { name email } }`);
+      return new Response(
+        JSON.stringify({ success: true, user: data.user }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -127,7 +159,7 @@ Deno.serve(async (req) => {
     );
   } catch (err) {
     console.error("[FIREFLIES]", err);
-    return new Response(JSON.stringify({ error: String(err) }), {
+    return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
