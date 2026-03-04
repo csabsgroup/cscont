@@ -12,6 +12,9 @@ import Clientes from "@/pages/Clientes";
 import Jornada from "@/pages/Jornada";
 import Atividades from "@/pages/Atividades";
 import Reunioes from "@/pages/Reunioes";
+import Eventos from "@/pages/Eventos";
+import ContratosGlobal from "@/pages/ContratosGlobal";
+import ContatosGlobal from "@/pages/ContatosGlobal";
 import ComingSoon from "@/pages/ComingSoon";
 import NotFound from "@/pages/NotFound";
 
@@ -48,9 +51,9 @@ const App = () => (
             <Route path="/jornada" element={<ProtectedRoute><Jornada /></ProtectedRoute>} />
             <Route path="/atividades" element={<ProtectedRoute><Atividades /></ProtectedRoute>} />
             <Route path="/reunioes" element={<ProtectedRoute><Reunioes /></ProtectedRoute>} />
-            <Route path="/eventos" element={<ProtectedRoute><ComingSoon title="Eventos" description="Eventos do programa" /></ProtectedRoute>} />
-            <Route path="/contratos" element={<ProtectedRoute><ComingSoon title="Contratos" description="Gestão de contratos" /></ProtectedRoute>} />
-            <Route path="/contatos" element={<ProtectedRoute><ComingSoon title="Contatos" description="Sócios e contatos" /></ProtectedRoute>} />
+            <Route path="/eventos" element={<ProtectedRoute><Eventos /></ProtectedRoute>} />
+            <Route path="/contratos" element={<ProtectedRoute><ContratosGlobal /></ProtectedRoute>} />
+            <Route path="/contatos" element={<ProtectedRoute><ContatosGlobal /></ProtectedRoute>} />
             <Route path="/relatorios" element={<ProtectedRoute><ComingSoon title="Relatórios" description="Análises e métricas" /></ProtectedRoute>} />
             <Route path="/configuracoes" element={<ProtectedRoute><ComingSoon title="Configurações" description="Configurações do sistema" /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />

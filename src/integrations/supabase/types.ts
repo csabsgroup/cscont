@@ -218,6 +218,97 @@ export type Database = {
           },
         ]
       }
+      event_participants: {
+        Row: {
+          confirmed: boolean
+          contact_id: string | null
+          created_at: string
+          event_id: string
+          id: string
+          office_id: string | null
+        }
+        Insert: {
+          confirmed?: boolean
+          contact_id?: string | null
+          created_at?: string
+          event_id: string
+          id?: string
+          office_id?: string | null
+        }
+        Update: {
+          confirmed?: boolean
+          contact_id?: string | null
+          created_at?: string
+          event_id?: string
+          id?: string
+          office_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_participants_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_participants_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_participants_office_id_fkey"
+            columns: ["office_id"]
+            isOneToOne: false
+            referencedRelation: "offices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      events: {
+        Row: {
+          created_at: string
+          created_by: string
+          description: string | null
+          end_date: string | null
+          event_date: string
+          id: string
+          location: string | null
+          max_participants: number | null
+          title: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          description?: string | null
+          end_date?: string | null
+          event_date: string
+          id?: string
+          location?: string | null
+          max_participants?: number | null
+          title: string
+          type?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          end_date?: string | null
+          event_date?: string
+          id?: string
+          location?: string | null
+          max_participants?: number | null
+          title?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       journey_stages: {
         Row: {
           created_at: string
