@@ -9,7 +9,7 @@ const corsHeaders = {
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_CALENDAR_API = "https://www.googleapis.com/calendar/v3";
 
-function getSupabase(authHeader?: string) {
+function getSupabase() {
   const url = Deno.env.get("SUPABASE_URL")!;
   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   return createClient(url, key);
@@ -49,7 +49,6 @@ async function getValidToken(supabase: any, userId: string): Promise<string> {
 
   if (now < expiry) return token.access_token;
 
-  // Refresh
   const refreshed = await refreshAccessToken(token.refresh_token);
   const newExpiry = new Date(Date.now() + refreshed.expires_in * 1000);
 
@@ -65,8 +64,39 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { action, user_id, data } = await req.json();
+    // --- Auth: validate JWT and require authenticated user ---
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const url = Deno.env.get("SUPABASE_URL")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const userClient = createClient(url, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user }, error: userErr } = await userClient.auth.getUser();
+    if (userErr || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const supabase = getSupabase();
+
+    // Role check for sensitive actions
+    const { data: roleCheck } = await supabase.rpc("get_user_role", { _user_id: user.id });
+    if (!roleCheck || !["admin", "manager", "csm"].includes(roleCheck)) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const { action, data } = await req.json();
+    // Use authenticated user's ID instead of body-supplied user_id
+    const userId = user.id;
 
     if (action === "exchangeCode") {
       const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
@@ -87,7 +117,6 @@ Deno.serve(async (req) => {
       if (!res.ok) throw new Error(`OAuth exchange failed: ${await res.text()}`);
       const tokens = await res.json();
 
-      // Get user email
       const userInfoRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
         headers: { Authorization: `Bearer ${tokens.access_token}` },
       });
@@ -96,7 +125,7 @@ Deno.serve(async (req) => {
       const expiry = new Date(Date.now() + tokens.expires_in * 1000);
 
       await supabase.from("integration_tokens").upsert({
-        user_id: data.user_id,
+        user_id: userId,
         provider: "google_calendar",
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
@@ -110,7 +139,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === "disconnect") {
-      await supabase.from("integration_tokens").delete().eq("user_id", user_id).eq("provider", "google_calendar");
+      await supabase.from("integration_tokens").delete().eq("user_id", userId).eq("provider", "google_calendar");
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -127,7 +156,7 @@ Deno.serve(async (req) => {
       const { data: token } = await supabase
         .from("integration_tokens")
         .select("provider_email")
-        .eq("user_id", user_id)
+        .eq("user_id", userId)
         .eq("provider", "google_calendar")
         .single();
 
@@ -137,7 +166,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === "syncMeetings") {
-      const accessToken = await getValidToken(supabase, user_id);
+      const accessToken = await getValidToken(supabase, userId);
       const now = new Date();
       const timeMin = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
       const timeMax = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
@@ -155,7 +184,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === "createEvent") {
-      const accessToken = await getValidToken(supabase, user_id);
+      const accessToken = await getValidToken(supabase, userId);
       const event = {
         summary: data.title,
         description: data.description || "",
@@ -172,7 +201,6 @@ Deno.serve(async (req) => {
       if (!res.ok) throw new Error(`Create event failed: ${await res.text()}`);
       const created = await res.json();
 
-      // Save google_event_id on meeting
       if (data.meeting_id) {
         await supabase.from("meetings").update({ google_event_id: created.id }).eq("id", data.meeting_id);
       }
@@ -183,7 +211,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === "updateEvent") {
-      const accessToken = await getValidToken(supabase, user_id);
+      const accessToken = await getValidToken(supabase, userId);
       const event: any = {};
       if (data.title) event.summary = data.title;
       if (data.start_time) event.start = { dateTime: data.start_time, timeZone: "America/Sao_Paulo" };
@@ -202,7 +230,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === "deleteEvent") {
-      const accessToken = await getValidToken(supabase, user_id);
+      const accessToken = await getValidToken(supabase, userId);
       const res = await fetch(`${GOOGLE_CALENDAR_API}/calendars/primary/events/${data.google_event_id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -215,12 +243,12 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ error: "Unknown action. Supported: exchangeCode, disconnect, getStatus, syncMeetings, createEvent, updateEvent, deleteEvent" }),
+      JSON.stringify({ error: "Unknown action" }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
     console.error("[GOOGLE CALENDAR]", err);
-    return new Response(JSON.stringify({ error: String(err) }), {
+    return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }

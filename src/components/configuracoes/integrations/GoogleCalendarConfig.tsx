@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Loader2, CheckCircle2, XCircle, ExternalLink } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import type { IntegrationSetting } from '@/hooks/useIntegrationSettings';
 
@@ -12,19 +11,16 @@ interface Props {
 }
 
 export function GoogleCalendarConfig({ setting, onSave }: Props) {
-  const { session } = useAuth();
   const [status, setStatus] = useState<{ connected: boolean; email: string | null } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     checkStatus();
-    // Handle OAuth callback
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
     const isGoogleOAuth = params.get('oauth') === 'google';
     if (code && isGoogleOAuth) {
       exchangeCode(code);
-      // Clean URL
       const url = new URL(window.location.href);
       url.searchParams.delete('code');
       url.searchParams.delete('oauth');
@@ -40,7 +36,7 @@ export function GoogleCalendarConfig({ setting, onSave }: Props) {
       const { data, error } = await supabase.functions.invoke('integration-google-calendar', {
         body: {
           action: 'exchangeCode',
-          data: { code, redirect_uri: redirectUri, user_id: session?.user?.id },
+          data: { code, redirect_uri: redirectUri },
         },
       });
       if (error) throw error;
@@ -60,7 +56,7 @@ export function GoogleCalendarConfig({ setting, onSave }: Props) {
     setLoading(true);
     try {
       const { data } = await supabase.functions.invoke('integration-google-calendar', {
-        body: { action: 'getStatus', user_id: session?.user?.id },
+        body: { action: 'getStatus' },
       });
       setStatus(data);
     } catch (e) {
@@ -91,7 +87,7 @@ export function GoogleCalendarConfig({ setting, onSave }: Props) {
   const handleDisconnect = async () => {
     try {
       await supabase.functions.invoke('integration-google-calendar', {
-        body: { action: 'disconnect', user_id: session?.user?.id },
+        body: { action: 'disconnect' },
       });
       setStatus({ connected: false, email: null });
       toast.success('Google Calendar desconectado');
