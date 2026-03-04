@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Loader2, Building2, Heart } from 'lucide-react';
+import { Loader2, Building2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { StatusBadge } from '@/components/clientes/StatusBadge';
@@ -22,6 +22,7 @@ interface OfficeInStage {
   id: string; office_id: string; journey_stage_id: string; entered_at: string;
   offices: { id: string; name: string; status: string; city: string | null; state: string | null; csm_id: string | null; };
 }
+interface CsmProfile { id: string; full_name: string | null; }
 
 export default function Jornada() {
   const { isViewer, session } = useAuth();
@@ -32,6 +33,7 @@ export default function Jornada() {
   const [healthScores, setHealthScores] = useState<Record<string, { score: number; band: string }>>({});
   const [contracts, setContracts] = useState<Record<string, any>>({});
   const [lastMeetings, setLastMeetings] = useState<Record<string, string>>({});
+  const [csmProfiles, setCsmProfiles] = useState<Record<string, CsmProfile>>({});
   const [loading, setLoading] = useState(true);
   const [moveDialog, setMoveDialog] = useState<{ journey: OfficeInStage; targetStage: string; fromStage: string } | null>(null);
   const [moveReason, setMoveReason] = useState('');
@@ -39,10 +41,25 @@ export default function Jornada() {
 
   const [filterHealth, setFilterHealth] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [filterCsm, setFilterCsm] = useState('');
+  const [csmList, setCsmList] = useState<CsmProfile[]>([]);
 
   useEffect(() => {
     supabase.from('products').select('id, name').eq('is_active', true).order('name')
       .then(({ data }) => { const p = data || []; setProducts(p); if (p.length > 0) setSelectedProduct(p[0].id); });
+    // Fetch CSM list for filter
+    (async () => {
+      const { data: roles } = await supabase.from('user_roles').select('user_id').eq('role', 'csm');
+      if (roles && roles.length > 0) {
+        const ids = roles.map(r => r.user_id);
+        const { data: profiles } = await supabase.from('profiles').select('id, full_name').in('id', ids);
+        const list = (profiles || []).map(p => ({ id: p.id, full_name: p.full_name }));
+        setCsmList(list);
+        const map: Record<string, CsmProfile> = {};
+        list.forEach(p => { map[p.id] = p; });
+        setCsmProfiles(map);
+      }
+    })();
   }, []);
 
   const fetchAll = useCallback(async () => {
@@ -92,7 +109,6 @@ export default function Jornada() {
       toast.error('Motivo obrigatório!');
       return;
     }
-    // Update journey
     const { error } = await supabase.from('office_journey').update({
       journey_stage_id: moveDialog.targetStage,
       entered_at: new Date().toISOString(),
@@ -102,7 +118,6 @@ export default function Jornada() {
     if (error) {
       toast.error('Erro: ' + error.message);
     } else {
-      // Record history
       await supabase.from('office_stage_history' as any).insert({
         office_id: moveDialog.journey.office_id,
         from_stage_id: moveDialog.fromStage,
@@ -133,11 +148,17 @@ export default function Jornada() {
     });
   };
 
+  const getInitials = (name: string | null) => {
+    if (!name) return '?';
+    return name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
+  };
+
   const officesByStage = (stageId: string) => {
     return officeJourneys.filter(oj => {
       if (oj.journey_stage_id !== stageId) return false;
       if (filterHealth && healthScores[oj.office_id]?.band !== filterHealth) return false;
       if (filterStatus && oj.offices.status !== filterStatus) return false;
+      if (filterCsm && oj.offices.csm_id !== filterCsm) return false;
       return true;
     });
   };
@@ -150,6 +171,15 @@ export default function Jornada() {
           <p className="text-sm text-muted-foreground">Kanban por produto — acompanhe a jornada dos clientes</p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          {csmList.length > 0 && (
+            <Select value={filterCsm} onValueChange={v => setFilterCsm(v === 'all' ? '' : v)}>
+              <SelectTrigger className="w-[160px]"><SelectValue placeholder="CSM" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos CSMs</SelectItem>
+                {csmList.map(c => <SelectItem key={c.id} value={c.id}>{c.full_name || 'Sem nome'}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
           <Select value={filterHealth} onValueChange={v => setFilterHealth(v === 'all' ? '' : v)}>
             <SelectTrigger className="w-[140px]"><SelectValue placeholder="Saúde" /></SelectTrigger>
             <SelectContent>
@@ -223,6 +253,7 @@ export default function Jornada() {
                               const lastMeeting = lastMeetings[oj.office_id];
                               const daysRenewal = contract?.renewal_date ? differenceInDays(new Date(contract.renewal_date), new Date()) : null;
                               const daysSinceMeeting = lastMeeting ? differenceInDays(new Date(), new Date(lastMeeting)) : null;
+                              const csm = oj.offices.csm_id ? csmProfiles[oj.offices.csm_id] : null;
 
                               return (
                                 <Draggable key={oj.id} draggableId={oj.id} index={index} isDragDisabled={isViewer}>
@@ -262,6 +293,11 @@ export default function Jornada() {
                                             )}
                                           </div>
                                         </div>
+                                        {csm && (
+                                          <div className="flex-shrink-0 h-7 w-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-medium" title={csm.full_name || ''}>
+                                            {getInitials(csm.full_name)}
+                                          </div>
+                                        )}
                                       </div>
                                     </Card>
                                   )}

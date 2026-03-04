@@ -30,10 +30,14 @@ export function ActivityPopup({ activity, onRefresh, readOnly }: Props) {
   const [saving, setSaving] = useState(false);
 
   const handleComplete = async () => {
+    if (!observations.trim()) {
+      toast.error('Observações são obrigatórias para concluir.');
+      return;
+    }
     setSaving(true);
     const { error } = await supabase.from('activities').update({
       completed_at: new Date().toISOString(),
-      observations: observations || null,
+      observations: observations,
     } as any).eq('id', activity.id);
     if (error) toast.error('Erro: ' + error.message);
     else { toast.success('Atividade concluída!'); setCompleteOpen(false); onRefresh(); }
@@ -84,7 +88,7 @@ export function ActivityPopup({ activity, onRefresh, readOnly }: Props) {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Complete dialog with observations */}
+      {/* Complete dialog with observations (REQUIRED) */}
       <Dialog open={completeOpen} onOpenChange={setCompleteOpen}>
         <DialogContent>
           <DialogHeader>
@@ -92,15 +96,15 @@ export function ActivityPopup({ activity, onRefresh, readOnly }: Props) {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Observações</Label>
+              <Label>Observações *</Label>
               <Textarea
                 value={observations}
                 onChange={e => setObservations(e.target.value)}
-                placeholder="Observações sobre a conclusão..."
+                placeholder="Descreva as observações sobre a conclusão (obrigatório)..."
                 rows={4}
               />
             </div>
-            <Button onClick={handleComplete} className="w-full" disabled={saving}>
+            <Button onClick={handleComplete} className="w-full" disabled={saving || !observations.trim()}>
               {saving ? 'Concluindo...' : 'Concluir Atividade'}
             </Button>
           </div>

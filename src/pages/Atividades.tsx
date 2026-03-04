@@ -7,14 +7,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Loader2, CheckSquare, Calendar, AlertCircle } from 'lucide-react';
-import { format, isToday, isPast, isFuture, startOfDay } from 'date-fns';
+import { Plus, Loader2, CheckSquare, Calendar, AlertCircle, X } from 'lucide-react';
+import { format, isToday, isPast, isFuture } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 import { ActivityPopup } from '@/components/atividades/ActivityPopup';
 
 interface Activity {
@@ -33,6 +33,7 @@ interface Activity {
 }
 
 interface Office { id: string; name: string; }
+interface UserProfile { id: string; full_name: string | null; }
 
 const priorityColors: Record<string, string> = {
   low: 'bg-muted text-muted-foreground',
@@ -53,18 +54,24 @@ const typeLabels: Record<string, string> = {
 
 export default function Atividades() {
   const { session, isViewer } = useAuth();
+  const navigate = useNavigate();
   const [activities, setActivities] = useState<Activity[]>([]);
   const [offices, setOffices] = useState<Office[]>([]);
+  const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [creating, setCreating] = useState(false);
 
+  // Form state
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [type, setType] = useState('task');
   const [priority, setPriority] = useState('medium');
   const [officeId, setOfficeId] = useState('');
+  const [assigneeId, setAssigneeId] = useState('');
+  const [checklistItems, setChecklistItems] = useState<string[]>([]);
+  const [newCheckItem, setNewCheckItem] = useState('');
 
   const fetchActivities = useCallback(async () => {
     setLoading(true);
@@ -81,27 +88,59 @@ export default function Atividades() {
     fetchActivities();
     supabase.from('offices').select('id, name').order('name')
       .then(({ data }) => setOffices(data || []));
+    // Fetch internal users for assignee dropdown
+    (async () => {
+      const { data: roles } = await supabase.from('user_roles').select('user_id, role').in('role', ['admin', 'manager', 'csm']);
+      if (roles && roles.length > 0) {
+        const ids = [...new Set(roles.map(r => r.user_id))];
+        const { data: profiles } = await supabase.from('profiles').select('id, full_name').in('id', ids);
+        setUsers(profiles || []);
+      }
+    })();
   }, [fetchActivities]);
+
+  useEffect(() => {
+    if (session?.user?.id && !assigneeId) setAssigneeId(session.user.id);
+  }, [session?.user?.id, assigneeId]);
+
+  const addCheckItem = () => {
+    if (!newCheckItem.trim()) return;
+    setChecklistItems(prev => [...prev, newCheckItem.trim()]);
+    setNewCheckItem('');
+  };
+
+  const removeCheckItem = (idx: number) => {
+    setChecklistItems(prev => prev.filter((_, i) => i !== idx));
+  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!session?.user?.id) return;
+    const userId = assigneeId || session?.user?.id;
+    if (!userId) return;
     setCreating(true);
-    const { error } = await supabase.from('activities').insert({
+    const { data: inserted, error } = await supabase.from('activities').insert({
       title, description: description || null, due_date: dueDate || null,
       type: type as any, priority: priority as any,
-      office_id: officeId || null, user_id: session.user.id,
-    });
-    if (error) toast.error('Erro: ' + error.message);
-    else { toast.success('Atividade criada!'); setDialogOpen(false); resetForm(); fetchActivities(); }
+      office_id: officeId || null, user_id: userId,
+    }).select('id').single();
+    if (error) { toast.error('Erro: ' + error.message); setCreating(false); return; }
+    // Save checklist items
+    if (inserted && checklistItems.length > 0) {
+      const items = checklistItems.map((t, i) => ({ activity_id: inserted.id, title: t, position: i }));
+      await supabase.from('activity_checklists').insert(items);
+    }
+    toast.success('Atividade criada!');
+    setDialogOpen(false);
+    resetForm();
+    fetchActivities();
     setCreating(false);
   };
 
   const resetForm = () => {
-    setTitle(''); setDescription(''); setDueDate(''); setType('task'); setPriority('medium'); setOfficeId('');
+    setTitle(''); setDescription(''); setDueDate(''); setType('task'); setPriority('medium');
+    setOfficeId(''); setAssigneeId(session?.user?.id || ''); setChecklistItems([]); setNewCheckItem('');
   };
 
-  const todayStart = startOfDay(new Date());
   const hoje = activities.filter(a => !a.completed_at && a.due_date && isToday(new Date(a.due_date)));
   const atrasadas = activities.filter(a => !a.completed_at && a.due_date && isPast(new Date(a.due_date)) && !isToday(new Date(a.due_date)));
   const futuras = activities.filter(a => !a.completed_at && (!a.due_date || (isFuture(new Date(a.due_date)) && !isToday(new Date(a.due_date)))));
@@ -120,7 +159,7 @@ export default function Atividades() {
           <DialogTrigger asChild>
             <Button><Plus className="mr-2 h-4 w-4" />Nova Atividade</Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>Nova Atividade</DialogTitle></DialogHeader>
             <form onSubmit={handleCreate} className="space-y-4">
               <div className="space-y-2">
@@ -133,8 +172,8 @@ export default function Atividades() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Data</Label>
-                  <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+                  <Label>Data Vencimento *</Label>
+                  <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} required />
                 </div>
                 <div className="space-y-2">
                   <Label>Cliente</Label>
@@ -164,6 +203,32 @@ export default function Atividades() {
                       {Object.entries(priorityLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
                     </SelectContent>
                   </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Responsável</Label>
+                <Select value={assigneeId} onValueChange={setAssigneeId}>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>
+                    {users.map(u => <SelectItem key={u.id} value={u.id}>{u.full_name || u.id.slice(0, 8)}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              {/* Checklist builder */}
+              <div className="space-y-2">
+                <Label>Subtarefas</Label>
+                {checklistItems.map((item, idx) => (
+                  <div key={idx} className="flex items-center gap-2 text-sm">
+                    <span className="flex-1 truncate">• {item}</span>
+                    <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeCheckItem(idx)}>
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+                <div className="flex gap-2">
+                  <Input value={newCheckItem} onChange={e => setNewCheckItem(e.target.value)} placeholder="Nova subtarefa..."
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCheckItem(); } }} className="text-sm" />
+                  <Button type="button" variant="outline" size="sm" onClick={addCheckItem}>+</Button>
                 </div>
               </div>
               <Button type="submit" className="w-full" disabled={creating}>
@@ -240,7 +305,7 @@ export default function Atividades() {
                     </CardContent>
                   </Card>
                 ) : (
-                  list.map(a => <ActivityCard key={a.id} activity={a} onRefresh={fetchActivities} isViewer={isViewer} />)
+                  list.map(a => <ActivityCard key={a.id} activity={a} onRefresh={fetchActivities} isViewer={isViewer} navigate={navigate} />)
                 )}
               </TabsContent>
             );
@@ -251,7 +316,7 @@ export default function Atividades() {
   );
 }
 
-function ActivityCard({ activity, onRefresh, isViewer }: { activity: Activity; onRefresh: () => void; isViewer?: boolean }) {
+function ActivityCard({ activity, onRefresh, isViewer, navigate }: { activity: Activity; onRefresh: () => void; isViewer?: boolean; navigate: (path: string) => void }) {
   const isOverdue = activity.due_date && isPast(new Date(activity.due_date)) && !isToday(new Date(activity.due_date)) && !activity.completed_at;
 
   return (
@@ -273,7 +338,14 @@ function ActivityCard({ activity, onRefresh, isViewer }: { activity: Activity; o
             <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{activity.description}</p>
           )}
           <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-            {activity.offices?.name && <span>📋 {activity.offices.name}</span>}
+            {activity.offices?.name && activity.office_id && (
+              <span
+                className="cursor-pointer hover:text-primary hover:underline"
+                onClick={(e) => { e.stopPropagation(); navigate(`/clientes/${activity.office_id}`); }}
+              >
+                📋 {activity.offices.name}
+              </span>
+            )}
             {activity.due_date && (
               <span className={isOverdue ? 'text-destructive font-medium' : ''}>
                 📅 {format(new Date(activity.due_date), "dd/MM/yyyy", { locale: ptBR })}

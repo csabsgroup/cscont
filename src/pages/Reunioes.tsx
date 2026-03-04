@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
@@ -11,8 +11,8 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Loader2, Video, Clock, CheckCircle2, XCircle, FileText, Eye } from 'lucide-react';
-import { format } from 'date-fns';
+import { Plus, Video, CheckCircle2, XCircle, FileText } from 'lucide-react';
+import { format, isAfter, isBefore, startOfDay, endOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { FormFillDialog } from '@/components/reunioes/FormFillDialog';
@@ -49,6 +49,13 @@ export default function Reunioes() {
   const [formFillMeeting, setFormFillMeeting] = useState<Meeting | null>(null);
   const [creating, setCreating] = useState(false);
 
+  // Filters
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterOffice, setFilterOffice] = useState('');
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo] = useState('');
+
+  // Create form
   const [title, setTitle] = useState('');
   const [officeId, setOfficeId] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
@@ -68,6 +75,22 @@ export default function Reunioes() {
     supabase.from('offices').select('id, name').order('name').then(({ data }) => setOffices(data || []));
   }, [fetchMeetings]);
 
+  const filteredMeetings = useMemo(() => {
+    return meetings.filter(m => {
+      if (filterStatus && m.status !== filterStatus) return false;
+      if (filterOffice && m.office_id !== filterOffice) return false;
+      if (filterDateFrom) {
+        const from = startOfDay(new Date(filterDateFrom));
+        if (isBefore(new Date(m.scheduled_at), from)) return false;
+      }
+      if (filterDateTo) {
+        const to = endOfDay(new Date(filterDateTo));
+        if (isAfter(new Date(m.scheduled_at), to)) return false;
+      }
+      return true;
+    });
+  }, [meetings, filterStatus, filterOffice, filterDateFrom, filterDateTo]);
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!session?.user?.id) return;
@@ -83,12 +106,16 @@ export default function Reunioes() {
     setCreating(false);
   };
 
-  const markCompleted = async (m: Meeting) => {
-    const { error } = await supabase.from('meetings').update({ status: 'completed' as any }).eq('id', m.id);
-    if (error) toast.error('Erro: ' + error.message);
-    else {
+  // "Marcar como realizada" — open form FIRST, then on submit mark completed
+  const markCompleted = (m: Meeting) => {
+    setFormFillMeeting(m);
+  };
+
+  const onFormSubmitted = async () => {
+    if (formFillMeeting) {
+      await supabase.from('meetings').update({ status: 'completed' as any }).eq('id', formFillMeeting.id);
       toast.success('Reunião marcada como concluída!');
-      setFormFillMeeting(m);
+      setFormFillMeeting(null);
       fetchMeetings();
     }
   };
@@ -127,7 +154,7 @@ export default function Reunioes() {
         <div>
           <h1 className="text-2xl font-bold">Reuniões</h1>
           <p className="text-sm text-muted-foreground">
-            {meetings.filter(m => m.status === 'scheduled').length} agendada{meetings.filter(m => m.status === 'scheduled').length !== 1 ? 's' : ''} • {meetings.length} total
+            {filteredMeetings.filter(m => m.status === 'scheduled').length} agendada{filteredMeetings.filter(m => m.status === 'scheduled').length !== 1 ? 's' : ''} • {filteredMeetings.length} total
           </p>
         </div>
         {!isViewer && <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -176,6 +203,45 @@ export default function Reunioes() {
         </Dialog>}
       </div>
 
+      {/* Filter bar */}
+      <div className="flex gap-3 flex-wrap items-end">
+        <div className="space-y-1">
+          <Label className="text-xs">Status</Label>
+          <Select value={filterStatus} onValueChange={v => setFilterStatus(v === 'all' ? '' : v)}>
+            <SelectTrigger className="w-[140px]"><SelectValue placeholder="Todos" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="scheduled">Agendada</SelectItem>
+              <SelectItem value="completed">Concluída</SelectItem>
+              <SelectItem value="cancelled">Cancelada</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Cliente</Label>
+          <Select value={filterOffice} onValueChange={v => setFilterOffice(v === 'all' ? '' : v)}>
+            <SelectTrigger className="w-[180px]"><SelectValue placeholder="Todos" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              {offices.map(o => <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">De</Label>
+          <Input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} className="w-[150px]" />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Até</Label>
+          <Input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} className="w-[150px]" />
+        </div>
+        {(filterStatus || filterOffice || filterDateFrom || filterDateTo) && (
+          <Button variant="ghost" size="sm" onClick={() => { setFilterStatus(''); setFilterOffice(''); setFilterDateFrom(''); setFilterDateTo(''); }}>
+            Limpar
+          </Button>
+        )}
+      </div>
+
       {loading ? (
         <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
           <div className="bg-muted/50 h-11 flex items-center px-4 gap-12">
@@ -187,10 +253,10 @@ export default function Reunioes() {
             </div>
           ))}
         </div>
-      ) : meetings.length === 0 ? (
+      ) : filteredMeetings.length === 0 ? (
         <Card><CardContent className="flex flex-col items-center justify-center py-12">
           <Video className="mb-3 h-10 w-10 text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground">Nenhuma reunião registrada.</p>
+          <p className="text-sm text-muted-foreground">Nenhuma reunião encontrada.</p>
         </CardContent></Card>
       ) : (
         <Card>
@@ -207,7 +273,7 @@ export default function Reunioes() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {meetings.map(m => {
+              {filteredMeetings.map(m => {
                 const cfg = statusConfig[m.status] || statusConfig.scheduled;
                 return (
                   <TableRow key={m.id}>
@@ -227,7 +293,7 @@ export default function Reunioes() {
                       <div className="flex gap-1">
                         {!isViewer && m.status === 'scheduled' && (
                           <>
-                            <Button size="sm" variant="ghost" onClick={() => markCompleted(m)} title="Concluir">
+                            <Button size="sm" variant="ghost" onClick={() => markCompleted(m)} title="Concluir (preencher formulário)">
                               <CheckCircle2 className="h-4 w-4 text-success" />
                             </Button>
                             <Button size="sm" variant="ghost" onClick={() => updateStatus(m.id, 'cancelled')} title="Cancelar">
@@ -311,7 +377,7 @@ export default function Reunioes() {
           onOpenChange={(open) => !open && setFormFillMeeting(null)}
           meetingId={formFillMeeting.id}
           officeId={formFillMeeting.office_id}
-          onSubmitted={fetchMeetings}
+          onSubmitted={onFormSubmitted}
         />
       )}
     </div>
