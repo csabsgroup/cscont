@@ -22,9 +22,9 @@ function classifyError(err: any): { status: number; message: string } {
   const match = msg.match(/Piperun API \[(\d+)\]/);
   if (match) {
     const code = Number(match[1]);
-    if (code === 401 || code === 403) return { status: 200, message: "Token do Piperun inválido ou sem permissão. Verifique o API Token." };
-    if (code === 503 || code === 502 || code === 504) return { status: 200, message: `API do Piperun temporariamente indisponível (${code}). Tente novamente em alguns minutos.` };
-    return { status: 200, message: `Erro na API do Piperun (${code}). Tente novamente.` };
+    if (code === 401 || code === 403) return { status: 200, message: "Token do Piperun inválido ou sem permissão." };
+    if (code === 503 || code === 502 || code === 504) return { status: 200, message: `API do Piperun temporariamente indisponível (${code}).` };
+    return { status: 200, message: `Erro na API do Piperun (${code}).` };
   }
   return { status: 200, message: "Erro interno ao conectar com o Piperun. Verifique os logs." };
 }
@@ -49,7 +49,6 @@ async function piperunGetAll(path: string) {
     const url = `${PIPERUN_BASE}${path}${separator}show=200&page=${page}`;
     console.log(`[PIPERUN] GET ALL ${url} (page ${page})`);
     const res = await fetch(url, { headers: { token: getToken() } });
-    console.log(`[PIPERUN] Response status: ${res.status}`);
     if (!res.ok) {
       const body = await res.text();
       throw new Error(`Piperun API [${res.status}]: ${body.substring(0, 200)}`);
@@ -67,6 +66,162 @@ function getNestedValue(obj: any, path: string): any {
   return path.split('.').reduce((o, k) => o?.[k], obj);
 }
 
+// ---- Import helpers ----
+
+function resolveProductId(rawValue: string | null | undefined, productMappings: any[]): string | null {
+  if (!rawValue || !productMappings?.length) return null;
+  const normalized = String(rawValue).trim().toLowerCase();
+  const match = productMappings.find((m: any) => String(m.piperun_value).trim().toLowerCase() === normalized);
+  return match?.product_id || null;
+}
+
+function buildEntityFields(deal: any, fieldMappings: any[], prefix: string): Record<string, any> {
+  const result: Record<string, any> = {};
+  for (const mapping of fieldMappings) {
+    if (!mapping.local.startsWith(prefix + '.')) continue;
+    const col = mapping.local.substring(prefix.length + 1);
+    const value = getNestedValue(deal, mapping.piperun);
+    if (value !== undefined && value !== null && value !== '') {
+      result[col] = value;
+    }
+  }
+  return result;
+}
+
+async function triggerAutomations(supabase: any, officeId: string, productId: string, userId: string) {
+  const results: string[] = [];
+
+  // 1. Distribution
+  const { data: distRule } = await supabase
+    .from("automation_rules").select("*")
+    .eq("product_id", productId).eq("rule_type", "distribution").eq("is_active", true)
+    .maybeSingle();
+
+  let assignedCsmId: string | null = null;
+
+  if (distRule) {
+    const config = distRule.config as any;
+    if (config.method === "fixed" && config.fixed_csm_id) {
+      assignedCsmId = config.fixed_csm_id;
+    } else if (config.method === "least_clients") {
+      const eligible = config.eligible_csm_ids || [];
+      if (eligible.length > 0) {
+        const { data: offices } = await supabase.from("offices").select("csm_id")
+          .eq("active_product_id", productId).in("csm_id", eligible);
+        const counts: Record<string, number> = {};
+        eligible.forEach((id: string) => { counts[id] = 0; });
+        (offices || []).forEach((o: any) => { if (o.csm_id && counts[o.csm_id] !== undefined) counts[o.csm_id]++; });
+        assignedCsmId = eligible.reduce((a: string, b: string) => (counts[a] || 0) <= (counts[b] || 0) ? a : b);
+      }
+    } else if (config.method === "round_robin") {
+      const eligible = config.eligible_csm_ids || [];
+      if (eligible.length > 0) {
+        const { data: lastExec } = await supabase.from("automation_executions").select("result")
+          .eq("rule_id", distRule.id).order("executed_at", { ascending: false }).limit(1).maybeSingle();
+        const lastIndex = (lastExec?.result as any)?.csm_index ?? -1;
+        const nextIndex = (lastIndex + 1) % eligible.length;
+        assignedCsmId = eligible[nextIndex];
+        await supabase.from("automation_executions").insert({
+          rule_id: distRule.id, office_id: officeId,
+          context_key: `distribution_${Date.now()}`,
+          result: { csm_index: nextIndex, csm_id: assignedCsmId },
+        });
+      }
+    }
+
+    if (assignedCsmId) {
+      await supabase.from("offices").update({ csm_id: assignedCsmId }).eq("id", officeId);
+      results.push(`CSM atribuído`);
+    }
+  }
+
+  // 2. Onboarding tasks
+  const { data: onbRule } = await supabase
+    .from("automation_rules").select("*")
+    .eq("product_id", productId).eq("rule_type", "onboarding_tasks").eq("is_active", true)
+    .maybeSingle();
+
+  if (onbRule) {
+    const { data: existing } = await supabase.from("automation_executions").select("id")
+      .eq("rule_id", onbRule.id).eq("office_id", officeId).eq("context_key", "onboarding").maybeSingle();
+
+    if (!existing) {
+      const templates = (onbRule.config as any)?.templates || [];
+      const taskOwner = assignedCsmId || userId;
+      const createdIds: string[] = [];
+
+      for (const t of templates) {
+        const dueDate = new Date();
+        dueDate.setDate(dueDate.getDate() + (t.due_days || 0));
+        const { data: act } = await supabase.from("activities").insert({
+          title: t.title, type: t.type || "task", description: t.description || null,
+          office_id: officeId, user_id: taskOwner,
+          due_date: dueDate.toISOString().split("T")[0], priority: "medium",
+        }).select("id").single();
+        if (act) createdIds.push(act.id);
+      }
+
+      await supabase.from("automation_executions").insert({
+        rule_id: onbRule.id, office_id: officeId, context_key: "onboarding",
+        result: { created_activity_ids: createdIds },
+      });
+      results.push(`${createdIds.length} atividades de onboarding criadas`);
+    }
+  }
+
+  // 3. Position in first journey stage
+  const { data: firstStage } = await supabase
+    .from("journey_stages").select("id")
+    .eq("product_id", productId).order("position", { ascending: true }).limit(1).maybeSingle();
+
+  if (firstStage) {
+    const { data: existingJourney } = await supabase.from("office_journey").select("id")
+      .eq("office_id", officeId).maybeSingle();
+    if (!existingJourney) {
+      await supabase.from("office_journey").insert({
+        office_id: officeId, journey_stage_id: firstStage.id,
+      });
+      results.push(`Posicionado na jornada`);
+    }
+  }
+
+  // 4. Calculate health score
+  try {
+    await supabase.functions.invoke('calculate-health-score', { body: { office_id: officeId } });
+    results.push(`Health score calculado`);
+  } catch (e) {
+    console.error(`[PIPERUN] Health score calc failed for ${officeId}:`, e);
+  }
+
+  // 5. Slack notification
+  try {
+    const { data: slackSetting } = await supabase.from("integration_settings").select("*")
+      .eq("provider", "slack").maybeSingle();
+    if (slackSetting?.is_connected) {
+      const { data: office } = await supabase.from("offices").select("name, csm_id").eq("id", officeId).single();
+      const { data: product } = await supabase.from("products").select("name").eq("id", productId).single();
+      let csmName = 'Não atribuído';
+      if (office?.csm_id) {
+        const { data: profile } = await supabase.from("profiles").select("full_name").eq("id", office.csm_id).single();
+        csmName = profile?.full_name || 'CSM';
+      }
+      await supabase.functions.invoke('integration-slack', {
+        body: {
+          action: 'sendMessage',
+          message: `🆕 Novo cliente importado do Piperun: *${office?.name}* — Produto: ${product?.name} — CSM: ${csmName}`,
+        },
+      });
+      results.push(`Notificação Slack enviada`);
+    }
+  } catch (e) {
+    console.error(`[PIPERUN] Slack notification failed:`, e);
+  }
+
+  return { assignedCsmId, results };
+}
+
+// ---- Main handler ----
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -75,7 +230,7 @@ Deno.serve(async (req) => {
     const body = JSON.parse(rawBody);
     const { action } = body;
 
-    // --- Auth: validate JWT and require admin/manager/csm role ---
+    // Auth
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -103,17 +258,15 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ========== testConnection ==========
     if (action === "testConnection") {
       try {
-        console.log("[PIPERUN] Testing connection...");
-        console.log("[PIPERUN] Token found:", !!Deno.env.get("PIPERUN_API_TOKEN"));
         const result = await piperunGet("/pipelines");
         return new Response(
           JSON.stringify({ success: true, pipelines_count: result.data?.length || 0 }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       } catch (e: any) {
-        console.error("[PIPERUN] testConnection error:", e.message);
         const classified = classifyError(e);
         return new Response(
           JSON.stringify({ success: false, error: classified.message }),
@@ -122,18 +275,16 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ========== listPipelines ==========
     if (action === "listPipelines") {
       const allPipelines = await piperunGetAll("/pipelines");
-      const pipelines = allPipelines.map((p: any) => ({
-        id: p.id,
-        name: p.name,
-        stages: (p.stages || []).map((s: any) => ({ id: s.id, name: s.name })),
-      }));
+      const pipelines = allPipelines.map((p: any) => ({ id: p.id, name: p.name }));
       return new Response(JSON.stringify({ pipelines }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    // ========== listStages ==========
     if (action === "listStages") {
       const { pipeline_id } = body;
       const allStages = await piperunGetAll(`/stages?pipeline_id=${pipeline_id}`);
@@ -143,8 +294,36 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ========== listFields ==========
+    if (action === "listFields") {
+      try {
+        const result = await piperunGet("/deals?show=1");
+        const sampleDeal = (result.data || [])[0] || {};
+        const extractFields = (obj: any, prefix = ""): Array<{key: string; label: string; example_value: string}> => {
+          const fields: Array<{key: string; label: string; example_value: string}> = [];
+          for (const [key, value] of Object.entries(obj)) {
+            const fullKey = prefix ? `${prefix}.${key}` : key;
+            if (value && typeof value === "object" && !Array.isArray(value)) {
+              fields.push(...extractFields(value, fullKey));
+            } else {
+              fields.push({ key: fullKey, label: fullKey, example_value: String(value ?? "") });
+            }
+          }
+          return fields;
+        };
+        return new Response(JSON.stringify({ fields: extractFields(sampleDeal) }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ fields: [] }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    // ========== importDeals ==========
     if (action === "importDeals") {
-      const { pipeline_id, stage_id, default_product_id, default_csm_id, filter_won, field_mappings } = body;
+      const { pipeline_id, stage_id, filter_won, field_mappings, product_value_mappings } = body;
       if (!pipeline_id || !stage_id) throw new Error("pipeline_id and stage_id are required");
 
       let path = `/deals?pipeline_id=${pipeline_id}&stage_id=${stage_id}&show=100`;
@@ -158,94 +337,114 @@ Deno.serve(async (req) => {
 
       let imported = 0;
       let skipped = 0;
+      let automationsTriggered = 0;
+      const warnings: string[] = [];
 
       for (const deal of deals) {
         const dealId = String(deal.id);
         if (existingIds.has(dealId)) { skipped++; continue; }
 
-        const office: Record<string, any> = {
-          status: "nao_iniciado",
-          active_product_id: default_product_id || null,
-          csm_id: default_csm_id || null,
-          piperun_deal_id: dealId,
-        };
+        // Step 1: Build office object
+        const officeFields = buildEntityFields(deal, field_mappings || [], 'offices');
+        officeFields.piperun_deal_id = dealId;
+        officeFields.status = 'nao_iniciado';
 
-        if (field_mappings && Array.isArray(field_mappings)) {
-          for (const mapping of field_mappings) {
-            const value = getNestedValue(deal, mapping.piperun);
-            if (value !== undefined && value !== null) {
-              if (mapping.local === 'contract_value') continue;
-              office[mapping.local] = value;
-            }
+        // Step 2: Resolve product
+        let resolvedProductId: string | null = null;
+        const productMapping = (field_mappings || []).find((m: any) => m.local === 'offices.active_product_id');
+        if (productMapping) {
+          const rawProductValue = getNestedValue(deal, productMapping.piperun);
+          resolvedProductId = resolveProductId(rawProductValue, product_value_mappings || []);
+          if (rawProductValue && !resolvedProductId) {
+            warnings.push(`Produto não mapeado: "${rawProductValue}" (Deal ${dealId})`);
+            console.warn(`[PIPERUN] Unmapped product value: "${rawProductValue}" for deal ${dealId}`);
           }
-        } else {
-          const contact = deal.person || deal.organization || {};
-          office.name = deal.title || contact.name || `Deal ${dealId}`;
-          office.email = contact.email || null;
-          office.phone = contact.phone || null;
-        }
-
-        if (!office.name) office.name = `Deal ${dealId}`;
-
-        const { error } = await supabase.from("offices").insert(office);
-
-        if (error) {
-          console.error(`[PIPERUN] Failed to import deal ${dealId}:`, error);
-        } else {
-          imported++;
-          const contractValueMapping = field_mappings?.find((m: any) => m.local === 'contract_value');
-          const contractValue = contractValueMapping ? getNestedValue(deal, contractValueMapping.piperun) : deal.value;
-          if (contractValue && default_product_id) {
-            const { data: newOffice } = await supabase.from("offices").select("id").eq("piperun_deal_id", dealId).single();
-            if (newOffice) {
-              await supabase.from("contracts").insert({
-                office_id: newOffice.id,
-                product_id: default_product_id,
-                value: contractValue,
-                status: "pendente",
-              }).catch(() => {});
-            }
+          // Remove raw text from office fields, set resolved ID
+          delete officeFields.active_product_id;
+          if (resolvedProductId) {
+            officeFields.active_product_id = resolvedProductId;
+            officeFields.status = 'ativo';
           }
         }
+
+        if (!officeFields.name) officeFields.name = deal.title || `Deal ${dealId}`;
+
+        // Step 3: Insert office
+        const { data: newOffice, error: officeErr } = await supabase.from("offices").insert(officeFields).select("id").single();
+        if (officeErr || !newOffice) {
+          console.error(`[PIPERUN] Failed to import deal ${dealId}:`, officeErr);
+          continue;
+        }
+        imported++;
+        const officeId = newOffice.id;
+
+        // Step 4: Create contract
+        const contractFields = buildEntityFields(deal, field_mappings || [], 'contracts');
+        if (Object.keys(contractFields).length > 0) {
+          contractFields.office_id = officeId;
+          contractFields.product_id = resolvedProductId || officeFields.active_product_id;
+          if (!contractFields.product_id) {
+            // Need a product_id for contracts — skip if none
+            console.warn(`[PIPERUN] Skipping contract for deal ${dealId}: no product_id`);
+          } else {
+            contractFields.status = contractFields.status || 'pendente';
+            await supabase.from("contracts").insert(contractFields).catch((e: any) => {
+              console.error(`[PIPERUN] Contract insert failed for deal ${dealId}:`, e);
+            });
+          }
+        }
+
+        // Step 5: Create contacts (up to 3)
+        const contactPrefixes = ['contacts', 'contacts_2', 'contacts_3'];
+        for (let i = 0; i < contactPrefixes.length; i++) {
+          const contactFields = buildEntityFields(deal, field_mappings || [], contactPrefixes[i]);
+          if (Object.keys(contactFields).length > 0 && contactFields.name) {
+            contactFields.office_id = officeId;
+            contactFields.is_main_contact = i === 0;
+            await supabase.from("contacts").insert(contactFields).catch((e: any) => {
+              console.error(`[PIPERUN] Contact insert failed for deal ${dealId}:`, e);
+            });
+          }
+        }
+
+        // Step 6: Trigger automations if product resolved
+        if (resolvedProductId) {
+          try {
+            const autoResult = await triggerAutomations(supabase, officeId, resolvedProductId, user.id);
+            automationsTriggered++;
+            console.log(`[PIPERUN] Automations for deal ${dealId}:`, autoResult.results);
+          } catch (e) {
+            console.error(`[PIPERUN] Automation error for deal ${dealId}:`, e);
+          }
+        }
+
+        // Step 7: Audit log
+        await supabase.from("audit_logs").insert({
+          user_id: user.id,
+          entity_type: "office",
+          entity_id: officeId,
+          action: "piperun_import",
+          details: {
+            deal_id: dealId,
+            product_id: resolvedProductId,
+            product_resolved: !!resolvedProductId,
+            automations_triggered: !!resolvedProductId,
+          },
+        }).catch(() => {});
       }
 
       return new Response(
-        JSON.stringify({ success: true, imported, skipped, total: deals.length }),
+        JSON.stringify({
+          success: true, imported, skipped, total: deals.length,
+          automations_triggered: automationsTriggered,
+          warnings: warnings.length > 0 ? warnings : undefined,
+        }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    if (action === "listFields") {
-      try {
-        const result = await piperunGet("/deals?show=1");
-        const sampleDeal = (result.data || [])[0] || {};
-        
-        const extractFields = (obj: any, prefix = ""): Array<{key: string; label: string; example_value: string}> => {
-          const fields: Array<{key: string; label: string; example_value: string}> = [];
-          for (const [key, value] of Object.entries(obj)) {
-            const fullKey = prefix ? `${prefix}.${key}` : key;
-            if (value && typeof value === "object" && !Array.isArray(value)) {
-              fields.push(...extractFields(value, fullKey));
-            } else {
-              fields.push({ key: fullKey, label: fullKey, example_value: String(value ?? "") });
-            }
-          }
-          return fields;
-        };
-        
-        const fields = extractFields(sampleDeal);
-        return new Response(JSON.stringify({ fields }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      } catch (e) {
-        return new Response(JSON.stringify({ fields: [] }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-    }
-
     return new Response(
-      JSON.stringify({ error: "Unknown action. Supported: testConnection, listPipelines, listStages, importDeals, listFields" }),
+      JSON.stringify({ error: "Unknown action" }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err: any) {
