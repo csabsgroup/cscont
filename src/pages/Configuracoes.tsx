@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Package, Route, Heart, FileText, Zap, Gift, Users, Link2, Globe, ArrowUpDown, ShieldX, Calendar, MessageSquare, CreditCard, Workflow, BarChart3, Eye, Bot, ClipboardList, ScrollText } from 'lucide-react';
+import { Package, Route, Heart, FileText, Zap, Gift, Users, Link2, Globe, ArrowUpDown, ShieldX, Calendar, MessageSquare, CreditCard, Workflow, BarChart3, Eye, Bot, ClipboardList, ScrollText, ChevronRight } from 'lucide-react';
 import { ImportExportTab } from '@/components/configuracoes/ImportExportTab';
 import { HealthScoreTab } from '@/components/configuracoes/HealthScoreTab';
 import { FormTemplatesTab } from '@/components/configuracoes/FormTemplatesTab';
@@ -395,23 +395,6 @@ export default function Configuracoes() {
   const [selectedSection, setSelectedSection] = useState('produtos');
   const { settings, upsertSetting } = useIntegrationSettings();
 
-  if (isViewer) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold">Configurações</h1>
-          <p className="text-sm text-muted-foreground">Gerencie produtos, etapas, health score e usuários</p>
-        </div>
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <ShieldX className="mb-3 h-10 w-10 text-muted-foreground/40" />
-            <p className="text-sm text-muted-foreground">Acesso restrito. Você não tem permissão para acessar configurações.</p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   const visibleSections = SIDEBAR_SECTIONS.filter(s => {
     if (s.adminOnly && !isAdmin) return false;
     if (s.managerVisible && !isAdmin && !isManager) return false;
@@ -419,6 +402,31 @@ export default function Configuracoes() {
   });
 
   const categories = Array.from(new Set(visibleSections.map(s => s.category)));
+
+  // Determine which categories have multiple items (expandable) vs standalone
+  const categoriesWithSubs = useMemo(() => {
+    const set = new Set<string>();
+    categories.forEach(cat => {
+      const items = visibleSections.filter(s => s.category === cat);
+      const isSingle = items.length === 1 && items[0].label === cat;
+      if (!isSingle) set.add(cat);
+    });
+    return set;
+  }, [categories, visibleSections]);
+
+  // Derive parent category from selectedSection
+  const parentCategory = useMemo(() => {
+    const s = SIDEBAR_SECTIONS.find(sec => sec.key === selectedSection);
+    if (s && categoriesWithSubs.has(s.category)) return s.category;
+    return null;
+  }, [selectedSection, categoriesWithSubs]);
+
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(parentCategory);
+
+  // Auto-expand parent on mount or when selectedSection changes
+  useEffect(() => {
+    if (parentCategory) setExpandedCategory(parentCategory);
+  }, [parentCategory]);
 
   const breadcrumb = getBreadcrumb(selectedSection);
 
@@ -449,6 +457,23 @@ export default function Configuracoes() {
       default: return null;
     }
   };
+
+  if (isViewer) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold">Configurações</h1>
+          <p className="text-sm text-muted-foreground">Gerencie produtos, etapas, health score e usuários</p>
+        </div>
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-16">
+            <ShieldX className="mb-3 h-10 w-10 text-muted-foreground/40" />
+            <p className="text-sm text-muted-foreground">Acesso restrito. Você não tem permissão para acessar configurações.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   // Mobile: dropdown selector
   if (isMobile) {
@@ -485,35 +510,86 @@ export default function Configuracoes() {
         <div className="p-4 pb-2">
           <h2 className="text-lg font-semibold">Configurações</h2>
         </div>
-        <nav className="px-2 pb-4">
+        <nav className="px-2 pb-4 space-y-0.5">
           {categories.map(cat => {
             const CatIcon = CATEGORY_ICONS[cat];
             const items = visibleSections.filter(s => s.category === cat);
-            // Single-item categories: render as direct item
-            const isSingle = items.length === 1 && items[0].label === cat;
+            const hasSubcategories = categoriesWithSubs.has(cat);
+            const isExpanded = expandedCategory === cat;
+
+            // Standalone item (no subcategories)
+            if (!hasSubcategories) {
+              const item = items[0];
+              const isActive = selectedSection === item.key;
+              return (
+                <button
+                  key={cat}
+                  onClick={() => { setSelectedSection(item.key); setExpandedCategory(null); }}
+                  className={cn(
+                    'w-full flex items-center gap-2 text-sm font-medium py-2.5 px-3 rounded-lg transition-colors text-left cursor-pointer',
+                    isActive
+                      ? 'bg-sidebar-accent text-primary font-medium'
+                      : 'text-muted-foreground hover:bg-muted/50'
+                  )}
+                >
+                  {CatIcon && <CatIcon className="h-4 w-4 flex-shrink-0" />}
+                  <span className="truncate">{cat}</span>
+                </button>
+              );
+            }
+
+            // Category with subcategories (accordion)
+            const hasActiveChild = items.some(s => s.key === selectedSection);
             return (
               <div key={cat}>
-                {!isSingle && (
-                  <div className="flex items-center gap-1.5 mt-5 mb-1.5 px-3">
-                    {CatIcon && <CatIcon className="h-3.5 w-3.5 text-muted-foreground/60" />}
-                    <span className="text-[11px] uppercase text-muted-foreground/60 tracking-wider font-medium">{cat}</span>
-                  </div>
-                )}
-                {items.map(s => (
-                  <button
-                    key={s.key}
-                    onClick={() => setSelectedSection(s.key)}
+                {/* Category header (toggle) */}
+                <button
+                  onClick={() => setExpandedCategory(isExpanded ? null : cat)}
+                  className={cn(
+                    'w-full flex items-center gap-2 text-sm font-medium py-2.5 px-3 rounded-lg transition-colors text-left cursor-pointer',
+                    isExpanded || hasActiveChild
+                      ? 'bg-muted/50'
+                      : 'hover:bg-muted/50',
+                    'text-muted-foreground'
+                  )}
+                >
+                  {CatIcon && <CatIcon className="h-4 w-4 flex-shrink-0" />}
+                  <span className="truncate flex-1">{cat}</span>
+                  <ChevronRight
                     className={cn(
-                      'w-full flex items-center gap-2 text-sm py-2 px-3 rounded-lg transition-colors text-left',
-                      selectedSection === s.key
-                        ? 'bg-red-50 text-red-700 font-medium'
-                        : 'text-muted-foreground hover:bg-muted/50'
+                      'h-4 w-4 flex-shrink-0 transition-transform duration-200',
+                      isExpanded && 'rotate-90'
                     )}
-                  >
-                    <s.icon className="h-4 w-4 flex-shrink-0" />
-                    <span className="truncate">{isSingle ? cat : s.label}</span>
-                  </button>
-                ))}
+                  />
+                </button>
+
+                {/* Subcategories with grid-row animation */}
+                <div
+                  className="grid transition-all duration-200 ease-in-out"
+                  style={{ gridTemplateRows: isExpanded ? '1fr' : '0fr' }}
+                >
+                  <div className="overflow-hidden min-h-0">
+                    <div className="py-0.5">
+                      {items.map(s => {
+                        const isActive = selectedSection === s.key;
+                        return (
+                          <button
+                            key={s.key}
+                            onClick={() => setSelectedSection(s.key)}
+                            className={cn(
+                              'w-full flex items-center text-sm py-2 px-3 pl-10 rounded-lg transition-colors text-left',
+                              isActive
+                                ? 'bg-sidebar-accent text-primary font-medium'
+                                : 'text-muted-foreground/80 hover:text-muted-foreground hover:bg-muted/50'
+                            )}
+                          >
+                            <span className="truncate">{s.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
               </div>
             );
           })}
