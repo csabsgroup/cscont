@@ -14,6 +14,56 @@ export type Database = {
   }
   public: {
     Tables: {
+      activities: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          description: string | null
+          due_date: string | null
+          id: string
+          office_id: string | null
+          priority: Database["public"]["Enums"]["activity_priority"]
+          title: string
+          type: Database["public"]["Enums"]["activity_type"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          office_id?: string | null
+          priority?: Database["public"]["Enums"]["activity_priority"]
+          title: string
+          type?: Database["public"]["Enums"]["activity_type"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          office_id?: string | null
+          priority?: Database["public"]["Enums"]["activity_priority"]
+          title?: string
+          type?: Database["public"]["Enums"]["activity_type"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activities_office_id_fkey"
+            columns: ["office_id"]
+            isOneToOne: false
+            referencedRelation: "offices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_office_links: {
         Row: {
           created_at: string
@@ -168,6 +218,47 @@ export type Database = {
           },
         ]
       }
+      journey_stages: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          position: number
+          product_id: string
+          sla_days: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          position?: number
+          product_id: string
+          sla_days?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          position?: number
+          product_id?: string
+          sla_days?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "journey_stages_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       manager_csm_links: {
         Row: {
           created_at: string
@@ -188,6 +279,104 @@ export type Database = {
           manager_id?: string
         }
         Relationships: []
+      }
+      meetings: {
+        Row: {
+          created_at: string
+          duration_minutes: number | null
+          id: string
+          notes: string | null
+          office_id: string
+          scheduled_at: string
+          status: Database["public"]["Enums"]["meeting_status"]
+          title: string
+          transcript: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          duration_minutes?: number | null
+          id?: string
+          notes?: string | null
+          office_id: string
+          scheduled_at: string
+          status?: Database["public"]["Enums"]["meeting_status"]
+          title: string
+          transcript?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          duration_minutes?: number | null
+          id?: string
+          notes?: string | null
+          office_id?: string
+          scheduled_at?: string
+          status?: Database["public"]["Enums"]["meeting_status"]
+          title?: string
+          transcript?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meetings_office_id_fkey"
+            columns: ["office_id"]
+            isOneToOne: false
+            referencedRelation: "offices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      office_journey: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          entered_at: string
+          id: string
+          journey_stage_id: string
+          notes: string | null
+          office_id: string
+          updated_at: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          entered_at?: string
+          id?: string
+          journey_stage_id: string
+          notes?: string | null
+          office_id: string
+          updated_at?: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          entered_at?: string
+          id?: string
+          journey_stage_id?: string
+          notes?: string | null
+          office_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "office_journey_journey_stage_id_fkey"
+            columns: ["journey_stage_id"]
+            isOneToOne: false
+            referencedRelation: "journey_stages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "office_journey_office_id_fkey"
+            columns: ["office_id"]
+            isOneToOne: true
+            referencedRelation: "offices"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       offices: {
         Row: {
@@ -360,8 +549,11 @@ export type Database = {
       }
     }
     Enums: {
+      activity_priority: "low" | "medium" | "high" | "urgent"
+      activity_type: "task" | "follow_up" | "onboarding" | "renewal" | "other"
       app_role: "admin" | "manager" | "csm" | "viewer" | "client"
       contract_status: "ativo" | "encerrado" | "cancelado" | "pendente"
+      meeting_status: "scheduled" | "completed" | "cancelled"
       office_status:
         | "ativo"
         | "churn"
@@ -496,8 +688,11 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      activity_priority: ["low", "medium", "high", "urgent"],
+      activity_type: ["task", "follow_up", "onboarding", "renewal", "other"],
       app_role: ["admin", "manager", "csm", "viewer", "client"],
       contract_status: ["ativo", "encerrado", "cancelado", "pendente"],
+      meeting_status: ["scheduled", "completed", "cancelled"],
       office_status: [
         "ativo",
         "churn",
