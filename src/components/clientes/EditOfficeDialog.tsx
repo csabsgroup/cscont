@@ -31,6 +31,7 @@ interface Office {
 }
 
 interface Product { id: string; name: string; }
+interface Stage { id: string; name: string; position: number; product_id: string; }
 
 interface Props {
   office: Office;
@@ -41,6 +42,8 @@ interface Props {
 
 export function EditOfficeDialog({ office, open, onOpenChange, onSaved }: Props) {
   const [products, setProducts] = useState<Product[]>([]);
+  const [stages, setStages] = useState<Stage[]>([]);
+  const [currentStageId, setCurrentStageId] = useState('');
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     name: '', cnpj: '', city: '', state: '', email: '', phone: '', instagram: '',
@@ -51,6 +54,25 @@ export function EditOfficeDialog({ office, open, onOpenChange, onSaved }: Props)
   useEffect(() => {
     supabase.from('products').select('id, name').eq('is_active', true).then(({ data }) => setProducts(data || []));
   }, []);
+
+  // Fetch stages when product changes
+  useEffect(() => {
+    if (form.active_product_id) {
+      supabase.from('journey_stages').select('id, name, position, product_id')
+        .eq('product_id', form.active_product_id).order('position')
+        .then(({ data }) => setStages(data || []));
+    } else {
+      setStages([]);
+    }
+  }, [form.active_product_id]);
+
+  // Fetch current journey stage
+  useEffect(() => {
+    if (open && office) {
+      supabase.from('office_journey').select('journey_stage_id').eq('office_id', office.id).single()
+        .then(({ data }) => setCurrentStageId(data?.journey_stage_id || ''));
+    }
+  }, [open, office]);
 
   useEffect(() => {
     if (open && office) {
@@ -68,23 +90,39 @@ export function EditOfficeDialog({ office, open, onOpenChange, onSaved }: Props)
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
+
+    // Update office
     const { error } = await supabase.from('offices').update({
-      name: form.name,
-      cnpj: form.cnpj || null,
-      city: form.city || null,
-      state: form.state || null,
-      email: form.email || null,
-      phone: form.phone || null,
-      instagram: form.instagram || null,
-      status: form.status,
-      active_product_id: form.active_product_id || null,
-      notes: form.notes || null,
-      onboarding_date: form.onboarding_date || null,
-      activation_date: form.activation_date || null,
+      name: form.name, cnpj: form.cnpj || null, city: form.city || null,
+      state: form.state || null, email: form.email || null, phone: form.phone || null,
+      instagram: form.instagram || null, status: form.status,
+      active_product_id: form.active_product_id || null, notes: form.notes || null,
+      onboarding_date: form.onboarding_date || null, activation_date: form.activation_date || null,
       visible_in_directory: form.visible_in_directory,
     }).eq('id', office.id);
-    if (error) toast.error('Erro: ' + error.message);
-    else { toast.success('Escritório atualizado!'); onOpenChange(false); onSaved(); }
+
+    if (error) {
+      toast.error('Erro: ' + error.message);
+      setSaving(false);
+      return;
+    }
+
+    // Update journey stage
+    if (currentStageId) {
+      const { data: existing } = await supabase.from('office_journey').select('id').eq('office_id', office.id).single();
+      if (existing) {
+        await supabase.from('office_journey').update({ journey_stage_id: currentStageId, entered_at: new Date().toISOString() }).eq('office_id', office.id);
+      } else {
+        await supabase.from('office_journey').insert({ office_id: office.id, journey_stage_id: currentStageId });
+      }
+    } else {
+      // Remove from journey if no stage selected
+      await supabase.from('office_journey').delete().eq('office_id', office.id);
+    }
+
+    toast.success('Escritório atualizado!');
+    onOpenChange(false);
+    onSaved();
     setSaving(false);
   };
 
@@ -124,7 +162,7 @@ export function EditOfficeDialog({ office, open, onOpenChange, onSaved }: Props)
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Produto</Label>
-              <Select value={form.active_product_id} onValueChange={v => setForm({ ...form, active_product_id: v })}>
+              <Select value={form.active_product_id} onValueChange={v => { setForm({ ...form, active_product_id: v }); setCurrentStageId(''); }}>
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>
                   {products.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
@@ -132,8 +170,13 @@ export function EditOfficeDialog({ office, open, onOpenChange, onSaved }: Props)
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Instagram</Label>
-              <Input value={form.instagram} onChange={e => setForm({ ...form, instagram: e.target.value })} />
+              <Label>Etapa da Jornada</Label>
+              <Select value={currentStageId} onValueChange={setCurrentStageId} disabled={stages.length === 0}>
+                <SelectTrigger><SelectValue placeholder={stages.length === 0 ? 'Selecione produto' : 'Selecione'} /></SelectTrigger>
+                <SelectContent>
+                  {stages.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -158,13 +201,17 @@ export function EditOfficeDialog({ office, open, onOpenChange, onSaved }: Props)
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
+              <Label>Instagram</Label>
+              <Input value={form.instagram} onChange={e => setForm({ ...form, instagram: e.target.value })} />
+            </div>
+            <div className="space-y-2">
               <Label>Data Onboarding</Label>
               <Input type="date" value={form.onboarding_date} onChange={e => setForm({ ...form, onboarding_date: e.target.value })} />
             </div>
-            <div className="space-y-2">
-              <Label>Data Ativação</Label>
-              <Input type="date" value={form.activation_date} onChange={e => setForm({ ...form, activation_date: e.target.value })} />
-            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Data Ativação</Label>
+            <Input type="date" value={form.activation_date} onChange={e => setForm({ ...form, activation_date: e.target.value })} />
           </div>
           <div className="space-y-2">
             <Label>Notas</Label>
