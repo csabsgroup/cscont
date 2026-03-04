@@ -1,91 +1,148 @@
 
 
-## Plan: Implement Phases 3-5 (Formularios, Cashback/Bonus, Portal do Cliente)
+## Gap Analysis and Implementation Plan
 
-Given the volume, I'll implement Phases 3, 4, and 5 together as they are interconnected (Portal depends on Bonus and Forms features).
-
----
-
-### Phase 3 — Custom Forms
-
-**Database migration:**
-- `form_templates` table: id, name, type (enum: kickoff, onboarding, nutricao, renovacao, expansao, sos, extra, apresentacao), product_id (nullable), fields (jsonb), post_actions (jsonb), created_by, created_at, updated_at
-- `form_submissions` table: id, template_id, office_id, meeting_id (nullable), user_id, data (jsonb), submitted_at
-- RLS: admin full access, CSM can create/view submissions for their offices, authenticated can view templates
-
-**UI:**
-- New "Formularios" tab in Configuracoes: template builder with field types (text, number, date, dropdown, multi, rating 1-5, NPS 0-10, boolean, file)
-- Reunioes page: when marking as "completed", show form selector and fill form
-- Form submissions stored as JSONB
+After thoroughly reviewing the codebase against the full specification, here is what exists and what remains to be built.
 
 ---
 
-### Phase 4 — Cashback/Bonus Catalog
+### What's Already Implemented
 
-**Database migration:**
-- `bonus_catalog` table: id, name, unit, default_validity_days, visible_in_portal, requires_approval, eligible_product_ids (uuid[]), created_at, updated_at
-- `bonus_grants` table: id, office_id, catalog_item_id, quantity, granted_at, expires_at, used, available
-- `bonus_requests` table: id, office_id, catalog_item_id, quantity, notes, status (enum: pending, approved, denied), reviewed_by (nullable), created_at, updated_at
-- RLS: admin full access on catalog; CSM can manage grants/requests for their offices; clients can view own grants and create requests
-
-**UI:**
-- New "Catalogo de Bonus" tab in Configuracoes (admin)
-- New "Bonus/Cashback" tab in Cliente 360: show grants balance, requests history, create grant
-- Events `eligible_product_ids` column (uuid[]) added to events table for Phase 7 prep
+- **Database**: All core tables exist with RLS (offices, contacts, contracts, products, activities, meetings, events, event_participants, journey_stages, office_journey, health_scores/pillars/indicators/overrides/playbooks, form_templates, form_submissions, bonus_catalog/grants/requests, action_plans, client_office_links, manager_csm_links, profiles, user_roles)
+- **Auth/RBAC**: 5 roles with security definer functions (has_role, get_visible_office_ids, etc.)
+- **All pages exist**: Dashboard, Clientes, Cliente360, Jornada, Atividades, Reunioes, Eventos, ContratosGlobal, ContatosGlobal, Relatorios, Configuracoes, Portal (8 pages)
+- **Configuracoes tabs**: Produtos, Etapas da Jornada, Health Score, Formularios, Catalogo de Bonus, Usuarios & Roles
 
 ---
 
-### Phase 5 — Portal do Cliente (role=client)
+### What's Missing (organized by priority)
 
-**Database migration:**
-- Add `shared_with_client boolean default false` to activities table (notes already have office-level visibility)
+#### Batch 1 — Core Functionality Gaps
 
-**UI — New layout + pages:**
-- `PortalLayout.tsx`: separate nav (no internal sidebar), with portal-specific menu
-- Portal routes under `/portal/*` with client-role guard
-- Pages:
-  - **Home**: summary cards (contract status, OKR progress, upcoming events)
-  - **Meu Contrato**: contract details, installments, renewal info
-  - **Plano de Acao**: view action_plans, edit only status + observations
-  - **Reunioes**: meetings with share_with_client=true, view notes/transcript
-  - **Eventos**: events for the client's product
-  - **Bonus/Cashback**: view balance, create requests
-  - **Contatos**: CSM and manager contact info
-  - **Membros Ativos**: directory of active offices in same product with visible_in_directory=true (photo, name, phone, instagram, email, city/state)
+**1. Dashboard Enhancements**
+- Missing: Health distribution (V/A/V), health medio, NPS medio + cobertura, sem percepcao no mes, +30 dias sem reuniao, ranking evolucao, funil/etapas por produto, top churn risk, top expansao
+- Current: Only has basic KPI cards + attention items + birthdays
 
-**Routing:**
-- Add `/portal/*` routes in App.tsx with a `PortalRoute` guard that checks role=client
-- Redirect clients to `/portal` on login
+**2. Atividades Improvements**
+- Missing: Tabs Hoje/Atrasadas/Futuras/Concluidas (has only Pendentes/Concluidas)
+- Missing: Full activity types (ligacao, follow_up, check_in, email, whatsapp, planejamento, task, other)
+- Missing: Checklist/subtarefas inside activities
+- Missing: Popup menu with edit/complete/delete actions per item
+- Missing: "Observacoes" prompt when completing
+
+**3. Reunioes Improvements**
+- Missing: `share_with_client` toggle on create/detail
+- Missing: Form selector when marking as "completed" (link to form_templates)
+- Missing: Transcript field visible in detail
+
+**4. Eventos Improvements**
+- Missing: `eligible_product_ids` multi-select on create
+- Missing: Auto-pull all active offices of eligible products as participants
+- Missing: Participation management UI (confirm/attended/absent/remove)
+
+**5. Jornada Kanban Improvements**
+- Missing: Real drag & drop (currently uses Select dropdown)
+- Missing: Move reason modal
+- Missing: Health badge on cards, dias renovacao, parcelas vencidas, ultima reuniao
+- Missing: Filters (saude, status, CSM, renovacao, parcelas vencidas, sem percepcao, +30 dias sem reuniao)
+
+#### Batch 2 — Enhanced Features
+
+**6. Clientes Table Enhancements**
+- Missing: Health, LTV, ultimo contato, proximo passo, parcelas vencidas, dias renovacao columns
+- Missing: Configurable/reorderable columns with saved views (user_table_views table needed)
+- Missing: More filters (CSM, etapa, tags, saude, etc.)
+
+**7. Relatorios Full Implementation**
+- Missing: Tab structure (Visao executiva, Churn & retencao, Receita & LTV, Health/NPS/CSAT, Cobertura/cadencia, Jornada analytics, Inadimplencia, Evolucao do cliente)
+- Missing: Period selector + comparison
+
+**8. Configuracoes — Missing Tabs**
+- Missing: Integracoes tab (stubs for Google Calendar, Asaas, Slack, Piperun, WhatsApp, Fireflies)
+- Missing: Templates/Automacoes tab
+
+**9. Portal Pages — Real Data**
+- Current portal pages are minimal stubs
+- Missing: Real contract details with installments in PortalContrato
+- Missing: Proper OKR editing (status/observations only) in PortalOKR
+- Missing: share_with_client filter in PortalReunioes
+- Missing: Product-filtered events in PortalEventos
+- Missing: Full bonus request flow in PortalBonus
+- Missing: Arquivos compartilhados page
+
+#### Batch 3 — Polish & Data
+
+**10. Branding**
+- Red primary color needs to be applied in Tailwind config
+
+**11. Viewer Read-Only**
+- Partially implemented; needs consistent check across all pages
+
+**12. Seed Data**
+- 3 products, 10 offices, 20 contacts, 30 activities, 10 meetings, 3 events, journey stages, health config
+
+---
+
+### Database Changes Needed
+
+```text
+New table: activity_checklists
+  - id, activity_id, title, completed, position, created_at
+
+New table: user_table_views
+  - id, user_id, page, name, columns (jsonb), filters (jsonb), is_default, created_at
+
+New table: shared_files (for portal "Arquivos compartilhados")
+  - id, office_id, name, url, uploaded_by, shared_with_client, created_at
+
+Enum update: activity_type
+  - Add: ligacao, check_in, email, whatsapp, planejamento
+
+Add column: activities.observations (text, nullable)
+```
 
 ---
 
 ### Implementation Order
 
-1. Database migration (all tables + columns in one migration)
-2. Configuracoes: Forms tab + Bonus Catalog tab
-3. Reunioes: form integration on completion
-4. Cliente 360: Bonus/Cashback tab
-5. Portal layout + all portal pages
-6. App.tsx routing updates + client redirect logic
+Due to the volume, I recommend splitting into 3 batches:
 
-### Files to create:
-- `src/components/configuracoes/FormTemplatesTab.tsx`
-- `src/components/configuracoes/BonusCatalogTab.tsx`
-- `src/components/clientes/ClienteBonus.tsx`
-- `src/components/portal/PortalLayout.tsx`
-- `src/pages/portal/PortalHome.tsx`
-- `src/pages/portal/PortalContrato.tsx`
-- `src/pages/portal/PortalOKR.tsx`
-- `src/pages/portal/PortalReunioes.tsx`
-- `src/pages/portal/PortalEventos.tsx`
-- `src/pages/portal/PortalBonus.tsx`
-- `src/pages/portal/PortalContatos.tsx`
-- `src/pages/portal/PortalMembros.tsx`
+**Batch 1** (this implementation — highest impact):
+1. DB migration (activity_checklists, activity_type enum, observations column)
+2. Branding (red primary in tailwind.config)
+3. Atividades: 4-tab layout, full types, checklist, popup menu, observations on complete
+4. Reunioes: share_with_client toggle, form selector on complete, transcript
+5. Eventos: product selector, auto-pull participants, participation management
+6. Jornada: Filters, health/info on cards, move reason modal
+7. Dashboard: Health distribution, +30 dias sem reuniao, funil/etapas, attention items expansion
 
-### Files to edit:
-- `src/pages/Configuracoes.tsx` (add Forms + Bonus tabs)
-- `src/pages/Reunioes.tsx` (form selector on completion)
-- `src/pages/Cliente360.tsx` (add Bonus tab)
-- `src/App.tsx` (portal routes + client redirect)
-- `src/contexts/AuthContext.tsx` (add portal redirect logic)
+**Batch 2** (next round):
+1. DB migration (user_table_views, shared_files)
+2. Clientes: Enhanced columns, saved views
+3. Relatorios: Full tab structure with all report types
+4. Configuracoes: Integracoes tab, Templates/Automacoes tab
+5. Portal: Enhanced pages with real data flows, Arquivos page
+
+**Batch 3** (final round):
+1. Viewer read-only consistency
+2. Seed data
+3. Polish and edge cases
+
+---
+
+### Files to Create (Batch 1)
+- `src/components/atividades/ActivityChecklist.tsx`
+- `src/components/atividades/ActivityPopup.tsx`
+- `src/components/eventos/ParticipantManager.tsx`
+- `src/components/reunioes/FormFillDialog.tsx`
+
+### Files to Edit (Batch 1)
+- `tailwind.config.ts` (red primary)
+- `src/pages/Dashboard.tsx` (health + funil + more attention items)
+- `src/pages/Atividades.tsx` (4 tabs, types, checklist, popup, observations)
+- `src/pages/Reunioes.tsx` (share_with_client, form on complete, transcript)
+- `src/pages/Eventos.tsx` (product selector, auto-pull, participation)
+- `src/pages/Jornada.tsx` (filters, card info, move reason)
+
+Shall I proceed with Batch 1?
 
