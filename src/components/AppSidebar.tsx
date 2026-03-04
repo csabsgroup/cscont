@@ -34,21 +34,12 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 
 const operationItems = [
-  { title: 'Dashboard', url: '/', icon: LayoutDashboard },
-  { title: 'Clientes', url: '/clientes', icon: Building2 },
+  { title: 'Minha Carteira', url: '/', icon: LayoutDashboard },
   { title: 'Jornada', url: '/jornada', icon: Kanban },
-  { title: 'Atividades', url: '/atividades', icon: CheckSquare },
-  { title: 'Reuniões', url: '/reunioes', icon: Video },
-  { title: 'Eventos', url: '/eventos', icon: Calendar },
 ];
 
 const managementItems = [
-  { title: 'Contratos', url: '/contratos', icon: FileText },
-  { title: 'Contatos', url: '/contatos', icon: Users },
   { title: 'Relatórios', url: '/relatorios', icon: BarChart3 },
-];
-
-const configItems = [
   { title: 'Configurações', url: '/configuracoes', icon: Settings },
   { title: 'Auditoria', url: '/auditoria', icon: ScrollText },
 ];
@@ -126,8 +117,6 @@ export function AppSidebar() {
         {renderGroup('Operação', operationItems)}
         <SidebarSeparator className="mx-2 bg-border/40" />
         {renderGroup('Gestão', managementItems)}
-        <SidebarSeparator className="mx-2 bg-border/40" />
-        {renderGroup('Sistema', configItems)}
       </SidebarContent>
 
       <SidebarFooter className="p-3">
