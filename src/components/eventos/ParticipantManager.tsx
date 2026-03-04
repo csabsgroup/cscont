@@ -2,14 +2,23 @@ import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Check, X, UserMinus, Users, Loader2 } from 'lucide-react';
+import { UserMinus, Users, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+
+const STATUS_OPTIONS = [
+  { value: 'convidado', label: 'Convidado', color: 'bg-muted text-muted-foreground' },
+  { value: 'confirmado', label: 'Confirmado', color: 'bg-primary/10 text-primary' },
+  { value: 'participou', label: 'Participou', color: 'bg-success/10 text-success' },
+  { value: 'faltou', label: 'Faltou', color: 'bg-destructive/10 text-destructive' },
+];
 
 interface Participant {
   id: string;
   office_id: string | null;
   confirmed: boolean;
+  status?: string;
   offices?: { name: string; status: string } | null;
 }
 
@@ -41,7 +50,6 @@ export function ParticipantManager({ eventId, eligibleProductIds, readOnly }: Pr
       return;
     }
     setPulling(true);
-    // Get active offices for eligible products
     const { data: offices } = await supabase
       .from('offices')
       .select('id')
@@ -64,15 +72,16 @@ export function ParticipantManager({ eventId, eligibleProductIds, readOnly }: Pr
     }
 
     const { error } = await supabase.from('event_participants').insert(
-      newOnes.map(o => ({ event_id: eventId, office_id: o.id, confirmed: false }))
+      newOnes.map(o => ({ event_id: eventId, office_id: o.id, confirmed: false, status: 'convidado' }))
     );
     if (error) toast.error('Erro: ' + error.message);
     else { toast.success(`${newOnes.length} escritório(s) adicionado(s)`); fetchParticipants(); }
     setPulling(false);
   };
 
-  const toggleConfirmed = async (p: Participant) => {
-    await supabase.from('event_participants').update({ confirmed: !p.confirmed }).eq('id', p.id);
+  const updateStatus = async (p: Participant, newStatus: string) => {
+    const confirmed = newStatus === 'confirmado' || newStatus === 'participou';
+    await supabase.from('event_participants').update({ status: newStatus, confirmed }).eq('id', p.id);
     fetchParticipants();
   };
 
@@ -82,6 +91,8 @@ export function ParticipantManager({ eventId, eligibleProductIds, readOnly }: Pr
   };
 
   if (loading) return <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin" /></div>;
+
+  const getStatusOption = (status?: string) => STATUS_OPTIONS.find(s => s.value === status) || STATUS_OPTIONS[0];
 
   return (
     <div className="space-y-3">
@@ -102,39 +113,46 @@ export function ParticipantManager({ eventId, eligibleProductIds, readOnly }: Pr
           <TableHeader>
             <TableRow>
               <TableHead>Escritório</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Confirmado</TableHead>
+              <TableHead>Status Escritório</TableHead>
+              <TableHead>Participação</TableHead>
               {!readOnly && <TableHead></TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
-            {participants.map(p => (
-              <TableRow key={p.id}>
-                <TableCell className="font-medium">{p.offices?.name || '—'}</TableCell>
-                <TableCell>
-                  <Badge variant="secondary" className="text-xs capitalize">{p.offices?.status || '—'}</Badge>
-                </TableCell>
-                <TableCell>
-                  {p.confirmed ? (
-                    <Badge className="bg-success/10 text-success text-xs">Confirmado</Badge>
-                  ) : (
-                    <Badge variant="outline" className="text-xs">Pendente</Badge>
-                  )}
-                </TableCell>
-                {!readOnly && (
+            {participants.map(p => {
+              const statusOpt = getStatusOption(p.status);
+              return (
+                <TableRow key={p.id}>
+                  <TableCell className="font-medium">{p.offices?.name || '—'}</TableCell>
                   <TableCell>
-                    <div className="flex gap-1">
-                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => toggleConfirmed(p)}>
-                        {p.confirmed ? <X className="h-3 w-3" /> : <Check className="h-3 w-3" />}
-                      </Button>
+                    <Badge variant="secondary" className="text-xs capitalize">{p.offices?.status || '—'}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    {readOnly ? (
+                      <Badge className={`text-xs ${statusOpt.color}`}>{statusOpt.label}</Badge>
+                    ) : (
+                      <Select value={p.status || 'convidado'} onValueChange={(val) => updateStatus(p, val)}>
+                        <SelectTrigger className="w-[140px] h-8">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {STATUS_OPTIONS.map(s => (
+                            <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </TableCell>
+                  {!readOnly && (
+                    <TableCell>
                       <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => removeParticipant(p.id)}>
                         <UserMinus className="h-3 w-3" />
                       </Button>
-                    </div>
-                  </TableCell>
-                )}
-              </TableRow>
-            ))}
+                    </TableCell>
+                  )}
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       )}
