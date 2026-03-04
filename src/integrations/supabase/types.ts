@@ -991,6 +991,39 @@ export type Database = {
           },
         ]
       }
+      import_batches: {
+        Row: {
+          created_at: string
+          entity_type: string
+          id: string
+          record_count: number
+          record_ids: string[]
+          table_name: string
+          undone_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          entity_type: string
+          id?: string
+          record_count?: number
+          record_ids?: string[]
+          table_name: string
+          undone_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          entity_type?: string
+          id?: string
+          record_count?: number
+          record_ids?: string[]
+          table_name?: string
+          undone_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       integration_settings: {
         Row: {
           config: Json | null
