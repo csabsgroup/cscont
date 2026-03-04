@@ -1,49 +1,84 @@
 
 
-## Plan: Complete the Client Portal
+## Plan: Complete Remaining Features
 
-### Current State
-The portal is already ~80% implemented. All 9 pages exist with routes, layout, sidebar, and basic functionality. The gaps are specific enhancements rather than new pages.
+### Analysis of Current vs Required
 
-### What's Missing
-
-**1. PortalHome** — Missing cards: Health Score, Bonus balance, Next event, Next meeting. Greeting shows generic text instead of office name.
-
-**2. PortalMembros** — Missing search/filter by name and city.
-
-**3. PortalEventos** — Missing participation status (confirmed/attended/absent) per office.
-
-**4. PortalLayout** — Shows hardcoded "Contador CEO" instead of the client's office name.
-
-**5. No separate /portal/login** — Currently uses same /auth page. The spec requests a dedicated portal login. However, since Auth already redirects clients to /portal automatically, a separate branded login page at `/portal/login` is straightforward.
+| Area | Status | Missing |
+|------|--------|---------|
+| Produtos CRUD | Done | -- |
+| Jornada Stages | Done | -- |
+| Health Score Config | Done | -- |
+| Formulários Builder | Partial | Post-actions config UI, field mapping, preview |
+| Catálogo Bônus | Done | -- |
+| Integrações | Done (stubs) | -- |
+| Usuários & Permissões | Partial | Create user, status toggle, link client→office |
+| Eventos | Partial | Auto-pull participants on create, attended/absent status |
+| Contratos | Partial | Status/product/period filters |
+| Contatos | Partial | CRUD (create/edit/delete), filters |
+| Audit Trail | Missing | New page + table |
 
 ### Changes
 
-**1. `src/pages/portal/PortalHome.tsx`** (rewrite)
-- Fetch office name for greeting: "Bem-vindo, [Office Name]"
-- Add Health Score card (latest from `health_scores`)
-- Add Bonus balance card (sum of `bonus_grants.available`)
-- Add Next event card (from `events` filtered by product eligibility)
-- Add Next meeting card (from `meetings` where `share_with_client=true` and future)
-- Keep existing: contract status, OKR progress
+**1. `src/components/configuracoes/FormTemplatesTab.tsx`** — Add post-actions configuration section in the form dialog (create_activity, move_stage, notify toggles with config fields). Add field mapping dropdown per field (map to health indicator or office perception field). Add preview button that renders the form fields read-only.
 
-**2. `src/pages/portal/PortalMembros.tsx`** (small addition)
-- Add search Input that filters members by name or city (client-side)
+**2. `src/pages/Configuracoes.tsx` (UsersTab)** — Add "Create User" button that calls `supabase.auth.admin` via edge function to create user with email+password+role. Add status active/inactive indicator. For client role: show office link dropdown. Add manager→CSM linking.
 
-**3. `src/pages/portal/PortalEventos.tsx`** (small addition)
-- Fetch `event_participants` for the client's office
-- Show participation badge on each event card (Convidado/Confirmado/Participou/Faltou)
+**3. New edge function `supabase/functions/admin-create-user/index.ts`** — Uses service role key to create auth user + assign role + optionally link to office. Required because client-side cannot create users for others.
 
-**4. `src/components/portal/PortalLayout.tsx`** (small change)
-- Fetch office name from `client_office_links` → `offices` and display it instead of hardcoded text
+**4. `src/pages/Eventos.tsx`** — After event creation succeeds, auto-pull active offices from eligible products as participants. Add participation status column (convidado/confirmado/participou/faltou) instead of just confirmed boolean.
 
-**5. `src/pages/portal/PortalLogin.tsx`** (new file)
-- Simple login-only page (no signup tab) branded for portal
-- Route at `/portal/login`
-- Redirects to `/portal` on success, to `/auth` if not a client
+**5. `src/pages/ContratosGlobal.tsx`** — Add filter bar: status Select, product Select, date range inputs. Apply filters to the contract list.
 
-**6. `src/App.tsx`** (add route)
-- Add `/portal/login` route pointing to PortalLogin
+**6. `src/pages/ContatosGlobal.tsx`** — Add CRUD: "Novo Contato" button with create dialog (all contact fields). Edit/delete via row actions. Add filters: office, type (decisor/usuário/financeiro), active toggle.
 
-### No DB changes needed.
+**7. New audit trail table** — DB migration to create `audit_logs` table (id, user_id, action, entity_type, entity_id, details jsonb, created_at) with RLS (admin-only read).
+
+**8. New page `src/pages/AuditLogs.tsx`** — Table listing audit logs with filters (period, user, action type). Admin-only access. Add route in App.tsx and sidebar link.
+
+**9. `src/components/eventos/ParticipantManager.tsx`** — Replace simple confirmed boolean with a status dropdown: convidado → confirmado → participou / faltou.
+
+### DB Migration Required
+
+```sql
+-- event_participants: add status column
+ALTER TABLE public.event_participants 
+ADD COLUMN status text NOT NULL DEFAULT 'convidado';
+-- Migrate existing data
+UPDATE public.event_participants SET status = CASE WHEN confirmed THEN 'confirmado' ELSE 'convidado' END;
+
+-- audit_logs table
+CREATE TABLE public.audit_logs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  action text NOT NULL,
+  entity_type text NOT NULL,
+  entity_id uuid,
+  details jsonb DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Admin can view audit logs" ON public.audit_logs
+  FOR SELECT TO authenticated
+  USING (public.has_role(auth.uid(), 'admin'));
+CREATE POLICY "Authenticated can insert audit logs" ON public.audit_logs
+  FOR INSERT TO authenticated
+  WITH CHECK (user_id = auth.uid());
+```
+
+### Files Summary
+
+| File | Action |
+|------|--------|
+| `src/components/configuracoes/FormTemplatesTab.tsx` | Add post-actions UI, field mapping, preview |
+| `src/pages/Configuracoes.tsx` (UsersTab) | Create user flow, status, client-office link |
+| `supabase/functions/admin-create-user/index.ts` | New edge function for user creation |
+| `src/pages/Eventos.tsx` | Auto-enroll participants on create |
+| `src/components/eventos/ParticipantManager.tsx` | Status dropdown (4 states) |
+| `src/pages/ContratosGlobal.tsx` | Add filters |
+| `src/pages/ContatosGlobal.tsx` | Add CRUD + filters |
+| `src/pages/AuditLogs.tsx` | New audit trail page |
+| `src/App.tsx` | Add audit route |
+| `src/components/AppSidebar.tsx` | Add audit nav link |
+| DB migration | audit_logs table + event_participants status column |
 
