@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { recalculateHealth } from '@/lib/health-engine';
 
 const statusLabels: Record<string, string> = { pending: 'Pendente', in_progress: 'Em andamento', done: 'Concluído', cancelled: 'Cancelado' };
 
@@ -34,7 +35,11 @@ export default function PortalOKR() {
   const updatePlan = async (id: string, patch: any) => {
     const { error } = await supabase.from('action_plans').update(patch).eq('id', id);
     if (error) toast.error('Erro: ' + error.message);
-    else { toast.success('Atualizado!'); fetch(); }
+    else {
+      toast.success('Atualizado!');
+      if (officeId) recalculateHealth(officeId);
+      fetch();
+    }
   };
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;

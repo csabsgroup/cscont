@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
+import { recalculateHealth } from '@/lib/health-engine';
 
 interface FormTemplate {
   id: string;
@@ -86,6 +87,9 @@ export function FormFillDialog({ open, onOpenChange, meetingId, officeId, onSubm
         console.error('Post-actions invocation error:', err);
       }
     }
+
+    // Recalculate health score
+    recalculateHealth(officeId);
 
     onOpenChange(false);
     onSubmitted();
