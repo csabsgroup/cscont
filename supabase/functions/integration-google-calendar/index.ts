@@ -116,6 +116,13 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (action === "getClientId") {
+      const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
+      return new Response(JSON.stringify({ client_id: clientId || null }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     if (action === "getStatus") {
       const { data: token } = await supabase
         .from("integration_tokens")

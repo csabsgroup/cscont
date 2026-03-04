@@ -33,18 +33,23 @@ export function GoogleCalendarConfig({ setting, onSave }: Props) {
     setLoading(false);
   };
 
-  const handleConnect = () => {
-    // This requires GOOGLE_CLIENT_ID to be set as a secret
-    // The OAuth flow redirects to Google, then back with a code
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-    if (!clientId) {
-      toast.error('Google Client ID não configurado. Configure GOOGLE_CLIENT_ID nos secrets.');
-      return;
+  const handleConnect = async () => {
+    try {
+      const { data } = await supabase.functions.invoke('integration-google-calendar', {
+        body: { action: 'getClientId' },
+      });
+      const clientId = data?.client_id;
+      if (!clientId) {
+        toast.error('Google Client ID não configurado nos secrets.');
+        return;
+      }
+      const redirectUri = `${window.location.origin}/configuracoes?tab=integracoes&oauth=google`;
+      const scope = 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/userinfo.email';
+      const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}&access_type=offline&prompt=consent`;
+      window.location.href = url;
+    } catch (e: any) {
+      toast.error('Erro ao obter Client ID: ' + e.message);
     }
-    const redirectUri = `${window.location.origin}/configuracoes?tab=integracoes&oauth=google`;
-    const scope = 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/userinfo.email';
-    const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}&access_type=offline&prompt=consent`;
-    window.location.href = url;
   };
 
   const handleDisconnect = async () => {
