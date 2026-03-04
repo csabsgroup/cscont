@@ -3,7 +3,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from './StatusBadge';
-import { HealthBadge } from './HealthBadge';
+import { HealthScoreBars } from './HealthScoreBars';
 import { ArrowLeft, Pencil, MoreVertical, UserCog, RefreshCw, StickyNote, Eye, Camera, Phone } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -107,16 +107,20 @@ export function ClienteHeader({
         />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <h1 className="text-xl font-bold truncate">{office.name}</h1>
-          <StatusBadge status={office.status} />
-          {health && <HealthBadge score={health.score} band={health.band} size="sm" />}
-          {office.products?.name && (
-            <Badge variant="outline" className="text-xs">{office.products.name}</Badge>
-          )}
-          {stageName && (
-            <Badge variant="secondary" className="text-xs">{stageName}</Badge>
-          )}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold truncate">{office.name}</h1>
+            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+              <StatusBadge status={office.status} />
+              {office.products?.name && (
+                <Badge variant="outline" className="text-xs">{office.products.name}</Badge>
+              )}
+              {stageName && (
+                <Badge variant="secondary" className="text-xs">{stageName}</Badge>
+              )}
+            </div>
+          </div>
+          {health && <HealthScoreBars score={health.score} band={health.band} />}
         </div>
         {csmProfile?.full_name && (
           <div className="flex items-center gap-1.5 mt-1">
