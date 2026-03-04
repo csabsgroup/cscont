@@ -15,6 +15,7 @@ import Reunioes from "@/pages/Reunioes";
 import Eventos from "@/pages/Eventos";
 import ContratosGlobal from "@/pages/ContratosGlobal";
 import ContatosGlobal from "@/pages/ContatosGlobal";
+import Configuracoes from "@/pages/Configuracoes";
 import ComingSoon from "@/pages/ComingSoon";
 import NotFound from "@/pages/NotFound";
 
@@ -55,7 +56,7 @@ const App = () => (
             <Route path="/contratos" element={<ProtectedRoute><ContratosGlobal /></ProtectedRoute>} />
             <Route path="/contatos" element={<ProtectedRoute><ContatosGlobal /></ProtectedRoute>} />
             <Route path="/relatorios" element={<ProtectedRoute><ComingSoon title="Relatórios" description="Análises e métricas" /></ProtectedRoute>} />
-            <Route path="/configuracoes" element={<ProtectedRoute><ComingSoon title="Configurações" description="Configurações do sistema" /></ProtectedRoute>} />
+            <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
