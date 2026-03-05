@@ -656,7 +656,10 @@ Deno.serve(async (req) => {
       const result = await piperunGet(path, token);
       let deals = result.data || [];
       // Filter won in code as fallback
-      deals = deals.filter((d: any) => d.status === 'won' || d.status === 'ganho');
+      deals = deals.filter((d: any) => {
+        const s = String(d.status || '').toLowerCase().trim();
+        return ['won', 'ganho', 'ganha'].includes(s) || d.won === true;
+      });
 
       // Check which are already imported
       const { data: existing } = await supabase.from("offices").select("piperun_deal_id").not("piperun_deal_id", "is", null);
@@ -688,7 +691,10 @@ Deno.serve(async (req) => {
       let path = `/deals?pipeline_id=${pipeline_id}&stage_id=${stage_id}&status=won&show=100`;
       const result = await piperunGet(path, token);
       let deals = result.data || [];
-      deals = deals.filter((d: any) => d.status === 'won' || d.status === 'ganho');
+      deals = deals.filter((d: any) => {
+        const s = String(d.status || '').toLowerCase().trim();
+        return ['won', 'ganho', 'ganha'].includes(s) || d.won === true;
+      });
 
       const { data: existing } = await supabase.from("offices").select("piperun_deal_id").not("piperun_deal_id", "is", null);
       const existingIds = new Set((existing || []).map((o: any) => o.piperun_deal_id));
