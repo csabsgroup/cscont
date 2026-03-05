@@ -66,13 +66,21 @@ Deno.serve(async (req) => {
     // 1. Get office + product
     const { data: office } = await sc
       .from("offices")
-      .select("id, active_product_id, csm_id")
+      .select("id, active_product_id, csm_id, status")
       .eq("id", office_id)
       .single();
 
     if (!office?.active_product_id) {
       return new Response(
         JSON.stringify({ skipped: true, reason: "No active product" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Skip pausado offices - freeze health score
+    if (office.status === "pausado") {
+      return new Response(
+        JSON.stringify({ skipped: true, reason: "Office is paused (pausado)" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

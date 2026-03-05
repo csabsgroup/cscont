@@ -54,7 +54,7 @@ interface CSMProfile { id: string; full_name: string | null; }
 interface JourneyStage { id: string; name: string; product_id: string; }
 
 // ─── Column definitions ─────────────────────────────────────────
-type ColumnKey = 'csm' | 'name' | 'product' | 'status' | 'stage' | 'health' | 'ltv' | 'lastMeeting' | 'nextStep' | 'city' | 'installments' | 'renewal' | 'sponsor' | 'contact';
+type ColumnKey = 'csm' | 'name' | 'product' | 'status' | 'stage' | 'health' | 'ltv' | 'lastMeeting' | 'nextStep' | 'city' | 'installments' | 'renewal' | 'sponsor' | 'contact' | 'activationDate' | 'cycleStart' | 'cycleEnd' | 'churnDate' | 'churnReason';
 
 const ALL_COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: 'csm', label: 'CSM' },
@@ -71,6 +71,11 @@ const ALL_COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: 'renewal', label: 'Dias Renovação' },
   { key: 'sponsor', label: 'Sponsor' },
   { key: 'contact', label: 'Contato' },
+  { key: 'activationDate', label: 'Data Ativação' },
+  { key: 'cycleStart', label: 'Início Ciclo' },
+  { key: 'cycleEnd', label: 'Fim Ciclo' },
+  { key: 'churnDate', label: 'Data Churn' },
+  { key: 'churnReason', label: 'Motivo Churn' },
 ];
 
 const DEFAULT_COLUMNS: ColumnKey[] = ['csm', 'name', 'product', 'status', 'stage', 'health', 'ltv', 'lastMeeting', 'city'];
@@ -82,11 +87,13 @@ const statusColors: Record<string, string> = {
   nao_iniciado: 'bg-muted text-muted-foreground border-border',
   upsell: 'bg-blue-50 text-blue-700 border-blue-200',
   bonus_elite: 'bg-amber-50 text-amber-700 border-amber-200',
+  pausado: 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-800',
 };
 
 const statusLabels: Record<string, string> = {
   ativo: 'Ativo', churn: 'Churn', nao_renovado: 'Não Renovado',
   nao_iniciado: 'Não Iniciado', upsell: 'Upsell', bonus_elite: 'Bônus Elite',
+  pausado: 'Pausado',
 };
 
 const healthDotColors: Record<string, string> = {
@@ -205,7 +212,7 @@ export default function Clientes() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const [officesRes, contactsRes, healthRes, contractsRes, meetingsRes, stagesRes, journeysRes, profilesRes, rolesRes, activitiesRes] = await Promise.all([
+    const [officesRes, contactsRes, healthRes, contractsRes, meetingsRes, stagesRes, journeysRes, profilesRes, rolesRes, activitiesRes, churnReasonsRes] = await Promise.all([
       supabase.from('offices').select('*, products:active_product_id(name)').order('name'),
       supabase.from('contacts').select('name, office_id').eq('is_main_contact', true),
       supabase.from('health_scores').select('office_id, score, band'),
@@ -216,7 +223,10 @@ export default function Clientes() {
       supabase.from('profiles').select('id, full_name'),
       supabase.from('user_roles').select('user_id, role').eq('role', 'csm'),
       supabase.from('activities').select('office_id, title, due_date').is('completed_at', null).order('due_date', { ascending: true }),
+      supabase.from('churn_reasons').select('id, name'),
     ]);
+
+    const churnReasonMap = new Map((churnReasonsRes.data || []).map((r: any) => [r.id, r.name]));
 
     if (officesRes.error) { setError(officesRes.error.message); setLoading(false); return; }
 
@@ -278,6 +288,7 @@ export default function Clientes() {
         journeyStageId: stageId || null,
         csmName: o.csm_id ? profileMap.get(o.csm_id) || null : null,
         nextStep: nextStepMap.get(o.id) || null,
+        churnReasonName: o.churn_reason_id ? churnReasonMap.get(o.churn_reason_id) || null : null,
       };
     }));
     setLoading(false);
@@ -593,6 +604,11 @@ export default function Clientes() {
         </TableCell>
       );
       case 'contact': return <TableCell key={col} className="text-muted-foreground text-sm">{office.email || office.phone || '—'}</TableCell>;
+      case 'activationDate': return <TableCell key={col} className="text-muted-foreground text-sm">{(office as any).activation_date ? formatDistanceToNow(new Date((office as any).activation_date), { addSuffix: true, locale: ptBR }) : '—'}</TableCell>;
+      case 'cycleStart': return <TableCell key={col} className="text-muted-foreground text-sm">{(office as any).cycle_start_date || '—'}</TableCell>;
+      case 'cycleEnd': return <TableCell key={col} className="text-muted-foreground text-sm">{(office as any).cycle_end_date || '—'}</TableCell>;
+      case 'churnDate': return <TableCell key={col} className="text-muted-foreground text-sm">{(office as any).churn_date || '—'}</TableCell>;
+      case 'churnReason': return <TableCell key={col} className="text-muted-foreground text-sm">{(office as any).churnReasonName || '—'}</TableCell>;
       default: return <TableCell key={col}>—</TableCell>;
     }
   };

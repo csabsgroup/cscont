@@ -13,6 +13,7 @@ export default function PortalHome() {
   const { settings } = usePortalSettings();
   const [loading, setLoading] = useState(true);
   const [officeName, setOfficeName] = useState('');
+  const [officeStatus, setOfficeStatus] = useState<string | null>(null);
   const [stats, setStats] = useState({
     contractStatus: '—',
     productName: '',
@@ -32,9 +33,11 @@ export default function PortalHome() {
       const oid = links?.[0]?.office_id;
       if (!oid) { setLoading(false); return; }
 
-      // Fetch office info
-      const { data: office } = await supabase.from('offices').select('name, active_product_id').eq('id', oid).single();
+      const { data: office } = await supabase.from('offices').select('name, active_product_id, status').eq('id', oid).single();
       setOfficeName(office?.name || '');
+      setOfficeStatus(office?.status || null);
+
+      if (office?.status === 'pausado') { setLoading(false); return; }
 
       const [contractRes, okrRes, healthRes, bonusRes, meetingRes] = await Promise.all([
         supabase.from('contracts').select('status, end_date, product_id').eq('office_id', oid).eq('status', 'ativo').maybeSingle(),
@@ -44,22 +47,17 @@ export default function PortalHome() {
         supabase.from('meetings').select('title, scheduled_at').eq('office_id', oid).eq('share_with_client', true).gte('scheduled_at', new Date().toISOString()).order('scheduled_at', { ascending: true }).limit(1).maybeSingle(),
       ]);
 
-      // Product name for contract
       let productName = '';
       if (contractRes.data?.product_id) {
         const { data: prod } = await supabase.from('products').select('name').eq('id', contractRes.data.product_id).single();
         productName = prod?.name || '';
       }
 
-      // OKR progress
       const plans = okrRes.data || [];
       const done = plans.filter(p => p.status === 'done').length;
       const progress = plans.length > 0 ? Math.round((done / plans.length) * 100) : 0;
-
-      // Bonus balance
       const totalBonus = (bonusRes.data || []).reduce((sum, g) => sum + Number(g.available), 0);
 
-      // Next event (filtered by product eligibility)
       let nextEvent: { title: string; date: string } | null = null;
       const { data: allEvents } = await supabase.from('events').select('title, event_date, eligible_product_ids').gte('event_date', new Date().toISOString()).order('event_date', { ascending: true }).limit(10);
       if (allEvents) {
@@ -87,6 +85,19 @@ export default function PortalHome() {
   }, [user]);
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
+
+  if (officeStatus === 'pausado') {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold">Portal</h1>
+        <div className="rounded-lg border border-purple-200 bg-purple-50 dark:bg-purple-900/20 dark:border-purple-800 p-6 text-center">
+          <p className="text-purple-800 dark:text-purple-300 font-medium">
+            Seu acesso está temporariamente pausado. Entre em contato com seu consultor.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const healthColor = stats.healthBand === 'green' ? 'bg-emerald-500' : stats.healthBand === 'yellow' ? 'bg-amber-500' : stats.healthBand === 'red' ? 'bg-red-500' : 'bg-muted';
 

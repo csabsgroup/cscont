@@ -37,7 +37,7 @@ const COLORS = {
   muted: 'hsl(var(--muted-foreground))',
 };
 const CHART_COLORS = [COLORS.primary, COLORS.success, COLORS.warning, COLORS.blue, COLORS.purple, COLORS.orange];
-const STATUS_LABELS: Record<string, string> = { ativo: 'Ativo', churn: 'Churn', nao_renovado: 'Não Renovado', nao_iniciado: 'Não Iniciado', upsell: 'Upsell', bonus_elite: 'Bônus Elite' };
+const STATUS_LABELS: Record<string, string> = { ativo: 'Ativo', churn: 'Churn', nao_renovado: 'Não Renovado', nao_iniciado: 'Não Iniciado', upsell: 'Upsell', bonus_elite: 'Bônus Elite', pausado: 'Pausado' };
 
 type PeriodType = 'month' | 'quarter' | 'semester' | 'year';
 
@@ -92,9 +92,11 @@ export default function Relatorios() {
   const [filterCsm, setFilterCsm] = useState<string>('all');
   const [filterProduct, setFilterProduct] = useState<string>('all');
 
+  const [churnReasons, setChurnReasons] = useState<any[]>([]);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [oRes, cRes, mRes, hRes, jRes, sRes, pRes, fRes, shRes, prRes, urRes] = await Promise.all([
+    const [oRes, cRes, mRes, hRes, jRes, sRes, pRes, fRes, shRes, prRes, urRes, crRes] = await Promise.all([
       supabase.from('offices').select('*, products:active_product_id(name)'),
       supabase.from('contracts').select('*, products:product_id(name)'),
       supabase.from('meetings').select('*'),
@@ -106,8 +108,15 @@ export default function Relatorios() {
       supabase.from('office_stage_history').select('*'),
       supabase.from('products').select('id, name').eq('is_active', true),
       supabase.from('user_roles').select('user_id, role').eq('role', 'csm'),
+      supabase.from('churn_reasons').select('id, name'),
     ]);
-    setOffices(oRes.data || []);
+    const churnReasonMap = new Map((crRes.data || []).map((r: any) => [r.id, r.name]));
+    setChurnReasons(crRes.data || []);
+    // Enrich offices with churn reason name
+    setOffices((oRes.data || []).map((o: any) => ({
+      ...o,
+      churn_reason_name: o.churn_reason_id ? churnReasonMap.get(o.churn_reason_id) || null : null,
+    })));
     setContracts(cRes.data || []);
     setMeetings(mRes.data || []);
     setHealthScores(hRes.data || []);
@@ -166,9 +175,10 @@ export default function Relatorios() {
 
   // ─── COMPUTED METRICS ───
   const metrics = useMemo(() => {
-    const o = filteredOffices;
+    const o = filteredOffices.filter(x => x.status !== 'pausado'); // Exclude pausado from metrics
+    const pausadoCount = filteredOffices.filter(x => x.status === 'pausado').length;
     const total = o.length;
-    const ativos = o.filter(x => x.status === 'ativo' || x.status === 'bonus_elite').length;
+    const ativos = o.filter(x => x.status === 'ativo' || x.status === 'bonus_elite' || x.status === 'upsell').length;
     const churnList = o.filter(x => x.status === 'churn');
     const naoRenovado = o.filter(x => x.status === 'nao_renovado');
     const naoIniciado = o.filter(x => x.status === 'nao_iniciado');
@@ -192,8 +202,22 @@ export default function Relatorios() {
     ].filter(d => d.value > 0);
 
     const avgTimeToChurn = churnList.length > 0
-      ? Math.round(churnList.reduce((s, x) => s + differenceInMonths(new Date(x.updated_at), new Date(x.created_at)), 0) / churnList.length)
+      ? Math.round(churnList.reduce((s, x) => {
+          const from = x.activation_date ? new Date(x.activation_date) : new Date(x.created_at);
+          const to = x.churn_date ? new Date(x.churn_date) : new Date(x.updated_at);
+          return s + differenceInMonths(to, from);
+        }, 0) / churnList.length)
       : 0;
+
+    // Churn by reason
+    const churnByReason: Record<string, number> = {};
+    churnList.forEach(x => {
+      const reason = x.churn_reason_name || 'Sem motivo';
+      churnByReason[reason] = (churnByReason[reason] || 0) + 1;
+    });
+    const churnReasonData = Object.entries(churnByReason).map(([name, value], i) => ({
+      name, value, color: CHART_COLORS[i % CHART_COLORS.length],
+    })).sort((a, b) => b.value - a.value);
 
     // Monthly churn evolution (last 12 months)
     const last12 = getLast12Months();
@@ -205,8 +229,10 @@ export default function Relatorios() {
     // Churned clients table
     const churnTable = churnList.map(x => {
       const hs = filteredHealth.find(h => h.office_id === x.id);
-      const mesesAtivo = differenceInMonths(new Date(x.updated_at), new Date(x.created_at));
-      return { name: x.name, id: x.id, mesesAtivo, health: hs?.score ?? '—', band: hs?.band, csm: profileMap.get(x.csm_id) || '—' };
+      const from = x.activation_date ? new Date(x.activation_date) : new Date(x.created_at);
+      const to = x.churn_date ? new Date(x.churn_date) : new Date(x.updated_at);
+      const mesesAtivo = differenceInMonths(to, from);
+      return { name: x.name, id: x.id, mesesAtivo, health: hs?.score ?? '—', band: hs?.band, csm: profileMap.get(x.csm_id) || '—', churnReason: x.churn_reason_name || '—' };
     });
 
     // MRR / LTV
@@ -367,7 +393,7 @@ export default function Relatorios() {
     const newPrev = o.filter(x => inRange(x.created_at, range.prevStart, range.prevEnd)).length;
 
     return {
-      total, ativos, churnCount, churnPct, retentionRate, churnBreakdown, avgTimeToChurn, churnEvolution, churnTable,
+      total, ativos, churnCount, churnPct, retentionRate, churnBreakdown, avgTimeToChurn, churnEvolution, churnTable, churnReasonData, pausadoCount,
       activeMRR, totalLTV, avgLTV, ltvHistogram, retentionEvolution, activeContracts,
       avgHealth, greenCount, yellowCount, redCount, healthDistData,
       avgNps, npsDistribution, promoters, neutrals, detractors,
@@ -499,6 +525,15 @@ export default function Relatorios() {
             <KPI label="Taxa de Retenção" value={`${metrics.retentionRate}%`} positive />
           </div>
           <div className="grid gap-6 lg:grid-cols-2">
+            <ChartCard title="Churn por Motivo">
+              {metrics.churnReasonData.length === 0 ? <EmptyChart /> : (
+                <ResponsiveContainer width="100%" height={280}>
+                  <PieChart><Pie data={metrics.churnReasonData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, value }) => `${name}: ${value}`}>
+                    {metrics.churnReasonData.map((e, i) => <Cell key={i} fill={e.color} />)}
+                  </Pie><Tooltip /><Legend /></PieChart>
+                </ResponsiveContainer>
+              )}
+            </ChartCard>
             <ChartCard title="Breakdown por Tipo">
               {metrics.churnBreakdown.length === 0 ? <EmptyChart /> : (
                 <ResponsiveContainer width="100%" height={280}>
@@ -508,6 +543,8 @@ export default function Relatorios() {
                 </ResponsiveContainer>
               )}
             </ChartCard>
+          </div>
+          <div className="grid gap-6 lg:grid-cols-2">
             <ChartCard title="Evolução Mensal do Churn">
               {metrics.churnEvolution.every(d => d.churns === 0) ? <EmptyChart /> : (
                 <ResponsiveContainer width="100%" height={280}>
@@ -522,14 +559,15 @@ export default function Relatorios() {
             <Card>
               <CardHeader><CardTitle className="text-base">Clientes que Churnaram</CardTitle></CardHeader>
               <CardContent>
-                <Table>
+                 <Table>
                   <TableHeader><TableRow>
-                    <TableHead>Escritório</TableHead><TableHead>Meses Ativo</TableHead><TableHead>Último Health</TableHead><TableHead>CSM</TableHead>
+                    <TableHead>Escritório</TableHead><TableHead>Motivo</TableHead><TableHead>Meses Ativo</TableHead><TableHead>Último Health</TableHead><TableHead>CSM</TableHead>
                   </TableRow></TableHeader>
                   <TableBody>
                     {metrics.churnTable.map(r => (
                       <TableRow key={r.id}>
                         <TableCell className="font-medium">{r.name}</TableCell>
+                        <TableCell><Badge variant="outline" className="text-xs">{r.churnReason}</Badge></TableCell>
                         <TableCell>{r.mesesAtivo}</TableCell>
                         <TableCell><Badge variant={r.band === 'red' ? 'destructive' : r.band === 'yellow' ? 'outline' : 'default'} className="text-xs">{r.health}</Badge></TableCell>
                         <TableCell>{r.csm}</TableCell>
