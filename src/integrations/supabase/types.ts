@@ -612,6 +612,134 @@ export type Database = {
           },
         ]
       }
+      custom_field_values: {
+        Row: {
+          custom_field_id: string
+          id: string
+          office_id: string
+          updated_at: string | null
+          updated_by: string | null
+          value_boolean: boolean | null
+          value_date: string | null
+          value_json: Json | null
+          value_number: number | null
+          value_text: string | null
+        }
+        Insert: {
+          custom_field_id: string
+          id?: string
+          office_id: string
+          updated_at?: string | null
+          updated_by?: string | null
+          value_boolean?: boolean | null
+          value_date?: string | null
+          value_json?: Json | null
+          value_number?: number | null
+          value_text?: string | null
+        }
+        Update: {
+          custom_field_id?: string
+          id?: string
+          office_id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          value_boolean?: boolean | null
+          value_date?: string | null
+          value_json?: Json | null
+          value_number?: number | null
+          value_text?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "custom_field_values_custom_field_id_fkey"
+            columns: ["custom_field_id"]
+            isOneToOne: false
+            referencedRelation: "custom_fields"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "custom_field_values_office_id_fkey"
+            columns: ["office_id"]
+            isOneToOne: false
+            referencedRelation: "offices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      custom_fields: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          data_source: string | null
+          data_source_config: Json | null
+          default_value: string | null
+          description: string | null
+          field_type: string
+          id: string
+          is_editable: boolean | null
+          is_required: boolean | null
+          is_visible: boolean | null
+          name: string
+          options: Json | null
+          position: string | null
+          product_id: string | null
+          scope: string
+          slug: string
+          sort_order: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          data_source?: string | null
+          data_source_config?: Json | null
+          default_value?: string | null
+          description?: string | null
+          field_type: string
+          id?: string
+          is_editable?: boolean | null
+          is_required?: boolean | null
+          is_visible?: boolean | null
+          name: string
+          options?: Json | null
+          position?: string | null
+          product_id?: string | null
+          scope?: string
+          slug: string
+          sort_order?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          data_source?: string | null
+          data_source_config?: Json | null
+          default_value?: string | null
+          description?: string | null
+          field_type?: string
+          id?: string
+          is_editable?: boolean | null
+          is_required?: boolean | null
+          is_visible?: boolean | null
+          name?: string
+          options?: Json | null
+          position?: string | null
+          product_id?: string | null
+          scope?: string
+          slug?: string
+          sort_order?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "custom_fields_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_participants: {
         Row: {
           confirmed: boolean

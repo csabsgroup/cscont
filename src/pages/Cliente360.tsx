@@ -273,6 +273,7 @@ export default function Cliente360() {
         health={health}
         stageName={stageName}
         csmProfile={csmProfile}
+        contracts={contracts}
         onReassignCSM={openReassign}
         onChangeStatus={() => setShowStatusChange(true)}
         onQuickNote={() => setShowQuickNote(true)}

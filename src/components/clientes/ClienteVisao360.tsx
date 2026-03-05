@@ -6,6 +6,7 @@ import { differenceInDays, differenceInMonths, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { CustomFieldsDisplay } from './CustomFieldsDisplay';
 
 interface Props {
   office: any;
@@ -135,6 +136,8 @@ export function ClienteVisao360({
               <div className="text-sm font-semibold text-foreground mt-0.5 truncate">{f.value}</div>
             </Card>
           ))}
+          {/* Custom fields (body position) */}
+          <CustomFieldsDisplay officeId={office.id} productId={office.active_product_id} position="body" />
         </div>
 
         {/* Expandable extra fields */}

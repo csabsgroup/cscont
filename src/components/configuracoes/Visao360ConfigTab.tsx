@@ -7,7 +7,7 @@ import { Loader2, GripVertical, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 
-interface Props { mode: 'campos' | 'abas'; }
+interface Props { mode: 'campos' | 'abas' | 'header'; }
 
 interface ConfigItem { key: string; visible: boolean; order: number; }
 
@@ -61,6 +61,27 @@ const ALL_TABS = [
   { key: 'tab_cashback', label: 'Cashback' },
 ];
 
+const ALL_HEADER_FIELDS = [
+  { key: 'header_name', label: 'Nome do escritório', locked: true },
+  { key: 'header_logo', label: 'Logo do escritório' },
+  { key: 'header_status', label: 'Status' },
+  { key: 'header_health', label: 'Health Score' },
+  { key: 'header_product', label: 'Produto ativo' },
+  { key: 'header_csm', label: 'CSM responsável' },
+  { key: 'header_stage', label: 'Etapa da jornada' },
+  { key: 'header_activation_date', label: 'Data de ativação' },
+  { key: 'header_cycle_start', label: 'Data início ciclo' },
+  { key: 'header_cycle_end', label: 'Data fim ciclo' },
+  { key: 'header_renewal_days', label: 'Dias para renovação' },
+  { key: 'header_overdue', label: 'Parcelas vencidas' },
+  { key: 'header_ltv', label: 'LTV' },
+  { key: 'header_revenue', label: 'Faturamento mensal' },
+  { key: 'header_city_state', label: 'Cidade/Estado' },
+  { key: 'header_cnpj', label: 'CNPJ' },
+  { key: 'header_whatsapp', label: 'WhatsApp' },
+  { key: 'header_email', label: 'Email' },
+];
+
 function buildDefaults(allItems: { key: string }[]): ConfigItem[] {
   return allItems.map((item, i) => ({ key: item.key, visible: true, order: i }));
 }
@@ -76,6 +97,9 @@ export function Visao360ConfigTab({ mode }: Props) {
   const [fields, setFields] = useState<ConfigItem[]>([]);
   // For "abas" mode: tabs
   const [tabs, setTabs] = useState<ConfigItem[]>([]);
+  // For "header" mode
+  const [headerFields, setHeaderFields] = useState<ConfigItem[]>([]);
+  const [customHeaderFields, setCustomHeaderFields] = useState<{ key: string; label: string }[]>([]);
 
   useEffect(() => {
     supabase.from('products').select('id, name').eq('is_active', true).order('name')
@@ -93,6 +117,16 @@ export function Visao360ConfigTab({ mode }: Props) {
       ]);
       setIndicators(mergeConfig(ALL_INDICATORS, (indRes.data as any)?.items));
       setFields(mergeConfig(ALL_FIELDS, (fldRes.data as any)?.items));
+    } else if (mode === 'header') {
+      // Fetch custom fields with position='header'
+      const [headerRes, customRes] = await Promise.all([
+        supabase.from('product_360_config' as any).select('*').eq('product_id', selectedProduct).eq('config_type', 'header').maybeSingle(),
+        supabase.from('custom_fields' as any).select('slug, name').eq('position', 'header').eq('is_visible', true).order('sort_order'),
+      ]);
+      const customDefs = ((customRes.data as any[]) || []).map((cf: any) => ({ key: cf.slug, label: cf.name }));
+      setCustomHeaderFields(customDefs);
+      const allDefs = [...ALL_HEADER_FIELDS, ...customDefs];
+      setHeaderFields(mergeConfig(allDefs, (headerRes.data as any)?.items));
     } else {
       const { data } = await supabase.from('product_360_config' as any).select('*').eq('product_id', selectedProduct).eq('config_type', 'tabs').maybeSingle();
       setTabs(mergeConfig(ALL_TABS, (data as any)?.items));
@@ -210,6 +244,15 @@ export function Visao360ConfigTab({ mode }: Props) {
               {saving ? 'Salvando...' : 'Salvar Campos'}
             </Button>
           </div>
+        </div>
+      ) : mode === 'header' ? (
+        <div>
+          <h3 className="text-sm font-semibold mb-3">Campos do Header</h3>
+          <p className="text-xs text-muted-foreground mb-3">Configure quais campos aparecem no header do Cliente 360. O nome do escritório é obrigatório.</p>
+          {renderDraggableList(headerFields, setHeaderFields, [...ALL_HEADER_FIELDS, ...customHeaderFields], 'header')}
+          <Button className="mt-3" size="sm" onClick={() => saveConfig('header', headerFields)} disabled={saving}>
+            {saving ? 'Salvando...' : 'Salvar Header'}
+          </Button>
         </div>
       ) : (
         <div>
