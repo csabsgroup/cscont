@@ -1560,6 +1560,41 @@ export type Database = {
           },
         ]
       }
+      office_notes: {
+        Row: {
+          content: string
+          created_at: string
+          created_by: string
+          id: string
+          note_type: string
+          office_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          created_by: string
+          id?: string
+          note_type?: string
+          office_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          note_type?: string
+          office_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "office_notes_office_id_fkey"
+            columns: ["office_id"]
+            isOneToOne: false
+            referencedRelation: "offices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       office_stage_history: {
         Row: {
           change_type: string

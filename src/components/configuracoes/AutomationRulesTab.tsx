@@ -231,6 +231,12 @@ const ACTION_TYPES = [
   { value: 'move_journey_stage', label: 'Mover Etapa da Jornada' },
   { value: 'change_status', label: 'Alterar Status' },
   { value: 'create_action_plan', label: 'Criar Plano de Ação' },
+  { value: 'change_csm', label: 'Alterar CSM Responsável' },
+  { value: 'create_contract', label: 'Criar Contrato' },
+  { value: 'cancel_contract', label: 'Cancelar/Encerrar Contrato' },
+  { value: 'set_product', label: 'Definir Jornada (Produto)' },
+  { value: 'add_note', label: 'Adicionar Nota na Timeline' },
+  { value: 'grant_bonus', label: 'Conceder Bônus' },
 ];
 
 const FREQUENCY_OPTIONS = [
@@ -257,6 +263,7 @@ export function AutomationRulesTab() {
   const [stages, setStages] = useState<any[]>([]);
   const [csms, setCsms] = useState<any[]>([]);
   const [formTemplates, setFormTemplates] = useState<any[]>([]);
+  const [bonusCatalog, setBonusCatalog] = useState<any[]>([]);
 
   const fetchRules = useCallback(async () => {
     setLoading(true);
@@ -266,16 +273,18 @@ export function AutomationRulesTab() {
   }, []);
 
   const fetchRefData = useCallback(async () => {
-    const [pRes, sRes, cRes, fRes] = await Promise.all([
+    const [pRes, sRes, cRes, fRes, bRes] = await Promise.all([
       supabase.from('products').select('id, name').eq('is_active', true).order('name'),
       supabase.from('journey_stages').select('id, name, product_id').order('position'),
       supabase.from('profiles').select('id, full_name'),
       supabase.from('form_templates').select('id, name').order('name'),
+      supabase.from('bonus_catalog').select('id, name, unit, default_validity_days'),
     ]);
     setProducts(pRes.data || []);
     setStages(sRes.data || []);
     setCsms(cRes.data || []);
     setFormTemplates(fRes.data || []);
+    setBonusCatalog(bRes.data || []);
   }, []);
 
   useEffect(() => { fetchRules(); fetchRefData(); }, [fetchRules, fetchRefData]);
@@ -722,6 +731,146 @@ export function AutomationRulesTab() {
             <div className="space-y-1"><Label className="text-xs">Título</Label><Input value={action.config.title || ''} onChange={e => updateConfig({ title: e.target.value })} /></div>
             <div className="space-y-1"><Label className="text-xs">Descrição</Label><Textarea value={action.config.description || ''} onChange={e => updateConfig({ description: e.target.value })} rows={2} /></div>
             <div className="space-y-1"><Label className="text-xs">Prazo (dias)</Label><Input type="number" value={action.config.due_days || ''} onChange={e => updateConfig({ due_days: e.target.value })} /></div>
+          </div>
+        );
+
+      case 'change_csm': {
+        const method = action.config.method || 'fixed';
+        const toggleCsmInList = (csmId: string) => {
+          const current: string[] = action.config.eligible_csm_ids || [];
+          const updated = current.includes(csmId) ? current.filter((id: string) => id !== csmId) : [...current, csmId];
+          updateConfig({ eligible_csm_ids: updated });
+        };
+        return (
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Método de atribuição</Label>
+              <Select value={method} onValueChange={v => updateConfig({ method: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="fixed">CSM fixo</SelectItem>
+                  <SelectItem value="least_clients">Menor carteira</SelectItem>
+                  <SelectItem value="round_robin">Round-robin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {method === 'fixed' && (
+              <div className="space-y-1">
+                <Label className="text-xs">CSM</Label>
+                <Select value={action.config.fixed_csm_id || ''} onValueChange={v => updateConfig({ fixed_csm_id: v })}>
+                  <SelectTrigger><SelectValue placeholder="Selecione o CSM" /></SelectTrigger>
+                  <SelectContent>{csms.map(c => <SelectItem key={c.id} value={c.id}>{c.full_name || 'Sem nome'}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            )}
+            {(method === 'least_clients' || method === 'round_robin') && (
+              <div className="space-y-1">
+                <Label className="text-xs">CSMs elegíveis</Label>
+                <div className="border rounded-md p-2 space-y-1 max-h-40 overflow-y-auto">
+                  {csms.map(c => (
+                    <label key={c.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 p-1 rounded">
+                      <input type="checkbox" checked={(action.config.eligible_csm_ids || []).includes(c.id)} onChange={() => toggleCsmInList(c.id)} className="rounded" />
+                      {c.full_name || 'Sem nome'}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      case 'create_contract':
+        return (
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Produto *</Label>
+              <Select value={action.config.product_id || ''} onValueChange={v => updateConfig({ product_id: v })}>
+                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectContent>{products.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Status inicial</Label>
+              <Select value={action.config.status || 'pendente'} onValueChange={v => updateConfig({ status: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ativo">Ativo</SelectItem>
+                  <SelectItem value="pendente">Pendente</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1"><Label className="text-xs">Valor total</Label><Input type="number" value={action.config.value || ''} onChange={e => updateConfig({ value: e.target.value })} placeholder="0,00" /></div>
+            <div className="space-y-1"><Label className="text-xs">Valor mensal</Label><Input type="number" value={action.config.monthly_value || ''} onChange={e => updateConfig({ monthly_value: e.target.value })} placeholder="0,00" /></div>
+            <div className="space-y-1"><Label className="text-xs">Dias até início (após trigger)</Label><Input type="number" value={action.config.start_days || ''} onChange={e => updateConfig({ start_days: e.target.value })} placeholder="0" /></div>
+            <div className="space-y-1"><Label className="text-xs">Duração (dias)</Label><Input type="number" value={action.config.duration_days || ''} onChange={e => updateConfig({ duration_days: e.target.value })} placeholder="365" /></div>
+            <div className="space-y-1"><Label className="text-xs">Dias até renovação</Label><Input type="number" value={action.config.renewal_days || ''} onChange={e => updateConfig({ renewal_days: e.target.value })} placeholder="365" /></div>
+          </div>
+        );
+
+      case 'cancel_contract':
+        return (
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Ação</Label>
+              <Select value={action.config.cancel_action || 'cancelado'} onValueChange={v => updateConfig({ cancel_action: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cancelado">Cancelar</SelectItem>
+                  <SelectItem value="encerrado">Encerrar</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Produto do contrato alvo</Label>
+              <Select value={action.config.target_product_id || ''} onValueChange={v => updateConfig({ target_product_id: v })}>
+                <SelectTrigger><SelectValue placeholder="Selecione o produto" /></SelectTrigger>
+                <SelectContent>{products.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+          </div>
+        );
+
+      case 'set_product':
+        return (
+          <div className="space-y-1">
+            <Label className="text-xs">Produto (Jornada) destino</Label>
+            <Select value={action.config.product_id || ''} onValueChange={v => updateConfig({ product_id: v })}>
+              <SelectTrigger><SelectValue placeholder="Selecione o produto" /></SelectTrigger>
+              <SelectContent>{products.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+        );
+
+      case 'add_note':
+        return (
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Tipo da nota</Label>
+              <Select value={action.config.note_type || 'observacao'} onValueChange={v => updateConfig({ note_type: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="observacao">Observação</SelectItem>
+                  <SelectItem value="ponto_atencao">Ponto de Atenção</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1"><Label className="text-xs">Texto da nota *</Label><Textarea value={action.config.content || ''} onChange={e => updateConfig({ content: e.target.value })} rows={3} placeholder="Texto da nota..." /></div>
+          </div>
+        );
+
+      case 'grant_bonus':
+        return (
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Item do catálogo *</Label>
+              <Select value={action.config.catalog_item_id || ''} onValueChange={v => updateConfig({ catalog_item_id: v })}>
+                <SelectTrigger><SelectValue placeholder="Selecione o item" /></SelectTrigger>
+                <SelectContent>{bonusCatalog.map(b => <SelectItem key={b.id} value={b.id}>{b.name} ({b.unit})</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1"><Label className="text-xs">Quantidade</Label><Input type="number" value={action.config.quantity || ''} onChange={e => updateConfig({ quantity: e.target.value })} placeholder="1" /></div>
+            <div className="space-y-1"><Label className="text-xs">Validade (dias)</Label><Input type="number" value={action.config.validity_days || ''} onChange={e => updateConfig({ validity_days: e.target.value })} placeholder="90" /></div>
           </div>
         );
 
