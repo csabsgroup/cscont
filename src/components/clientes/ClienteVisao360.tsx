@@ -7,6 +7,7 @@ import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { CustomFieldsDisplay } from './CustomFieldsDisplay';
+import { StatusDropdown } from './StatusDropdown';
 
 interface Props {
   office: any;
@@ -18,10 +19,12 @@ interface Props {
   stageName: string | null;
   contacts: any[];
   onNavigateTab: (tab: string) => void;
+  onStatusSelect?: (newStatus: string) => void;
+  canEditStatus?: boolean;
 }
 
 export function ClienteVisao360({
-  office, health, contracts, meetings, actionPlans, csmProfile, stageName, contacts, onNavigateTab,
+  office, health, contracts, meetings, actionPlans, csmProfile, stageName, contacts, onNavigateTab, onStatusSelect, canEditStatus,
 }: Props) {
   const [showMore, setShowMore] = useState(false);
 
@@ -53,7 +56,7 @@ export function ClienteVisao360({
   };
 
   const infoFields = [
-    { label: 'Status', value: statusLabels[office.status] || office.status },
+    { label: 'Status', value: null, isStatus: true },
     { label: 'CSM', value: csmProfile?.full_name || '—' },
     { label: 'Etapa Jornada', value: stageName || '—' },
     { label: 'Produto', value: office.products?.name || '—' },
@@ -130,10 +133,16 @@ export function ClienteVisao360({
       {/* Info fields grid */}
       <div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {infoFields.map((f, i) => (
+          {infoFields.map((f: any, i: number) => (
             <Card key={i} className="p-3">
               <div className="text-[10px] text-muted-foreground uppercase font-medium tracking-wider">{f.label}</div>
-              <div className="text-sm font-semibold text-foreground mt-0.5 truncate">{f.value}</div>
+              <div className="mt-0.5">
+                {f.isStatus && onStatusSelect ? (
+                  <StatusDropdown status={office.status} onStatusSelect={onStatusSelect} readonly={!canEditStatus} />
+                ) : (
+                  <div className="text-sm font-semibold text-foreground truncate">{f.value}</div>
+                )}
+              </div>
             </Card>
           ))}
           {/* Custom fields (body position) */}

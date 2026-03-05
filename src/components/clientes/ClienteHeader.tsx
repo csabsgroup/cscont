@@ -2,7 +2,7 @@ import { useRef, useState, useEffect } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { StatusBadge } from './StatusBadge';
+import { StatusDropdown } from './StatusDropdown';
 import { HealthScoreBars } from './HealthScoreBars';
 import { CustomFieldsDisplay } from './CustomFieldsDisplay';
 import { ArrowLeft, Pencil, MoreVertical, UserCog, RefreshCw, StickyNote, Eye, Camera, Phone, Trash2 } from 'lucide-react';
@@ -52,6 +52,8 @@ interface ClienteHeaderProps {
   csmProfile?: { full_name: string | null; avatar_url: string | null } | null;
   onReassignCSM?: () => void;
   onChangeStatus?: () => void;
+  onStatusSelect?: (newStatus: string) => void;
+  canEditStatus?: boolean;
   onQuickNote?: () => void;
   onLogoUpdated?: () => void;
   onPreviewOpen?: () => void;
@@ -61,7 +63,7 @@ interface ClienteHeaderProps {
 
 export function ClienteHeader({
   office, onEdit, onDelete, health, stageName, csmProfile,
-  onReassignCSM, onChangeStatus, onQuickNote, onLogoUpdated, onPreviewOpen, onWhatsApp, contracts,
+  onReassignCSM, onChangeStatus, onStatusSelect, canEditStatus, onQuickNote, onLogoUpdated, onPreviewOpen, onWhatsApp, contracts,
 }: ClienteHeaderProps) {
   const navigate = useNavigate();
   const { isViewer, isClient, isAdmin, isManager } = useAuth();
@@ -165,7 +167,9 @@ export function ClienteHeader({
           </div>
           {/* Line 2: Configurable badges */}
           <div className="flex items-center gap-2 mt-1 flex-wrap">
-            {isFieldVisible('header_status') && <StatusBadge status={office.status} />}
+            {isFieldVisible('header_status') && onStatusSelect && (
+              <StatusDropdown status={office.status} onStatusSelect={onStatusSelect} readonly={!canEditStatus} />
+            )}
             {isFieldVisible('header_health') && health && <HealthScoreBars score={health.score} band={health.band} />}
             {badgeDefs.filter(b => !['header_status', 'header_health'].includes(b.key)).map(b => {
               if (!isFieldVisible(b.key, ['header_product', 'header_csm'].includes(b.key))) return null;
@@ -198,9 +202,6 @@ export function ClienteHeader({
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={onReassignCSM}>
                 <UserCog className="mr-2 h-4 w-4" />Reatribuir CSM
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={onChangeStatus}>
-                <RefreshCw className="mr-2 h-4 w-4" />Alterar Status
               </DropdownMenuItem>
               <DropdownMenuItem onClick={onQuickNote}>
                 <StickyNote className="mr-2 h-4 w-4" />Nota Rápida
