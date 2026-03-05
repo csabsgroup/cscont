@@ -1,0 +1,1 @@
+ALTER TABLE public.profiles ADD COLUMN product_id uuid REFERENCES public.products(id);

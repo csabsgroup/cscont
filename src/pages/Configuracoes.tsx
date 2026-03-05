@@ -221,7 +221,9 @@ function JourneyStagesTab() {
 // ─── Users Tab ───────────────────────────────────────────────
 function UsersTab() {
   const [users, setUsers] = useState<any[]>([]);
+  const [authMeta, setAuthMeta] = useState<Record<string, any>>({});
   const [offices, setOffices] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -231,31 +233,46 @@ function UsersTab() {
   const [newRole, setNewRole] = useState('csm');
   const [newOfficeId, setNewOfficeId] = useState('');
 
+  // Edit state
+  const [editOpen, setEditOpen] = useState(false);
+  const [editUser, setEditUser] = useState<any>(null);
+  const [editTab, setEditTab] = useState<'dados' | 'seguranca' | 'status'>('dados');
+  const [editName, setEditName] = useState('');
+  const [editRole, setEditRole] = useState('');
+  const [editProductId, setEditProductId] = useState('');
+  const [editPassword, setEditPassword] = useState('');
+  const [editPasswordConfirm, setEditPasswordConfirm] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const { user: currentUser } = useAuth();
+
   const fetchUsers = useCallback(async () => {
     setLoading(true);
-    const [pRes, rRes, oRes] = await Promise.all([
+    const [pRes, rRes, oRes, prodRes] = await Promise.all([
       supabase.from('profiles').select('*').order('full_name'),
       supabase.from('user_roles').select('*'),
       supabase.from('offices').select('id, name').order('name'),
+      supabase.from('products').select('id, name').eq('is_active', true).order('name'),
     ]);
     const roleMap = new Map((rRes.data || []).map(r => [r.user_id, r.role]));
     setUsers((pRes.data || []).map(p => ({ ...p, role: roleMap.get(p.id) || 'sem role' })));
     setOffices(oRes.data || []);
+    setProducts(prodRes.data || []);
+
+    // Fetch auth metadata (email, banned status)
+    const { data: metaResult } = await supabase.functions.invoke('admin-manage-user', {
+      body: { action: 'list' },
+    });
+    if (metaResult?.users) {
+      const map: Record<string, any> = {};
+      metaResult.users.forEach((u: any) => { map[u.id] = u; });
+      setAuthMeta(map);
+    }
+
     setLoading(false);
   }, []);
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
-
-  const updateRole = async (userId: string, newRoleVal: string) => {
-    const { data: existing } = await supabase.from('user_roles').select('id').eq('user_id', userId).single();
-    if (existing) {
-      const { error } = await supabase.from('user_roles').update({ role: newRoleVal as any }).eq('user_id', userId);
-      if (error) toast.error('Erro: ' + error.message); else { toast.success('Role atualizado!'); fetchUsers(); }
-    } else {
-      const { error } = await supabase.from('user_roles').insert({ user_id: userId, role: newRoleVal as any });
-      if (error) toast.error('Erro: ' + error.message); else { toast.success('Role atribuído!'); fetchUsers(); }
-    }
-  };
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -274,8 +291,82 @@ function UsersTab() {
     setCreating(false);
   };
 
+  const openEditDialog = (u: any) => {
+    setEditUser(u);
+    setEditName(u.full_name || '');
+    setEditRole(u.role || 'csm');
+    setEditProductId(u.product_id || '');
+    setEditPassword('');
+    setEditPasswordConfirm('');
+    setEditTab('dados');
+    setConfirmDelete(false);
+    setEditOpen(true);
+  };
+
+  const handleSaveProfile = async () => {
+    setSaving(true);
+    const { data, error } = await supabase.functions.invoke('admin-manage-user', {
+      body: { action: 'update_profile', user_id: editUser.id, full_name: editName, role: editRole, product_id: editProductId === 'none' ? null : editProductId || null },
+    });
+    if (error || data?.error) {
+      toast.error(data?.error || error?.message || 'Erro ao atualizar');
+    } else {
+      toast.success('Perfil atualizado!');
+      setEditOpen(false);
+      fetchUsers();
+    }
+    setSaving(false);
+  };
+
+  const handleResetPassword = async () => {
+    if (editPassword !== editPasswordConfirm) { toast.error('As senhas não coincidem'); return; }
+    if (editPassword.length < 6) { toast.error('A senha deve ter pelo menos 6 caracteres'); return; }
+    setSaving(true);
+    const { data, error } = await supabase.functions.invoke('admin-manage-user', {
+      body: { action: 'update_password', user_id: editUser.id, password: editPassword },
+    });
+    if (error || data?.error) {
+      toast.error(data?.error || error?.message || 'Erro ao alterar senha');
+    } else {
+      toast.success('Senha alterada com sucesso!');
+      setEditPassword(''); setEditPasswordConfirm('');
+    }
+    setSaving(false);
+  };
+
+  const handleToggleStatus = async () => {
+    const banned = authMeta[editUser?.id]?.banned;
+    setSaving(true);
+    const { data, error } = await supabase.functions.invoke('admin-manage-user', {
+      body: { action: banned ? 'reactivate' : 'deactivate', user_id: editUser.id },
+    });
+    if (error || data?.error) {
+      toast.error(data?.error || error?.message || 'Erro');
+    } else {
+      toast.success(banned ? 'Usuário reativado!' : 'Usuário desativado!');
+      fetchUsers();
+    }
+    setSaving(false);
+  };
+
+  const handleDeleteUser = async () => {
+    setSaving(true);
+    const { data, error } = await supabase.functions.invoke('admin-manage-user', {
+      body: { action: 'delete', user_id: editUser.id },
+    });
+    if (error || data?.error) {
+      toast.error(data?.error || error?.message || 'Erro ao excluir');
+    } else {
+      toast.success('Usuário excluído!');
+      setEditOpen(false);
+      fetchUsers();
+    }
+    setSaving(false);
+  };
+
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>;
   const roleLabels: Record<string, string> = { admin: 'Admin', manager: 'Gestor', csm: 'CSM', viewer: 'Viewer', client: 'Cliente' };
+  const isBanned = (id: string) => authMeta[id]?.banned;
 
   return (
     <div className="space-y-4">
@@ -285,24 +376,48 @@ function UsersTab() {
       </div>
       <Card>
         <Table>
-          <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Telefone</TableHead><TableHead>Role</TableHead></TableRow></TableHeader>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Nome</TableHead>
+              <TableHead>E-mail</TableHead>
+              <TableHead>Role</TableHead>
+              <TableHead>Produto</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead></TableHead>
+            </TableRow>
+          </TableHeader>
           <TableBody>
-            {users.map(u => (
-              <TableRow key={u.id}>
-                <TableCell className="font-medium">{u.full_name || 'Sem nome'}</TableCell>
-                <TableCell className="text-muted-foreground">{u.phone || '—'}</TableCell>
-                <TableCell>
-                  <Select value={u.role} onValueChange={(val) => updateRole(u.id, val)}>
-                    <SelectTrigger className="w-[140px] h-8"><SelectValue /></SelectTrigger>
-                    <SelectContent>{Object.entries(roleLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
-                  </Select>
-                </TableCell>
-              </TableRow>
-            ))}
+            {users.map(u => {
+              const meta = authMeta[u.id];
+              const productName = products.find(p => p.id === u.product_id)?.name;
+              return (
+                <TableRow key={u.id}>
+                  <TableCell className="font-medium">{u.full_name || 'Sem nome'}</TableCell>
+                  <TableCell className="text-muted-foreground text-sm">{meta?.email || '—'}</TableCell>
+                  <TableCell>
+                    <Badge variant={u.role === 'admin' ? 'default' : 'secondary'}>
+                      {roleLabels[u.role] || u.role}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-sm">{productName || '—'}</TableCell>
+                  <TableCell>
+                    <Badge variant={meta?.banned ? 'destructive' : 'default'}>
+                      {meta?.banned ? 'Inativo' : 'Ativo'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Button size="sm" variant="ghost" onClick={() => openEditDialog(u)}>
+                      <Edit2 className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </Card>
 
+      {/* Create Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Novo Usuário</DialogTitle></DialogHeader>
@@ -330,6 +445,139 @@ function UsersTab() {
             )}
             <Button type="submit" className="w-full" disabled={creating}>{creating ? 'Criando...' : 'Criar Usuário'}</Button>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Editar Usuário — {editUser?.full_name || 'Sem nome'}</DialogTitle>
+          </DialogHeader>
+
+          {/* Tabs */}
+          <div className="flex gap-1 border-b border-border pb-0">
+            {(['dados', 'seguranca', 'status'] as const).map(tab => (
+              <button
+                key={tab}
+                onClick={() => setEditTab(tab)}
+                className={cn(
+                  'px-3 py-2 text-sm font-medium border-b-2 transition-colors -mb-px',
+                  editTab === tab
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                )}
+              >
+                {tab === 'dados' ? 'Dados' : tab === 'seguranca' ? 'Segurança' : 'Status'}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab: Dados */}
+          {editTab === 'dados' && (
+            <div className="space-y-4 pt-2">
+              <div className="space-y-2">
+                <Label>Nome</Label>
+                <Input value={editName} onChange={e => setEditName(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>E-mail</Label>
+                <Input value={authMeta[editUser?.id]?.email || ''} disabled className="opacity-60" />
+                <p className="text-xs text-muted-foreground">O e-mail não pode ser alterado</p>
+              </div>
+              <div className="space-y-2">
+                <Label>Role</Label>
+                <Select value={editRole} onValueChange={setEditRole}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(roleLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              {editRole === 'csm' && (
+                <div className="space-y-2">
+                  <Label>Produto do CSM</Label>
+                  <Select value={editProductId || 'none'} onValueChange={setEditProductId}>
+                    <SelectTrigger><SelectValue placeholder="Nenhum" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhum</SelectItem>
+                      {products.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Define de qual produto este CSM é responsável</p>
+                </div>
+              )}
+              <Button onClick={handleSaveProfile} disabled={saving} className="w-full">
+                {saving ? 'Salvando...' : 'Salvar Alterações'}
+              </Button>
+            </div>
+          )}
+
+          {/* Tab: Segurança */}
+          {editTab === 'seguranca' && (
+            <div className="space-y-4 pt-2">
+              <div className="space-y-2">
+                <Label>Nova Senha</Label>
+                <Input type="password" value={editPassword} onChange={e => setEditPassword(e.target.value)} placeholder="Mínimo 6 caracteres" />
+              </div>
+              <div className="space-y-2">
+                <Label>Confirmar Senha</Label>
+                <Input type="password" value={editPasswordConfirm} onChange={e => setEditPasswordConfirm(e.target.value)} placeholder="Repita a senha" />
+              </div>
+              <Button onClick={handleResetPassword} disabled={saving || !editPassword} className="w-full">
+                {saving ? 'Alterando...' : 'Redefinir Senha'}
+              </Button>
+            </div>
+          )}
+
+          {/* Tab: Status */}
+          {editTab === 'status' && editUser && (
+            <div className="space-y-6 pt-2">
+              <div className="flex items-center justify-between p-4 rounded-lg border border-border">
+                <div>
+                  <p className="text-sm font-medium">Status da Conta</p>
+                  <p className="text-xs text-muted-foreground">
+                    {isBanned(editUser.id) ? 'Este usuário está desativado e não consegue fazer login' : 'Este usuário está ativo'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Badge variant={isBanned(editUser.id) ? 'destructive' : 'default'}>
+                    {isBanned(editUser.id) ? 'Inativo' : 'Ativo'}
+                  </Badge>
+                  <Button
+                    size="sm"
+                    variant={isBanned(editUser.id) ? 'default' : 'outline'}
+                    onClick={handleToggleStatus}
+                    disabled={saving || editUser.id === currentUser?.id}
+                  >
+                    {isBanned(editUser.id) ? 'Reativar' : 'Desativar'}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="border border-destructive/30 rounded-lg p-4 space-y-3">
+                <p className="text-sm font-medium text-destructive">Zona de Perigo</p>
+                <p className="text-xs text-muted-foreground">Excluir o usuário é irreversível. Todos os dados associados serão removidos.</p>
+                {!confirmDelete ? (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => setConfirmDelete(true)}
+                    disabled={editUser.id === currentUser?.id}
+                  >
+                    <Trash2 className="mr-1 h-4 w-4" /> Excluir Usuário
+                  </Button>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="destructive" onClick={handleDeleteUser} disabled={saving}>
+                      {saving ? 'Excluindo...' : 'Confirmar Exclusão'}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(false)}>Cancelar</Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
