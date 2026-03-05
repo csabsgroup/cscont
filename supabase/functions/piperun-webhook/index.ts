@@ -15,20 +15,7 @@ function jsonResponse(data: any, status = 200) {
   });
 }
 
-function isWonDeal(deal: any): boolean {
-  if (!deal) return false;
-  if (deal.won === true) return true;
-  const status = String(deal.status || '').toLowerCase().trim();
-  if (['won', 'ganho', 'ganha'].includes(status)) return true;
-  const statusLabel = String(deal.status_label || '').toLowerCase().trim();
-  if (['ganho', 'ganha', 'won'].includes(statusLabel)) return true;
-  // If webhook is configured for "oportunidade ganha", status may be absent
-  if (!deal.status && !deal.won && deal.id) {
-    console.log('[PIPERUN-WEBHOOK] No status field, assuming won (webhook configured for won deals)');
-    return true;
-  }
-  return false;
-}
+// Status validation removed — trigger is now "proposta assinada" (signed contract), not "deal won"
 
 function extractDeal(body: any): any {
   // Try different formats Piperun may send
@@ -195,7 +182,7 @@ async function processAndCreateOffice(
     user_id: userId,
     entity_type: "office",
     entity_id: officeId,
-    action: "piperun_webhook_import",
+    action: "piperun_contract_signed_import",
     details: { deal_id: dealId, product_id: resolvedProductId },
   }).catch(() => {});
 
@@ -250,14 +237,8 @@ Deno.serve(async (req) => {
     console.log('[PIPERUN-WEBHOOK] Deal pipeline_id:', deal.pipeline_id);
     console.log('[PIPERUN-WEBHOOK] Deal stage_id:', deal.stage_id);
 
-    // Validate status (flexible)
-    if (!isWonDeal(deal)) {
-      const msg = `Deal não é ganho (status=${deal.status}, won=${deal.won}), ignorando`;
-      console.log('[PIPERUN-WEBHOOK]', msg);
-      if (webhookLogId) await supabase.from('webhook_logs').update({ error: msg }).eq('id', webhookLogId);
-      return jsonResponse({ success: false, message: msg });
-    }
-    console.log('[PIPERUN-WEBHOOK] Status check passed');
+    // No status validation — webhook is triggered by "proposta assinada" event
+    console.log('[PIPERUN-WEBHOOK] Accepting deal (trigger: proposta assinada)');
 
     // Fetch integration settings
     const { data: settings } = await supabase
@@ -351,7 +332,8 @@ Deno.serve(async (req) => {
     if (proposalData) {
       try {
         const res = await piperunGet(`/signatures?proposal_id=${proposalData.id}`, token);
-        signatureData = (res.data || [])[0];
+        const sigs = res.data || [];
+        signatureData = sigs.find((s: any) => s.status === 'signed' || s.status === 'assinado') || sigs[0] || null;
       } catch (e) { /* ok */ }
     }
 

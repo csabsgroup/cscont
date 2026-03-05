@@ -277,7 +277,7 @@ async function fetchFullSourceData(dealId: number | string, token: string): Prom
     try {
       const sigRes = await piperunGet(`/signatures?proposal_id=${proposalData.id}`, token);
       const sigs = sigRes.data || [];
-      signatureData = sigs[0] || null;
+      signatureData = sigs.find((s: any) => s.status === 'signed' || s.status === 'assinado') || sigs[0] || null;
     } catch (e) { /* no signature, ok */ }
   }
 
@@ -613,7 +613,7 @@ Deno.serve(async (req) => {
         let samplePath = '/deals?show=1';
         if (pipeline_id) samplePath += `&pipeline_id=${pipeline_id}`;
         if (stage_id) samplePath += `&stage_id=${stage_id}`;
-        samplePath += '&status=won&with=person,company,customFields';
+        samplePath += '&with=person,company,customFields';
         
         const sampleRes = await piperunGet(samplePath, token);
         const sampleDeal = (sampleRes.data || [])[0];
@@ -652,14 +652,9 @@ Deno.serve(async (req) => {
       const { pipeline_id, stage_id } = body;
       if (!pipeline_id || !stage_id) throw new Error("pipeline_id and stage_id are required");
 
-      let path = `/deals?pipeline_id=${pipeline_id}&stage_id=${stage_id}&status=won&show=100`;
+      let path = `/deals?pipeline_id=${pipeline_id}&stage_id=${stage_id}&show=100`;
       const result = await piperunGet(path, token);
-      let deals = result.data || [];
-      // Filter won in code as fallback
-      deals = deals.filter((d: any) => {
-        const s = String(d.status || '').toLowerCase().trim();
-        return ['won', 'ganho', 'ganha'].includes(s) || d.won === true;
-      });
+      const deals = result.data || [];
 
       // Check which are already imported
       const { data: existing } = await supabase.from("offices").select("piperun_deal_id").not("piperun_deal_id", "is", null);
@@ -688,13 +683,9 @@ Deno.serve(async (req) => {
       const { pipeline_id, stage_id, field_mappings } = body;
       if (!pipeline_id || !stage_id) throw new Error("pipeline_id and stage_id are required");
 
-      let path = `/deals?pipeline_id=${pipeline_id}&stage_id=${stage_id}&status=won&show=100`;
+      let path = `/deals?pipeline_id=${pipeline_id}&stage_id=${stage_id}&show=100`;
       const result = await piperunGet(path, token);
-      let deals = result.data || [];
-      deals = deals.filter((d: any) => {
-        const s = String(d.status || '').toLowerCase().trim();
-        return ['won', 'ganho', 'ganha'].includes(s) || d.won === true;
-      });
+      const deals = result.data || [];
 
       const { data: existing } = await supabase.from("offices").select("piperun_deal_id").not("piperun_deal_id", "is", null);
       const existingIds = new Set((existing || []).map((o: any) => o.piperun_deal_id));
