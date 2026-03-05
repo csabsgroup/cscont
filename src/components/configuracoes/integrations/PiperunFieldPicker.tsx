@@ -3,7 +3,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Search, Circle } from 'lucide-react';
-import { cn } from '@/lib/utils';
 
 interface PiperunField {
   key: string;
@@ -17,9 +16,10 @@ interface FieldCategory {
 }
 
 const FIELD_CATEGORIES: FieldCategory[] = [
-  { label: 'Deal (Negócio)', prefix: '' },
-  { label: 'Pessoa (Contato)', prefix: 'person.' },
-  { label: 'Organização (Empresa)', prefix: 'organization.' },
+  { label: '📋 Deal (Negócio)', prefix: '' },
+  { label: '👤 Contato (Pessoa)', prefix: 'person.' },
+  { label: '🏢 Empresa (Organização)', prefix: 'organization.' },
+  { label: '📄 Proposta', prefix: 'proposal.' },
 ];
 
 const FALLBACK_FIELDS: PiperunField[] = [
@@ -77,12 +77,14 @@ const FALLBACK_FIELDS: PiperunField[] = [
   // ── Organização (Empresa) ──
   { key: 'organization.id', label: 'ID da organização', example_value: '55001' },
   { key: 'organization.name', label: 'Nome da organização', example_value: 'Empresa XYZ' },
+  { key: 'organization.corporate_name', label: 'Razão social', example_value: 'XYZ Ltda' },
   { key: 'organization.cnpj', label: 'CNPJ', example_value: '12.345.678/0001-99' },
   { key: 'organization.email', label: 'Email da organização', example_value: 'contato@xyz.com' },
   { key: 'organization.phone', label: 'Telefone da organização', example_value: '1133334444' },
   { key: 'organization.mobile', label: 'Celular da organização', example_value: '' },
-  { key: 'organization.website', label: 'Website', example_value: 'https://xyz.com' },
+  { key: 'organization.website', label: 'Site', example_value: 'https://xyz.com' },
   { key: 'organization.segment', label: 'Segmento', example_value: 'Contabilidade' },
+  { key: 'organization.size', label: 'Porte', example_value: 'Médio' },
   { key: 'organization.address', label: 'Endereço', example_value: 'Rua Augusta 500' },
   { key: 'organization.neighborhood', label: 'Bairro', example_value: 'Consolação' },
   { key: 'organization.city', label: 'Cidade', example_value: 'São Paulo' },
@@ -99,6 +101,17 @@ const FALLBACK_FIELDS: PiperunField[] = [
   { key: 'organization.created_at', label: 'Organização criada em', example_value: '2025-10-01' },
   { key: 'organization.updated_at', label: 'Organização atualizada em', example_value: '2026-01-20' },
   { key: 'organization.custom_fields', label: 'Campos custom (organização)', example_value: '{}' },
+
+  // ── Proposta ──
+  { key: 'proposal.number', label: 'Número da proposta', example_value: 'P-001' },
+  { key: 'proposal.value', label: 'Valor da proposta', example_value: '15000' },
+  { key: 'proposal.status', label: 'Status da proposta', example_value: 'accepted' },
+  { key: 'proposal.sent_at', label: 'Data de envio', example_value: '2026-01-15' },
+  { key: 'proposal.accepted_at', label: 'Data de aceite', example_value: '2026-02-01' },
+  { key: 'proposal.payment_conditions', label: 'Condições de pagamento', example_value: '30/60/90' },
+  { key: 'proposal.items', label: 'Itens/Produtos', example_value: '[]' },
+  { key: 'proposal.validity', label: 'Validade da proposta', example_value: '30 dias' },
+  { key: 'proposal.pdf_url', label: 'PDF do contrato/proposta (baixar e salvar no 360)', example_value: '' },
 ];
 
 interface Props {
@@ -110,7 +123,7 @@ interface Props {
 
 let cachedFields: PiperunField[] | null = null;
 let cacheTime = 0;
-const CACHE_TTL = 60 * 60 * 1000; // 1 hour
+const CACHE_TTL = 60 * 60 * 1000;
 
 export function PiperunFieldPicker({ open, onClose, onSelect, isConnected }: Props) {
   const [fields, setFields] = useState<PiperunField[]>(FALLBACK_FIELDS);
@@ -149,6 +162,7 @@ export function PiperunFieldPicker({ open, onClose, onSelect, isConnected }: Pro
   );
 
   const getCategoryForField = (key: string): FieldCategory => {
+    if (key.startsWith('proposal.')) return FIELD_CATEGORIES[3];
     if (key.startsWith('organization.')) return FIELD_CATEGORIES[2];
     if (key.startsWith('person.')) return FIELD_CATEGORIES[1];
     return FIELD_CATEGORIES[0];
@@ -180,7 +194,10 @@ export function PiperunFieldPicker({ open, onClose, onSelect, isConnected }: Pro
             <p className="text-sm text-muted-foreground text-center py-4">Nenhum campo encontrado</p>
           ) : groupedFields.map(group => (
             <div key={group.prefix}>
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-3 pt-3 pb-1">{group.label}</p>
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-3 pt-3 pb-1 sticky top-0 bg-background z-10">
+                {group.label}
+                <span className="ml-1 text-[10px] font-normal">({group.fields.length})</span>
+              </p>
               {group.fields.map(f => (
                 <button
                   key={f.key}
@@ -190,7 +207,7 @@ export function PiperunFieldPicker({ open, onClose, onSelect, isConnected }: Pro
                   <Circle className="h-2.5 w-2.5 text-destructive fill-destructive flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <span className="text-sm font-medium">{f.label}</span>
-                    <span className="text-xs text-muted-foreground ml-2">{f.key}</span>
+                    <span className="text-[10px] text-muted-foreground ml-2">{f.key}</span>
                   </div>
                   {f.example_value && (
                     <span className="text-xs text-muted-foreground truncate max-w-[120px]">{f.example_value}</span>

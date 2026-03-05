@@ -296,6 +296,65 @@ Deno.serve(async (req) => {
 
     // ========== listFields ==========
     if (action === "listFields") {
+      const FIELD_LABELS: Record<string, string> = {
+        // Deal
+        id: 'ID da oportunidade', hash: 'Hash', title: 'Título', value: 'Valor total',
+        monthly_value: 'Valor mensal', status: 'Status', 'pipeline.name': 'Funil',
+        'pipeline.id': 'ID do Funil', 'stage.name': 'Etapa', 'stage.id': 'ID da Etapa',
+        moved_at: 'Movido em', created_at: 'Criado em', updated_at: 'Atualizado em',
+        won_at: 'Ganho em', lost_at: 'Perdido em', close_forecast: 'Previsão de fechamento',
+        tags: 'Tags', observation: 'Observações', origin: 'Origem',
+        'owner.name': 'Responsável (nome)', 'owner.email': 'Responsável (email)',
+        custom_fields: 'Campos customizados (JSON)', deal_value: 'Valor da oportunidade',
+        expected_close_date: 'Data prevista de fechamento', pipeline_id: 'Funil',
+        stage_id: 'Etapa do funil', owner_id: 'Responsável', channel: 'Canal', campaign: 'Campanha',
+        // Person
+        'person.id': 'ID do contato', 'person.name': 'Nome do contato',
+        'person.email': 'Email do contato', 'person.phone': 'Telefone do contato',
+        'person.mobile': 'Celular do contato', 'person.mobile_phone': 'Celular do contato',
+        'person.cpf': 'CPF do contato', 'person.birthday': 'Aniversário',
+        'person.birth_date': 'Data de nascimento', 'person.city': 'Cidade',
+        'person.state': 'Estado', 'person.cep': 'CEP', 'person.zip_code': 'CEP',
+        'person.address': 'Endereço', 'person.neighborhood': 'Bairro',
+        'person.country': 'País', 'person.facebook': 'Facebook',
+        'person.linkedin': 'LinkedIn', 'person.instagram': 'Instagram',
+        'person.twitter': 'Twitter/X', 'person.whatsapp': 'WhatsApp',
+        'person.website': 'Website', 'person.company_name': 'Nome da empresa (pessoa)',
+        'person.role': 'Cargo', 'person.position': 'Cargo',
+        'person.created_at': 'Pessoa criada em', 'person.updated_at': 'Pessoa atualizada em',
+        'person.observation': 'Observações da pessoa',
+        'person.custom_fields': 'Campos custom (pessoa)',
+        // Organization
+        'organization.id': 'ID da organização', 'organization.name': 'Nome da organização',
+        'organization.corporate_name': 'Razão social', 'organization.cnpj': 'CNPJ',
+        'organization.email': 'Email da organização', 'organization.phone': 'Telefone da organização',
+        'organization.mobile': 'Celular da organização', 'organization.website': 'Site',
+        'organization.segment': 'Segmento', 'organization.address': 'Endereço',
+        'organization.neighborhood': 'Bairro', 'organization.city': 'Cidade',
+        'organization.state': 'Estado', 'organization.cep': 'CEP', 'organization.zip_code': 'CEP',
+        'organization.country': 'País', 'organization.employee_count': 'Qtd funcionários',
+        'organization.number_of_employees': 'Nº funcionários',
+        'organization.annual_revenue': 'Faturamento anual', 'organization.size': 'Porte',
+        'organization.facebook': 'Facebook', 'organization.linkedin': 'LinkedIn',
+        'organization.instagram': 'Instagram', 'organization.twitter': 'Twitter/X',
+        'organization.observation': 'Observações da organização',
+        'organization.created_at': 'Organização criada em',
+        'organization.updated_at': 'Organização atualizada em',
+        'organization.custom_fields': 'Campos custom (organização)',
+        // Proposal
+        'proposal.id': 'ID da proposta', 'proposal.number': 'Número da proposta',
+        'proposal.value': 'Valor da proposta', 'proposal.status': 'Status da proposta',
+        'proposal.sent_at': 'Data de envio', 'proposal.accepted_at': 'Data de aceite',
+        'proposal.payment_conditions': 'Condições de pagamento',
+        'proposal.items': 'Itens/Produtos', 'proposal.validity': 'Validade da proposta',
+        'proposal.created_at': 'Proposta criada em', 'proposal.updated_at': 'Proposta atualizada em',
+        'proposal.pdf_url': 'PDF do contrato/proposta',
+      };
+
+      function formatKey(key: string): string {
+        return key.split(/[._]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+      }
+
       try {
         const extractFields = (obj: any, prefix = ""): Array<{key: string; label: string; example_value: string}> => {
           const fields: Array<{key: string; label: string; example_value: string}> = [];
@@ -304,7 +363,7 @@ Deno.serve(async (req) => {
             if (value && typeof value === "object" && !Array.isArray(value)) {
               fields.push(...extractFields(value, fullKey));
             } else {
-              fields.push({ key: fullKey, label: fullKey, example_value: String(value ?? "") });
+              fields.push({ key: fullKey, label: FIELD_LABELS[fullKey] || formatKey(fullKey), example_value: String(value ?? "") });
             }
           }
           return fields;
@@ -348,6 +407,29 @@ Deno.serve(async (req) => {
         } catch (e) {
           console.warn("[PIPERUN] Failed to fetch organizations for listFields:", e);
         }
+
+        // 4. Fetch proposal fields
+        try {
+          const proposalResult = await piperunGet("/proposals?show=1");
+          const sampleProposal = (proposalResult.data || [])[0] || {};
+          addFields(extractFields(sampleProposal, "proposal"));
+        } catch (e) {
+          console.warn("[PIPERUN] Failed to fetch proposals for listFields:", e);
+        }
+
+        // 5. Always add static proposal/file fields if not already present
+        const staticProposalFields = [
+          { key: 'proposal.number', label: 'Número da proposta', example_value: 'P-001' },
+          { key: 'proposal.value', label: 'Valor da proposta', example_value: '15000' },
+          { key: 'proposal.status', label: 'Status da proposta', example_value: 'accepted' },
+          { key: 'proposal.sent_at', label: 'Data de envio', example_value: '2026-01-15' },
+          { key: 'proposal.accepted_at', label: 'Data de aceite', example_value: '2026-02-01' },
+          { key: 'proposal.payment_conditions', label: 'Condições de pagamento', example_value: '30/60/90' },
+          { key: 'proposal.items', label: 'Itens/Produtos', example_value: '[]' },
+          { key: 'proposal.validity', label: 'Validade da proposta', example_value: '30 dias' },
+          { key: 'proposal.pdf_url', label: 'PDF do contrato/proposta (baixar e salvar no 360)', example_value: '' },
+        ];
+        addFields(staticProposalFields);
 
         return new Response(JSON.stringify({ fields: allFields }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
