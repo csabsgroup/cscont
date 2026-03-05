@@ -62,7 +62,16 @@ export function ClienteBonus({ officeId }: { officeId: string }) {
       expires_at: expiresAt,
     });
     if (error) toast.error('Erro: ' + error.message);
-    else { toast.success('Bônus concedido!'); setGrantDialogOpen(false); fetchAll(); }
+    else {
+      toast.success('Bônus concedido!');
+      // Trigger automations
+      try {
+        await supabase.functions.invoke('execute-automations', {
+          body: { action: 'triggerV2', trigger_type: 'bonus.requested', office_id: officeId, context: { suffix: `bonus_${Date.now()}` } },
+        });
+      } catch (autoErr) { console.error('Automation trigger failed:', autoErr); }
+      setGrantDialogOpen(false); fetchAll();
+    }
     setSaving(false);
   };
 

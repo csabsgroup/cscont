@@ -117,6 +117,12 @@ export default function Reunioes() {
       await supabase.from('meetings').update({ status: 'completed' as any }).eq('id', formFillMeeting.id);
       toast.success('Reunião marcada como concluída!');
       recalculateHealth(formFillMeeting.office_id);
+      // Trigger automations for meeting completed
+      try {
+        await supabase.functions.invoke('execute-automations', {
+          body: { action: 'triggerV2', trigger_type: 'meeting.completed', office_id: formFillMeeting.office_id, context: { meeting_id: formFillMeeting.id, suffix: `meeting_${formFillMeeting.id}` } },
+        });
+      } catch (autoErr) { console.error('Automation trigger failed:', autoErr); }
       setFormFillMeeting(null);
       fetchMeetings();
     }

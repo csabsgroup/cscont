@@ -76,7 +76,18 @@ export function ClienteContatos({ officeId, contacts, onRefresh }: Props) {
       : await supabase.from('contacts').insert(payload);
 
     if (error) toast.error('Erro: ' + error.message);
-    else { toast.success(editing ? 'Contato atualizado!' : 'Contato criado!'); setOpen(false); onRefresh(); }
+    else {
+      toast.success(editing ? 'Contato atualizado!' : 'Contato criado!');
+      // Trigger automations for new contacts
+      if (!editing) {
+        try {
+          await supabase.functions.invoke('execute-automations', {
+            body: { action: 'triggerV2', trigger_type: 'contact.created', office_id: officeId, context: { suffix: `contact_${Date.now()}` } },
+          });
+        } catch (autoErr) { console.error('Automation trigger failed:', autoErr); }
+      }
+      setOpen(false); onRefresh();
+    }
     setSaving(false);
   };
 

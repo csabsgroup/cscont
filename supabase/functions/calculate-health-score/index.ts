@@ -461,6 +461,29 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Trigger automation if band changed
+    if (oldBand && band !== oldBand) {
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        await fetch(`${supabaseUrl}/functions/v1/execute-automations`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${serviceKey}`,
+          },
+          body: JSON.stringify({
+            action: 'triggerV2',
+            trigger_type: 'health.band_changed',
+            office_id,
+            context: { previous: oldBand, new: band, suffix: `health_${oldBand}_${band}` },
+          }),
+        });
+      } catch (autoErr) {
+        console.error('[HEALTH] Automation trigger failed:', autoErr);
+      }
+    }
+
     return new Response(
       JSON.stringify({
         score: finalScore,

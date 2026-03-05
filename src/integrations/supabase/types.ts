@@ -209,6 +209,45 @@ export type Database = {
         }
         Relationships: []
       }
+      automation_logs: {
+        Row: {
+          actions_executed: Json | null
+          conditions_met: boolean
+          created_at: string
+          error: string | null
+          execution_time_ms: number | null
+          id: string
+          office_id: string
+          rule_id: string
+          rule_name: string | null
+          trigger_type: string
+        }
+        Insert: {
+          actions_executed?: Json | null
+          conditions_met?: boolean
+          created_at?: string
+          error?: string | null
+          execution_time_ms?: number | null
+          id?: string
+          office_id: string
+          rule_id: string
+          rule_name?: string | null
+          trigger_type: string
+        }
+        Update: {
+          actions_executed?: Json | null
+          conditions_met?: boolean
+          created_at?: string
+          error?: string | null
+          execution_time_ms?: number | null
+          id?: string
+          office_id?: string
+          rule_id?: string
+          rule_name?: string | null
+          trigger_type?: string
+        }
+        Relationships: []
+      }
       automation_rules: {
         Row: {
           config: Json

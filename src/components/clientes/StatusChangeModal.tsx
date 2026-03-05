@@ -106,6 +106,20 @@ export function StatusChangeModal({
         },
       });
 
+      // Trigger automations
+      try {
+        await supabase.functions.invoke('execute-automations', {
+          body: {
+            action: 'triggerV2',
+            trigger_type: 'office.status_changed',
+            office_id: officeId,
+            context: { from: currentStatus, to: targetStatus, suffix: `${currentStatus}_${targetStatus}` },
+          },
+        });
+      } catch (autoErr) {
+        console.error('Automation trigger failed:', autoErr);
+      }
+
       toast.success(`Status alterado para ${STATUS_LABELS[targetStatus] || targetStatus}!`);
       onStatusChanged();
       onOpenChange(false);
