@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { VariableTextInput } from '@/components/shared/VariableTextInput';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -773,8 +774,8 @@ export function AutomationRulesTab() {
       case 'create_activity':
         return (
           <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2 space-y-1"><Label className="text-xs">Título da atividade *</Label><Input value={action.config.title || ''} onChange={e => updateConfig({ title: e.target.value })} placeholder="Ex: Ligar para cliente" /></div>
-            <div className="col-span-2 space-y-1"><Label className="text-xs">Descrição / Instruções</Label><Textarea value={action.config.description || ''} onChange={e => updateConfig({ description: e.target.value })} rows={2} /></div>
+            <div className="col-span-2"><VariableTextInput value={action.config.title || ''} onChange={v => updateConfig({ title: v })} placeholder="Ex: Ligar para cliente" label="Título da atividade *" /></div>
+            <div className="col-span-2"><VariableTextInput value={action.config.description || ''} onChange={v => updateConfig({ description: v })} placeholder="Instruções..." label="Descrição / Instruções" multiline /></div>
             <div className="space-y-1">
               <Label className="text-xs">Prioridade</Label>
               <Select value={action.config.priority || 'medium'} onValueChange={v => updateConfig({ priority: v })}>
@@ -831,8 +832,8 @@ export function AutomationRulesTab() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1"><Label className="text-xs">Título</Label><Input value={action.config.title || ''} onChange={e => updateConfig({ title: e.target.value })} /></div>
-            <div className="space-y-1"><Label className="text-xs">Mensagem</Label><Textarea value={action.config.message || ''} onChange={e => updateConfig({ message: e.target.value })} rows={2} /></div>
+            <VariableTextInput value={action.config.title || ''} onChange={v => updateConfig({ title: v })} label="Título" />
+            <VariableTextInput value={action.config.message || ''} onChange={v => updateConfig({ message: v })} label="Mensagem" multiline />
           </div>
         );
 
@@ -851,8 +852,8 @@ export function AutomationRulesTab() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1"><Label className="text-xs">Assunto</Label><Input value={action.config.subject || ''} onChange={e => updateConfig({ subject: e.target.value })} /></div>
-            <div className="space-y-1"><Label className="text-xs">Corpo</Label><Textarea value={action.config.body || ''} onChange={e => updateConfig({ body: e.target.value })} rows={3} /></div>
+            <VariableTextInput value={action.config.subject || ''} onChange={v => updateConfig({ subject: v })} label="Assunto" />
+            <VariableTextInput value={action.config.body || ''} onChange={v => updateConfig({ body: v })} label="Corpo" multiline />
           </div>
         );
 
@@ -881,8 +882,8 @@ export function AutomationRulesTab() {
       case 'create_action_plan':
         return (
           <div className="space-y-3">
-            <div className="space-y-1"><Label className="text-xs">Título</Label><Input value={action.config.title || ''} onChange={e => updateConfig({ title: e.target.value })} /></div>
-            <div className="space-y-1"><Label className="text-xs">Descrição</Label><Textarea value={action.config.description || ''} onChange={e => updateConfig({ description: e.target.value })} rows={2} /></div>
+            <VariableTextInput value={action.config.title || ''} onChange={v => updateConfig({ title: v })} label="Título" />
+            <VariableTextInput value={action.config.description || ''} onChange={v => updateConfig({ description: v })} label="Descrição" multiline />
             <div className="space-y-1"><Label className="text-xs">Prazo (dias)</Label><Input type="number" value={action.config.due_days || ''} onChange={e => updateConfig({ due_days: e.target.value })} /></div>
           </div>
         );
@@ -1008,7 +1009,7 @@ export function AutomationRulesTab() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1"><Label className="text-xs">Texto da nota *</Label><Textarea value={action.config.content || ''} onChange={e => updateConfig({ content: e.target.value })} rows={3} placeholder="Texto da nota..." /></div>
+            <VariableTextInput value={action.config.content || ''} onChange={v => updateConfig({ content: v })} label="Texto da nota *" multiline placeholder="Texto da nota..." />
           </div>
         );
 

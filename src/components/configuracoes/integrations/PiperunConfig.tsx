@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, CheckCircle2, XCircle, Download, ArrowRight, Plus, Trash2, RotateCcw, Search, Zap, AlertTriangle } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, Download, ArrowRight, Plus, Trash2, RotateCcw, Search, Zap } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { IntegrationSetting } from '@/hooks/useIntegrationSettings';
@@ -97,7 +97,6 @@ const DEFAULT_MAPPINGS: MappingRow[] = [
 ];
 
 interface MappingRow { id: string; crm: string; piperun_key: string; piperun_label: string; }
-interface ProductMapping { id: string; piperun_value: string; product_id: string; }
 
 export function PiperunConfig({ setting, onSave }: Props) {
   const config = setting?.config || {};
@@ -115,18 +114,8 @@ export function PiperunConfig({ setting, onSave }: Props) {
     if (config.field_mappings_v2) return config.field_mappings_v2;
     return DEFAULT_MAPPINGS;
   });
-  const [productMappings, setProductMappings] = useState<ProductMapping[]>(() => {
-    return config.product_value_mappings || [];
-  });
-  const [products, setProducts] = useState<any[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerTargetId, setPickerTargetId] = useState('');
-
-  // Load products for product mapping dropdown
-  useEffect(() => {
-    supabase.from('products').select('id, name').eq('is_active', true).order('name')
-      .then(({ data }) => setProducts(data || []));
-  }, []);
 
   const testConnection = async () => {
     setTesting(true);
@@ -168,21 +157,6 @@ export function PiperunConfig({ setting, onSave }: Props) {
     setMappings(prev => prev.filter(m => m.id !== id));
   };
 
-  // Product mapping handlers
-  const addProductMapping = () => {
-    setProductMappings(prev => [...prev, { id: crypto.randomUUID(), piperun_value: '', product_id: '' }]);
-  };
-
-  const removeProductMapping = (id: string) => {
-    setProductMappings(prev => prev.filter(m => m.id !== id));
-  };
-
-  const updateProductMapping = (id: string, field: 'piperun_value' | 'product_id', value: string) => {
-    setProductMappings(prev => prev.map(m => m.id === id ? { ...m, [field]: value } : m));
-  };
-
-  const hasProductField = mappings.some(m => m.crm === 'offices.active_product_id' && m.piperun_key);
-  const hasProductMappings = productMappings.some(m => m.piperun_value && m.product_id);
 
   const validateMappings = (): string | null => {
     const crmTargets = mappings.filter(m => m.crm && m.piperun_key).map(m => m.crm);
@@ -206,7 +180,6 @@ export function PiperunConfig({ setting, onSave }: Props) {
           stage_id: stageId,
           filter_won: filterWon,
           field_mappings: fieldMappings,
-          product_value_mappings: productMappings.filter(m => m.piperun_value && m.product_id),
         },
       });
       setImportResult(data);
@@ -227,7 +200,6 @@ export function PiperunConfig({ setting, onSave }: Props) {
         auto_import: autoImport,
         filter_won: filterWon,
         field_mappings_v2: mappings,
-        product_value_mappings: productMappings,
       },
     });
     toast.success('Configuração do Piperun salva!');
@@ -351,57 +323,8 @@ export function PiperunConfig({ setting, onSave }: Props) {
         <Button variant="outline" size="sm" onClick={addMapping}><Plus className="mr-1 h-3.5 w-3.5" />Adicionar mapeamento</Button>
       </div>
 
-      {/* ========== Product Value Mapping ========== */}
-      <div className="space-y-3 border border-amber-500/30 rounded-lg p-4 bg-amber-500/5">
-        <div className="flex items-center gap-2">
-          <Zap className="h-4 w-4 text-amber-500" />
-          <Label className="text-sm font-semibold">Mapeamento de Produto (obrigatório para automações)</Label>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Mapeie os valores de produto do Piperun para os produtos do CRM. Isso dispara automações de distribuição, onboarding e jornada.
-        </p>
 
-        {!hasProductField && (
-          <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-500/10 p-2 rounded">
-            <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
-            Mapeie o campo "⚡ Produto ativo" acima para que o mapeamento de valores funcione.
-          </div>
-        )}
 
-        {hasProductField && !hasProductMappings && (
-          <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-500/10 p-2 rounded">
-            <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
-            Sem mapeamento de produto, automações não serão disparadas na importação.
-          </div>
-        )}
-
-        <div className="space-y-2">
-          {productMappings.map(pm => (
-            <div key={pm.id} className="flex items-center gap-2">
-              <Input
-                placeholder="Valor no Piperun (ex: Start CEO)"
-                value={pm.piperun_value}
-                onChange={e => updateProductMapping(pm.id, 'piperun_value', e.target.value)}
-                className="flex-1 h-9 text-xs"
-              />
-              <ArrowRight className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-              <Select value={pm.product_id} onValueChange={v => updateProductMapping(pm.id, 'product_id', v)}>
-                <SelectTrigger className="w-[180px] h-9 text-xs"><SelectValue placeholder="Produto CRM" /></SelectTrigger>
-                <SelectContent>
-                  {products.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <Button size="sm" variant="ghost" onClick={() => removeProductMapping(pm.id)}>
-                <Trash2 className="h-3.5 w-3.5 text-destructive" />
-              </Button>
-            </div>
-          ))}
-        </div>
-
-        <Button variant="outline" size="sm" onClick={addProductMapping}>
-          <Plus className="mr-1 h-3.5 w-3.5" />Adicionar mapeamento de valor
-        </Button>
-      </div>
 
       <Button variant="outline" onClick={importNow} disabled={importing || !pipelineId || !stageId}>
         {importing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
