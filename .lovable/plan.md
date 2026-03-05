@@ -1,41 +1,24 @@
 
 
-# Plan: Add Universal "New Client Registered" Trigger
+# Fix: Portal Settings Not Persisting
 
-## What
-Add a new trigger `office.registered` to the automation rules that fires whenever a new client enters the system, regardless of origin. It coexists with the existing specific triggers (`office.created`, `office.imported_piperun`).
+## Root Cause
+The `portal_settings` table has **zero rows**. The save handler uses `.update()` which requires existing rows to match — so nothing is ever saved. The `usePortalSettings` hook defaults everything to `true` when no data exists, masking the problem.
 
-## Changes
+## Solution
 
-### 1. Add trigger definition (UI only)
-**File:** `src/components/configuracoes/AutomationRulesTab.tsx`
+### 1. PortalSettingsTab.tsx — Use upsert instead of update
+Change `handleSave` to use `.upsert()` with `setting_key` as the conflict target. This creates rows on first save and updates them on subsequent saves.
 
-Add a new entry to the `TRIGGERS` array:
-```typescript
-{ value: 'office.registered', label: 'Novo cliente registrado (qualquer origem)', category: 'Cliente', timing: 'realtime' },
-```
+### 2. Seed rows on component load (optional safety)
+On `fetchSettings`, if the table is empty, insert all 14 default rows so the switches reflect real DB state. This also prevents the "all true" illusion.
 
-No parameters needed -- it fires unconditionally on any new office.
+### 3. DB: Ensure portal_settings has proper unique constraint
+Check if `setting_key` has a unique constraint (needed for upsert). If not, add one via migration.
 
-### 2. Update the execution engine
-**File:** `supabase/functions/execute-automations/index.ts`
-
-In the `onNewOffice` handler, after processing existing `distribution` and `onboarding_tasks` rules, also query `automation_rules_v2` for rules with `trigger_type = 'office.registered'` and execute their configured actions (create activity, send notification, move stage, etc.).
-
-This ensures any rule using this trigger fires whenever `onNewOffice` is called -- which already covers manual creation and Piperun import.
-
-### 3. Ensure import path also triggers
-**File:** `src/components/import-export/ImportWizard.tsx`
-
-After successfully importing offices (bulk insert), call the `execute-automations` edge function with `action: 'onNewOffice'` for each newly created office. This closes the gap where imported clients currently don't trigger automations.
-
-## No DB changes needed
-The `automation_rules_v2` table already supports any `trigger_type` text value and the actions/conditions JSONB structure. No migration required.
-
-## Summary
+## Files
 | File | Change |
 |------|--------|
-| `AutomationRulesTab.tsx` | Add `office.registered` trigger definition |
-| `execute-automations/index.ts` | Query and execute v2 rules for `office.registered` |
-| `ImportWizard.tsx` | Fire `onNewOffice` after office imports |
+| `PortalSettingsTab.tsx` | Replace `.update()` with `.upsert()`, add seed logic on empty fetch |
+| Migration (if needed) | Add unique constraint on `setting_key` |
 
