@@ -51,7 +51,8 @@ const BAND_PARAMS: ParamDef[] = [
 ];
 
 const TRIGGERS: TriggerDef[] = [
-  { value: 'office.created', label: 'Novo cliente criado', category: 'Cliente', timing: 'realtime' },
+  { value: 'office.registered', label: 'Novo cliente registrado (qualquer origem)', category: 'Cliente', timing: 'realtime' },
+  { value: 'office.created', label: 'Novo cliente criado (manual)', category: 'Cliente', timing: 'realtime' },
   { value: 'office.status_changed', label: 'Status do cliente mudou', category: 'Cliente', timing: 'realtime', params: STATUS_PARAMS },
   { value: 'office.imported_piperun', label: 'Cliente importado do Piperun', category: 'Cliente', timing: 'realtime' },
   { value: 'office.stage_changed', label: 'Cliente mudou de etapa', category: 'Jornada', timing: 'realtime', params: STAGE_PARAMS },
