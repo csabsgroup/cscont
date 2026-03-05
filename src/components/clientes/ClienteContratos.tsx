@@ -78,7 +78,7 @@ export function ClienteContratos({ officeId, contracts, onRefresh }: Props) {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    const { error } = await supabase.from('contracts').insert({
+    const contractData = {
       office_id: officeId,
       product_id: form.product_id,
       status: form.status,
@@ -91,9 +91,35 @@ export function ClienteContratos({ officeId, contracts, onRefresh }: Props) {
       installments_overdue: form.installments_overdue ? Number(form.installments_overdue) : null,
       asaas_link: form.asaas_link || null,
       negotiation_notes: form.negotiation_notes || null,
-    });
-    if (error) toast.error('Erro: ' + error.message);
-    else { toast.success('Contrato criado!'); setOpen(false); setForm(emptyForm); onRefresh(); }
+    };
+    const { error } = await supabase.from('contracts').insert(contractData);
+    if (error) {
+      toast.error('Erro: ' + error.message);
+    } else {
+      toast.success('Contrato criado!');
+      
+      // Auto-fill cycle dates on the office
+      const officeUpdate: Record<string, any> = {};
+      if (form.start_date) officeUpdate.cycle_start_date = form.start_date;
+      if (form.end_date) officeUpdate.cycle_end_date = form.end_date;
+      
+      // If this is the first contract, also set activation_date
+      if (contracts.length === 0 && form.start_date) {
+        // Check if activation_date is already set
+        const { data: officeData } = await supabase.from('offices').select('activation_date').eq('id', officeId).single();
+        if (officeData && !officeData.activation_date) {
+          officeUpdate.activation_date = form.start_date;
+        }
+      }
+      
+      if (Object.keys(officeUpdate).length > 0) {
+        await supabase.from('offices').update(officeUpdate).eq('id', officeId);
+      }
+      
+      setOpen(false);
+      setForm(emptyForm);
+      onRefresh();
+    }
     setSaving(false);
   };
 

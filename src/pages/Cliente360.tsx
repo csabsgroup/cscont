@@ -28,6 +28,7 @@ import { ClienteBonus } from '@/components/clientes/ClienteBonus';
 import { PortalPreviewModal } from '@/components/clientes/PortalPreviewModal';
 import { WhatsAppSendDialog } from '@/components/clientes/WhatsAppSendDialog';
 import { ClienteVisao360 } from '@/components/clientes/ClienteVisao360';
+import { StatusChangeModal } from '@/components/clientes/StatusChangeModal';
 import { ActivityCounterBadges, ActivityCounts } from '@/components/shared/ActivityCounterBadges';
 import { Constants } from '@/integrations/supabase/types';
 import { cn } from '@/lib/utils';
@@ -58,10 +59,10 @@ export default function Cliente360() {
   // Quick action dialogs
   const [showReassign, setShowReassign] = useState(false);
   const [showStatusChange, setShowStatusChange] = useState(false);
+  const [selectedStatusTarget, setSelectedStatusTarget] = useState('');
   const [showQuickNote, setShowQuickNote] = useState(false);
   const [csmList, setCsmList] = useState<any[]>([]);
   const [selectedCsm, setSelectedCsm] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState('');
   const [quickNoteText, setQuickNoteText] = useState('');
   const [actionSaving, setActionSaving] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -144,13 +145,7 @@ export default function Cliente360() {
     setActionSaving(false); setShowReassign(false); fetchAll();
   };
 
-  const saveStatusChange = async () => {
-    if (!selectedStatus) return;
-    setActionSaving(true);
-    await supabase.from('offices').update({ status: selectedStatus as any }).eq('id', id!);
-    toast.success('Status alterado!');
-    setActionSaving(false); setShowStatusChange(false); fetchAll();
-  };
+  // saveStatusChange is now handled by StatusChangeModal
 
   const saveQuickNote = async () => {
     if (!quickNoteText.trim()) return;
@@ -252,7 +247,7 @@ export default function Cliente360() {
 
   const STATUS_LABELS: Record<string, string> = {
     ativo: 'Ativo', churn: 'Churn', nao_renovado: 'Não Renovado',
-    nao_iniciado: 'Não Iniciado', upsell: 'Upsell', bonus_elite: 'Bonus Elite',
+    nao_iniciado: 'Não Iniciado', upsell: 'Upsell', bonus_elite: 'Bonus Elite', pausado: 'Pausado',
   };
 
   const tabs360 = [
@@ -279,7 +274,7 @@ export default function Cliente360() {
         stageName={stageName}
         csmProfile={csmProfile}
         onReassignCSM={openReassign}
-        onChangeStatus={() => { setSelectedStatus(office.status); setShowStatusChange(true); }}
+        onChangeStatus={() => setShowStatusChange(true)}
         onQuickNote={() => setShowQuickNote(true)}
         onPreviewOpen={() => setPreviewOpen(true)}
         onWhatsApp={() => setWhatsappOpen(true)}
@@ -392,31 +387,35 @@ export default function Cliente360() {
         </DialogContent>
       </Dialog>
 
-      {/* Change Status Dialog */}
-      <Dialog open={showStatusChange} onOpenChange={setShowStatusChange}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Alterar Status</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <Label>Novo Status</Label>
-            <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {Constants.public.Enums.office_status.map(s => <SelectItem key={s} value={s}>{STATUS_LABELS[s] || s}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <DialogFooter><Button onClick={saveStatusChange} disabled={actionSaving}>{actionSaving ? 'Salvando...' : 'Salvar'}</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Quick Note Dialog */}
-      <Dialog open={showQuickNote} onOpenChange={setShowQuickNote}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Nota Rápida</DialogTitle></DialogHeader>
-          <Textarea placeholder="Escreva sua nota..." value={quickNoteText} onChange={e => setQuickNoteText(e.target.value)} rows={4} />
-          <DialogFooter><Button onClick={saveQuickNote} disabled={actionSaving || !quickNoteText.trim()}>{actionSaving ? 'Salvando...' : 'Salvar'}</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Status Change Flow */}
+      {!selectedStatusTarget ? (
+        <Dialog open={showStatusChange} onOpenChange={setShowStatusChange}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Alterar Status</DialogTitle></DialogHeader>
+            <div className="space-y-3">
+              <Label>Novo Status</Label>
+              <Select value="" onValueChange={(val) => setSelectedStatusTarget(val)}>
+                <SelectTrigger><SelectValue placeholder="Selecione o novo status" /></SelectTrigger>
+                <SelectContent>
+                  {(Constants.public.Enums.office_status as readonly string[]).filter(s => s !== office.status).map(s => (
+                    <SelectItem key={s} value={s}>{STATUS_LABELS[s] || s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </DialogContent>
+        </Dialog>
+      ) : (
+        <StatusChangeModal
+          open={showStatusChange}
+          onOpenChange={(open) => { setShowStatusChange(open); if (!open) setSelectedStatusTarget(''); }}
+          officeId={id!}
+          officeName={office.name}
+          currentStatus={office.status}
+          targetStatus={selectedStatusTarget}
+          onStatusChanged={() => { setSelectedStatusTarget(''); fetchAll(); }}
+        />
+      )}
 
       {/* Portal Preview Modal */}
       <PortalPreviewModal

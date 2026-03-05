@@ -7,6 +7,7 @@ const statusColors: Record<string, string> = {
   nao_iniciado: 'bg-muted text-muted-foreground border-border',
   upsell: 'bg-primary/10 text-primary border-primary/20',
   bonus_elite: 'bg-primary/10 text-primary border-primary/20',
+  pausado: 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-800',
 };
 
 const statusLabels: Record<string, string> = {
@@ -16,6 +17,7 @@ const statusLabels: Record<string, string> = {
   nao_iniciado: 'Não Iniciado',
   upsell: 'Upsell',
   bonus_elite: 'Bônus Elite',
+  pausado: 'Pausado',
 };
 
 const contractStatusColors: Record<string, string> = {
