@@ -1,59 +1,60 @@
 
 
-# Plan: Fix Piperun Field Labels + Add Proposal/PDF Fields
+# Plan: Remove Product Value Mapping Section + Add Variable Picker to Automation Actions
 
-## Problem Analysis
+## Correction 1 — Remove Product Value Mapping from PiperunConfig
 
-1. **Technical names shown instead of labels**: In `integration-piperun/index.ts` line 307, `extractFields` sets `label: fullKey` — so API-fetched fields display their raw key as the label (e.g., `person.name` instead of "Nome do contato").
+### `src/components/configuracoes/integrations/PiperunConfig.tsx`
 
-2. **Missing categories**: No proposal or PDF/files fields exist in either the edge function or the fallback fields. Organization fields already exist in fallback but may not come through from the API with proper labels.
+**Remove** the entire "Product Value Mapping" section (lines 354-404) including:
+- The `ProductMapping` interface (line 100)
+- State: `productMappings`, `products` (lines 118-129)
+- Handlers: `addProductMapping`, `removeProductMapping`, `updateProductMapping` (lines 172-182)
+- Computed: `hasProductField`, `hasProductMappings` (lines 184-185)
+- The amber-bordered UI section (lines 354-404)
+- Remove `product_value_mappings` from `importNow` body (line 209) and `handleSave` config (line 230)
 
----
+**Keep** the `products` state load (needed for reference) — actually not needed anymore since product mapping is removed. Remove the `useEffect` at lines 126-129 and the `products` state.
 
-## Fix 1: Friendly Labels in Edge Function
+Remove unused imports: `AlertTriangle`, `Zap` (if no longer used — but `Zap` is still used in the CRM field icon rendering, so keep it). Remove `AlertTriangle`.
 
-Add a hardcoded `FIELD_LABELS` map (~60 entries) in the edge function covering deal, person, organization, and proposal keys. In `extractFields`, after building `fullKey`, look up the label from this map. Fallback: format the key by replacing underscores/dots with spaces and capitalizing.
+### `supabase/functions/integration-piperun/index.ts`
 
-**Change in `listFields` action** (line 300-311):
-- Add `FIELD_LABELS` constant before the handler
-- Change line 307 from `label: fullKey` to `label: FIELD_LABELS[fullKey] || formatKey(fullKey)`
-- Add `formatKey` helper: split by `.` and `_`, capitalize first letter of each word
+In the `importDeals` action, update the field application logic:
+- When `local` field is `offices.active_product_id`: do case-insensitive name lookup in `products` table instead of using `product_value_mappings`
+- When `local` field is `offices.status`: normalize value to match valid enum values
+- When `local` field is `offices.csm_id`: lookup by name/email in `profiles` table
+- Remove any `product_value_mappings` processing logic
 
-## Fix 2: Add Proposal Fields + PDF in Edge Function
+## Correction 2 — Variable Picker for Automation Action Text Fields
 
-In `listFields` action, after fetching organizations (line 343-350):
-- Add a 4th try/catch block to fetch proposals: `GET /proposals?show=1`
-- Extract fields with prefix `proposal.`
-- Add static proposal and file fields if API fetch fails or returns empty
+### New file: `src/components/shared/VariableTextInput.tsx`
 
-## Fix 3: Expand PiperunFieldPicker
+Create a reusable component with:
+- Props: `value`, `onChange`, `placeholder`, `multiline` (boolean), `label` (string)
+- Layout: flex row with textarea/input on left, variable list panel on right (w-56)
+- Variable list: grouped by category with emoji headers, sticky group labels
+- Click behavior: insert variable at cursor position using `selectionStart`
+- Variables defined as constant array (~40 items in 8 groups)
+- Dark mode support via standard Tailwind dark classes
 
-### Update `FIELD_CATEGORIES` array:
-Add two new categories:
-```
-{ label: '📄 Proposta', prefix: 'proposal.' }
-{ label: '📎 Arquivos', prefix: 'file.' }
-```
+### `src/components/configuracoes/AutomationRulesTab.tsx`
 
-### Expand `FALLBACK_FIELDS`:
-Add ~10 proposal fields:
-- `proposal.number`, `proposal.value`, `proposal.status`, `proposal.sent_at`, `proposal.accepted_at`, `proposal.payment_conditions`, `proposal.items`, `proposal.validity`
+Replace plain `Input`/`Textarea` with `VariableTextInput` in these action config fields:
+- `create_activity`: title (line 776), description (line 777)
+- `send_notification`: title (line 834), message (line 835)
+- `send_email`: subject (line 854), body (line 855)
+- `create_action_plan`: title (line 884), description (line 885)
+- `add_note`: content field (need to check exact location)
 
-Add 1 file field:
-- `proposal.pdf_url` with label "PDF do contrato/proposta (baixar e salvar no 360)"
-
-### Update category detection in `getCategoryForField`:
-Add checks for `proposal.` prefix → Proposta category, and `file.` prefix → Arquivos category.
-
-### Sticky group headers:
-Add `sticky top-0 bg-background z-10` to the group header `<p>` element.
-
----
+Do NOT apply to `send_whatsapp` (WhatsApp templates have fixed variables from Meta).
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| `supabase/functions/integration-piperun/index.ts` | Add `FIELD_LABELS` map + `formatKey` helper; update `extractFields` to use labels; add proposal fetch in `listFields` |
-| `src/components/configuracoes/integrations/PiperunFieldPicker.tsx` | Add proposal + file categories and fallback fields; sticky headers; update category detection |
+| `src/components/configuracoes/integrations/PiperunConfig.tsx` | Remove product value mapping section, state, handlers, and UI |
+| `supabase/functions/integration-piperun/index.ts` | Smart match for product/status/csm fields by name |
+| `src/components/shared/VariableTextInput.tsx` | New reusable component with variable picker sidebar |
+| `src/components/configuracoes/AutomationRulesTab.tsx` | Replace Input/Textarea with VariableTextInput in action configs |
 
