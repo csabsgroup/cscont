@@ -1,70 +1,68 @@
 
+Diagnóstico confirmado (com evidência):
+- O webhook está chegando, mas a função retorna cedo por validação de status.
+- Logs atuais mostram casos como `Received deal ... undefined` (status ausente) e payloads com wrapper viram `deal.id` indefinido.
+- Testes diretos da função retornaram `success:false` com mensagem “Deal não é ganho, ignorando”.
+- Não há escritórios com `piperun_deal_id`, nem trilha `piperun_*`, e a tabela `webhook_logs` ainda não existe.
 
-# Plan: Refactor Piperun Integration — Full API Support + Webhook
+Plano de correção (sem remover lógica existente):
 
-## Overview
+1) Endurecer parsing + logs em `supabase/functions/piperun-webhook/index.ts`
+- Adicionar logs detalhados em todas as etapas (método, chaves do body, snippet do JSON, validações, erros com stack).
+- Implementar extração robusta do deal para formatos:
+  - root, `body.data`, `body.deal`, array root, `body.data[]`.
+- Se não extrair `deal.id`, retornar 400 com erro explícito.
 
-Complete refactor of the Piperun edge function to use the correct API endpoints (`/companies` instead of `/organizations`, `?with=` parameter for expanded data), add a webhook edge function for real-time deal import, and update the config UI with webhook URL display and import preview.
+2) Corrigir validação de status (webhook)
+- Criar helper `isWonDeal(deal)` aceitando:
+  - `won`, `ganho`, `ganha` (case-insensitive), `status_label === 'Ganho'`, `won === true`.
+- Se status vier ausente, assumir ganho (conforme evento “oportunidade ganha”) e logar essa decisão.
 
-## File Changes
+3) Corrigir comparação de funil/etapa por tipo (webhook)
+- Normalizar IDs com `String(...)` antes da comparação.
+- Logar valores normalizados e motivo de mismatch.
 
-### 1. `supabase/functions/integration-piperun/index.ts` — Full Rewrite
+4) Persistir payload bruto para debug (`webhook_logs`)
+- Criar migração para tabela `public.webhook_logs` com:
+  - `id`, `provider`, `payload`, `processed`, `error`, `created_at`.
+- RLS:
+  - INSERT apenas via service role (função já usa service role).
+  - SELECT para admin (configuração de integrações é admin-only).
+- Fluxo da função:
+  - Inserir log bruto no início (`processed=false`).
+  - Em sucesso: marcar `processed=true`, `error=null`.
+  - Em falha: manter `processed=false` e preencher `error`.
 
-**Key structural changes:**
+5) Atualizar status “Último webhook” na configuração
+- Em `src/components/configuracoes/integrations/PiperunConfig.tsx`:
+  - Buscar últimos 10 `webhook_logs` do provider `piperun`.
+  - Exibir tabela com data/hora, status (✅/❌), oportunidade e botão para ver JSON em modal.
+  - Fazer fallback do indicador principal:
+    - usar `config.last_webhook_at` se existir;
+    - senão usar `created_at` do log mais recente (atende requisito de mudar após qualquer registro).
 
-- **`piperunGet`**: Change auth header from `token` to `Token` (Piperun API convention). Add `?with=` support.
-- **`listFields`**: Replace `organization.*` prefixes with `company.*` to match the real API. Add `signature.*` fields. Update field categories. Use `/deals?show=1&with=person,company,customFields` to get a sample deal with related data in one call. Fetch `/proposals?show=1` and `/customFields?entity=deal` separately.
-- **`importDeals`**: 
-  - Fetch deals with `?with=person,company,proposals,customFields,stage,pipeline,owner`
-  - For each deal, if company/person not expanded, fetch separately via `/companies/{id}` and `/persons/{id}`
-  - Fetch proposals via `?deal_id={id}` if not in `with`
-  - Fetch signatures via `/signatures?proposal_id={id}`
-  - Build unified `sourceData` object with `deal`, `company`, `person`, `proposal`, `signature` keys
-  - Use `resolveNestedValue` (dot-path accessor) to apply mappings from the unified source
-  - Download PDF from `signature.document_url` if mapped, upload to `office-files` bucket
-  - Smart matching for product/status/csm (already exists, keep)
-  - Add `previewDeals` action (new) that returns eligible deals without importing
-- **New action `previewDeals`**: Same filter logic as importDeals but returns deal list (title, company, value, won_at) without creating anything — for the confirmation UI.
-- **Extract `processAndCreateOffice`**: Shared function used by both `importDeals` and the webhook function. Takes `supabase`, `sourceData`, `mappings`, `dealId`, `userId` and handles: apply mappings → smart field resolution → insert office → insert contract → insert contacts → download PDF → trigger automations → audit log.
+6) Aplicar mesma normalização no import manual (`supabase/functions/integration-piperun/index.ts`)
+- Reutilizar helpers:
+  - `normalizeId(value) => String(value ?? '')`
+  - `isWonDeal(...)`
+- Em `previewDeals` e `importDeals`:
+  - manter filtro por query e reforçar filtro em código por:
+    - pipeline (normalizado),
+    - stage (normalizado),
+    - status ganho (helper robusto).
 
-### 2. New: `supabase/functions/piperun-webhook/index.ts`
+7) Observabilidade e retorno amigável
+- No `catch` do webhook: log completo (`message` + `stack`) e atualização do `webhook_logs.error`.
+- Manter respostas JSON claras para diagnóstico sem quebrar o fluxo do Piperun.
 
-- `verify_jwt = false` (external webhook, no JWT)
-- CORS headers
-- POST only, parse body as deal JSON
-- Validate: `status === 'won'`, pipeline/stage match config, not already imported
-- Fetch related data via API if not in webhook payload (company, person, proposals, signatures)
-- Build `sourceData`, call shared processing logic (duplicated inline since edge functions can't share code — copy the `processAndCreateOffice` logic)
-- Return `{ success, office_id }` or `{ success: false, message }`
-
-### 3. `supabase/config.toml`
-
-Add:
-```toml
-[functions.piperun-webhook]
-verify_jwt = false
-```
-
-### 4. `src/components/configuracoes/integrations/PiperunFieldPicker.tsx`
-
-- Replace `organization.*` prefixes with `company.*` in `FIELD_CATEGORIES` and `FALLBACK_FIELDS`
-- Add `🔏 Assinatura` category with prefix `signature.`
-- Add signature fallback fields: `signature.status`, `signature.signed_at`, `signature.document_url`
-- Update `getCategoryForField` for `company.` and `signature.` prefixes
-
-### 5. `src/components/configuracoes/integrations/PiperunConfig.tsx`
-
-- Update `DEFAULT_MAPPINGS` to use `company.*` instead of `organization.*` (e.g., `company.cnpj`)
-- Add **webhook section** after the import button: displays the webhook URL (`https://{project_id}.supabase.co/functions/v1/piperun-webhook`), copy button, and setup instructions
-- Add **import preview flow**: clicking "Importar agora" first calls `previewDeals` action, shows a dialog/table with eligible deals (title, company, value, date), then "Confirmar importação" executes the actual import
-
-### 6. `src/components/configuracoes/integrations/PiperunConfig.tsx` — Default Mappings Update
-
-Change `organization.cnpj` → `company.cnpj`, `organization.name` → `company.name`, etc. to match the real Piperun API entity names.
-
-## Technical Notes
-
-- Edge functions cannot import from each other, so the `processAndCreateOffice` logic will be duplicated between `integration-piperun` and `piperun-webhook`. This is unavoidable given the Lovable Cloud constraint of single-file edge functions.
-- The webhook URL uses `VITE_SUPABASE_PROJECT_ID` env var in the frontend to construct the display URL.
-- The Piperun API uses `Token` (capital T) as the auth header name — verify and fix in `piperunGet`.
-
+Detalhes técnicos e validações finais:
+- Arquivos impactados:
+  - `supabase/functions/piperun-webhook/index.ts`
+  - `supabase/functions/integration-piperun/index.ts`
+  - `src/components/configuracoes/integrations/PiperunConfig.tsx`
+  - nova migração SQL em `supabase/migrations/*_webhook_logs.sql`
+- Verificação pós-implementação:
+  - disparar payloads nos 5 formatos e confirmar criação do escritório;
+  - validar mudança de status “Aguardando...” para “Último webhook...”;
+  - confirmar lista de webhooks com JSON completo;
+  - confirmar que import manual e preview respeitam os mesmos filtros normalizados.
