@@ -525,15 +525,29 @@ export default function Clientes() {
       }
     }
 
-    const { error: err } = await supabase.from('offices').insert({
+    const { data: newOffice, error: err } = await supabase.from('offices').insert({
       name: newName, cnpj: newCnpj || null, city: newCity || null,
       state: newState || null, email: newEmail || null, phone: newPhone || null,
-      active_product_id: newProductId || null, status: 'nao_iniciado',
+      active_product_id: newProductId || null, status: 'ativo',
       office_code: officeCode,
-    });
+    }).select('id, active_product_id').single();
     if (err) toast.error('Erro ao criar escritório: ' + err.message);
     else {
       toast.success(`Escritório criado!${officeCode ? ` Código: ${officeCode}` : ''}`);
+      // Trigger automations
+      if (newOffice?.id) {
+        try {
+          await supabase.functions.invoke('execute-automations', {
+            body: {
+              action: 'onNewOffice',
+              office_id: newOffice.id,
+              product_id: newOffice.active_product_id,
+            },
+          });
+        } catch (autoErr) {
+          console.error('Automation trigger failed:', autoErr);
+        }
+      }
       setDialogOpen(false); setNewName(''); setNewCnpj(''); setNewCity(''); setNewState(''); setNewEmail(''); setNewPhone(''); setNewProductId('');
       fetchData();
     }

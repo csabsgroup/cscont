@@ -16,7 +16,8 @@ import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { Plus, Loader2, Trash2, Edit2, Zap, Clock, X, Copy, ArrowLeft, ChevronDown, ChevronUp, CalendarIcon } from 'lucide-react';
+import { Plus, Loader2, Trash2, Edit2, Zap, Clock, X, Copy, ArrowLeft, ChevronDown, ChevronUp, CalendarIcon, FileText, Play, Users } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -322,6 +323,20 @@ export function AutomationRulesTab() {
   const [form, setForm] = useState<RuleFormData>({ ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
   const [activeStep, setActiveStep] = useState(1);
+  const [activeTab, setActiveTab] = useState('rules');
+
+  // Logs
+  const [logs, setLogs] = useState<any[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logFilter, setLogFilter] = useState({ trigger: '', success: '' });
+
+  // Reach preview
+  const [reachCount, setReachCount] = useState<number | null>(null);
+  const [reachLoading, setReachLoading] = useState(false);
+
+  // Dry run
+  const [dryRunResults, setDryRunResults] = useState<any[] | null>(null);
+  const [dryRunLoading, setDryRunLoading] = useState(false);
 
   // Reference data
   const [products, setProducts] = useState<any[]>([]);
@@ -363,6 +378,15 @@ export function AutomationRulesTab() {
   }, []);
 
   useEffect(() => { fetchRules(); fetchRefData(); }, [fetchRules, fetchRefData]);
+
+  const fetchLogs = useCallback(async () => {
+    setLogsLoading(true);
+    const { data } = await supabase.from('automation_logs' as any).select('*').order('created_at', { ascending: false }).limit(200);
+    setLogs((data as any[]) || []);
+    setLogsLoading(false);
+  }, []);
+
+  useEffect(() => { if (activeTab === 'logs') fetchLogs(); }, [activeTab, fetchLogs]);
 
   const openNew = () => {
     setEditingId(null);
@@ -458,6 +482,52 @@ export function AutomationRulesTab() {
     const { error } = await (supabase.from('automation_rules_v2' as any) as any).update({ is_active: !current }).eq('id', id);
     if (error) toast.error('Erro: ' + error.message);
     else fetchRules();
+  };
+
+  const handleDuplicate = async (rule: any) => {
+    const payload: any = {
+      name: `${rule.name} (cópia)`,
+      description: rule.description || null,
+      is_active: false,
+      trigger_type: rule.trigger_type,
+      trigger_params: rule.trigger_params || {},
+      conditions: rule.conditions || [],
+      condition_logic: rule.condition_logic || 'and',
+      actions: rule.actions || [],
+      product_id: rule.product_id || null,
+      target_type: rule.target_type || 'client',
+      schedule_config: rule.schedule_config || {},
+      created_by: user?.id,
+    };
+    const { data, error } = await (supabase.from('automation_rules_v2' as any) as any).insert(payload).select('*').single();
+    if (error) toast.error('Erro: ' + error.message);
+    else {
+      toast.success('Regra duplicada! (inativa para revisão)');
+      fetchRules();
+      if (data) openEdit(data);
+    }
+  };
+
+  const fetchReachCount = async () => {
+    setReachLoading(true);
+    try {
+      const { data } = await supabase.functions.invoke('execute-automations', {
+        body: { action: 'reachCount', product_id: form.product_id || '__all__' },
+      });
+      setReachCount(data?.count ?? 0);
+    } catch { setReachCount(null); }
+    setReachLoading(false);
+  };
+
+  const handleDryRun = async () => {
+    setDryRunLoading(true);
+    try {
+      const { data } = await supabase.functions.invoke('execute-automations', {
+        body: { action: 'dryRun', trigger_type: form.trigger_type, product_id: form.product_id || null },
+      });
+      setDryRunResults(data?.previews || []);
+    } catch { setDryRunResults([]); }
+    setDryRunLoading(false);
   };
 
   // ─── Condition Group helpers ─────────────────────────────────
@@ -985,12 +1055,16 @@ export function AutomationRulesTab() {
   // ─── List View ─────────────────────────────────────────────
   if (!editorOpen) {
     return (
-      <div className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <div className="flex justify-between items-center">
-          <p className="text-sm text-muted-foreground">{rules.length} regra{rules.length !== 1 ? 's' : ''} configurada{rules.length !== 1 ? 's' : ''}</p>
+          <TabsList>
+            <TabsTrigger value="rules">Regras ({rules.length})</TabsTrigger>
+            <TabsTrigger value="logs">Logs</TabsTrigger>
+          </TabsList>
           <Button size="sm" onClick={openNew}><Plus className="mr-1 h-4 w-4" />Nova Regra</Button>
         </div>
 
+        <TabsContent value="rules">
         {rules.length === 0 ? (
           <Card><CardContent className="py-12 text-center text-sm text-muted-foreground">Nenhuma regra de automação criada.</CardContent></Card>
         ) : (
@@ -1026,6 +1100,7 @@ export function AutomationRulesTab() {
                     <TableCell>
                       <div className="flex gap-1">
                         <Button size="sm" variant="ghost" onClick={() => openEdit(r)}><Edit2 className="h-4 w-4" /></Button>
+                        <Button size="sm" variant="ghost" onClick={() => handleDuplicate(r)} title="Duplicar"><Copy className="h-4 w-4 text-muted-foreground" /></Button>
                         <Button size="sm" variant="ghost" onClick={() => handleDelete(r.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                       </div>
                     </TableCell>
@@ -1035,7 +1110,60 @@ export function AutomationRulesTab() {
             </Table>
           </Card>
         )}
-      </div>
+        </TabsContent>
+
+        <TabsContent value="logs">
+          {logsLoading ? (
+            <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
+          ) : logs.length === 0 ? (
+            <Card><CardContent className="py-12 text-center text-sm text-muted-foreground">
+              <FileText className="mx-auto mb-3 h-10 w-10 opacity-40" />
+              Nenhuma automação foi executada ainda.
+            </CardContent></Card>
+          ) : (
+            <Card>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Data/Hora</TableHead>
+                    <TableHead>Regra</TableHead>
+                    <TableHead>Trigger</TableHead>
+                    <TableHead>Condições</TableHead>
+                    <TableHead>Ações</TableHead>
+                    <TableHead>Tempo</TableHead>
+                    <TableHead>Erro</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {logs.map((log: any) => (
+                    <TableRow key={log.id}>
+                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                        {format(new Date(log.created_at), "dd/MM HH:mm:ss", { locale: ptBR })}
+                      </TableCell>
+                      <TableCell className="font-medium text-sm">{log.rule_name || '—'}</TableCell>
+                      <TableCell><Badge variant="outline" className="text-xs">{log.trigger_type}</Badge></TableCell>
+                      <TableCell>
+                        {log.conditions_met ? (
+                          <Badge variant="default" className="text-[10px]">✅ Sim</Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-[10px]">❌ Não</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {Array.isArray(log.actions_executed) ? log.actions_executed.map((a: any, i: number) => (
+                          <Badge key={i} variant="outline" className="text-[10px] mr-1">{a.type}</Badge>
+                        )) : '—'}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{log.execution_time_ms ? `${log.execution_time_ms}ms` : '—'}</TableCell>
+                      <TableCell className="text-xs text-destructive max-w-[200px] truncate">{log.error || ''}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
     );
   }
 

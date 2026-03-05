@@ -97,6 +97,12 @@ export function ClienteContratos({ officeId, contracts, onRefresh }: Props) {
       toast.error('Erro: ' + error.message);
     } else {
       toast.success('Contrato criado!');
+      // Trigger automations
+      try {
+        await supabase.functions.invoke('execute-automations', {
+          body: { action: 'triggerV2', trigger_type: 'contract.created', office_id: officeId, context: { suffix: `contract_${Date.now()}` } },
+        });
+      } catch (autoErr) { console.error('Automation trigger failed:', autoErr); }
       
       // Auto-fill cycle dates on the office
       const officeUpdate: Record<string, any> = {};

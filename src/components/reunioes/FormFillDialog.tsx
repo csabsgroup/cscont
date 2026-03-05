@@ -91,6 +91,13 @@ export function FormFillDialog({ open, onOpenChange, meetingId, officeId, onSubm
     // Recalculate health score
     recalculateHealth(officeId);
 
+    // Trigger automations for form submission
+    try {
+      await supabase.functions.invoke('execute-automations', {
+        body: { action: 'triggerV2', trigger_type: 'form.submitted', office_id: officeId, context: { form_id: selectedTemplate, suffix: `form_${submission?.id}` } },
+      });
+    } catch (autoErr) { console.error('Automation trigger failed:', autoErr); }
+
     onOpenChange(false);
     onSubmitted();
     setSubmitting(false);

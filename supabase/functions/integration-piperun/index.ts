@@ -385,7 +385,7 @@ Deno.serve(async (req) => {
         // Step 1: Build office object
         const officeFields = buildEntityFields(deal, field_mappings || [], 'offices');
         officeFields.piperun_deal_id = dealId;
-        officeFields.status = 'nao_iniciado';
+        officeFields.status = 'ativo';
 
         // Step 2: Resolve product
         let resolvedProductId: string | null = null;
