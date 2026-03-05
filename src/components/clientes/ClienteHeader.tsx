@@ -34,6 +34,7 @@ interface Office {
   cnpj?: string | null;
   whatsapp?: string | null;
   email?: string | null;
+  office_code?: string | null;
 }
 
 interface ConfigItem {
@@ -158,7 +159,10 @@ export function ClienteHeader({
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-bold truncate">{office.name}</h1>
+          <div className="flex items-center gap-2">
+            {(office as any).office_code && <Badge variant="secondary" className="text-xs font-mono">{(office as any).office_code}</Badge>}
+            <h1 className="text-xl font-bold truncate">{office.name}</h1>
+          </div>
           {/* Line 2: Configurable badges */}
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             {isFieldVisible('header_status') && <StatusBadge status={office.status} />}

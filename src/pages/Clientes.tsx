@@ -54,9 +54,10 @@ interface CSMProfile { id: string; full_name: string | null; }
 interface JourneyStage { id: string; name: string; product_id: string; }
 
 // ─── Column definitions ─────────────────────────────────────────
-type ColumnKey = 'csm' | 'name' | 'product' | 'status' | 'stage' | 'health' | 'ltv' | 'lastMeeting' | 'nextStep' | 'city' | 'installments' | 'renewal' | 'sponsor' | 'contact' | 'activationDate' | 'cycleStart' | 'cycleEnd' | 'churnDate' | 'churnReason';
+type ColumnKey = 'officeCode' | 'csm' | 'name' | 'product' | 'status' | 'stage' | 'health' | 'ltv' | 'lastMeeting' | 'nextStep' | 'city' | 'installments' | 'renewal' | 'sponsor' | 'contact' | 'activationDate' | 'cycleStart' | 'cycleEnd' | 'churnDate' | 'churnReason';
 
 const ALL_COLUMNS: { key: ColumnKey; label: string }[] = [
+  { key: 'officeCode', label: 'ID' },
   { key: 'csm', label: 'CSM' },
   { key: 'name', label: 'Escritório' },
   { key: 'product', label: 'Produto' },
@@ -609,6 +610,7 @@ export default function Clientes() {
       case 'cycleEnd': return <TableCell key={col} className="text-muted-foreground text-sm">{(office as any).cycle_end_date || '—'}</TableCell>;
       case 'churnDate': return <TableCell key={col} className="text-muted-foreground text-sm">{(office as any).churn_date || '—'}</TableCell>;
       case 'churnReason': return <TableCell key={col} className="text-muted-foreground text-sm">{(office as any).churnReasonName || '—'}</TableCell>;
+      case 'officeCode': return <TableCell key={col} className="text-muted-foreground text-sm font-mono">{(office as any).office_code || '—'}</TableCell>;
       default: return <TableCell key={col}>—</TableCell>;
     }
   };
