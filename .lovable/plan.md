@@ -1,39 +1,84 @@
 
 
-# Plan: Status Dropdown na Visão 360
+# Plan: Central de Notificações Completa
 
-## O que muda
-O badge de status do cliente se torna um dropdown clicável em dois locais: no header (ClienteHeader) e no corpo da Visão 360 (ClienteVisao360). Apenas Admin, CSM e Manager podem alterar. Viewer e Client veem o badge normal (sem dropdown).
+## Visão Geral
+Criar uma tabela `notifications` no banco, um componente de painel de notificações (Popover) no ícone do sino, e uma página dedicada `/notificacoes` com histórico, filtros e marcação de leitura.
 
-Ao selecionar um status "negativo" (Churn, Não Renovado, Não Iniciado), abre o popup existente `StatusChangeModal` pedindo data, motivo e observação. Para status "positivos" (Ativo, Upsell, Bônus Elite, Pausado), abre o `StatusChangeModal` com confirmação simples (já funciona assim).
+## 1. Tabela `notifications` (migração)
 
-O fluxo atual via menu "..." > "Alterar Status" > Dialog intermediário com Select é removido/simplificado, pois o dropdown direto substitui essa necessidade.
+```sql
+CREATE TABLE public.notifications (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  title text NOT NULL,
+  message text,
+  type text NOT NULL DEFAULT 'info',  -- info, warning, success, error
+  entity_type text,                    -- office, activity, meeting, etc.
+  entity_id uuid,
+  link text,                           -- rota para navegar ao clicar
+  read boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
 
-## Arquivos e mudanças
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
-### 1. Novo componente: `StatusDropdown.tsx`
-Cria `src/components/clientes/StatusDropdown.tsx` que:
-- Renderiza um `DropdownMenu` estilizado como o `StatusBadge` atual (mesmas cores por status)
-- Lista todos os status (exceto o atual) como opções no menu
-- Cada opção tem o dot de cor correspondente
-- Recebe `onStatusSelect(newStatus)` callback
-- Recebe `readonly` prop: se true, renderiza o badge estático (para Viewer/Client)
+-- Users see own notifications
+CREATE POLICY "Users see own notifications"
+  ON public.notifications FOR SELECT TO authenticated
+  USING (user_id = auth.uid());
 
-### 2. `ClienteHeader.tsx`
-- Substitui `<StatusBadge status={office.status} />` por `<StatusDropdown>` quando visível
-- Passa `readonly={isViewer || isClient}` 
-- Conecta `onStatusSelect` ao callback do parent
+-- Users can update own (mark read)
+CREATE POLICY "Users update own notifications"
+  ON public.notifications FOR UPDATE TO authenticated
+  USING (user_id = auth.uid());
 
-### 3. `ClienteVisao360.tsx`
-- No card "Status" do grid de infoFields, substitui o texto estático por `<StatusDropdown>`
-- Recebe props `onStatusSelect` e `canEditStatus` do parent
+-- System/admin can insert
+CREATE POLICY "Authenticated can insert notifications"
+  ON public.notifications FOR INSERT TO authenticated
+  WITH CHECK (true);
 
-### 4. `Cliente360.tsx`
-- Remove o Dialog intermediário de seleção de status (linhas 392-408)
-- Cria callback `handleStatusSelect(newStatus)` que seta `selectedStatusTarget` e abre `showStatusChange` diretamente no `StatusChangeModal`
-- Passa `onStatusSelect` para `ClienteHeader` e `ClienteVisao360`
-- Passa `canEditStatus={!isViewer && !isClient}` para ambos
+-- Users can delete own
+CREATE POLICY "Users delete own notifications"
+  ON public.notifications FOR DELETE TO authenticated
+  USING (user_id = auth.uid());
 
-### Nenhuma mudança de banco
-O `StatusChangeModal` já trata todos os cenários (churn com campos obrigatórios, positivos com confirmação simples). Apenas eliminamos o passo intermediário.
+-- Enable realtime
+ALTER PUBLICATION supabase_realtime ADD TABLE public.notifications;
+```
+
+## 2. Componente `NotificationPanel.tsx`
+- Popover que abre ao clicar no sino em `AppLayout.tsx`
+- Lista as últimas 20 notificações do usuário logado
+- Mostra título, mensagem resumida, tempo relativo (ex: "há 5 min")
+- Ícone colorido por tipo (info=azul, warning=amarelo, success=verde, error=vermelho)
+- Notificações não lidas com fundo destacado
+- Botão "Marcar todas como lidas"
+- Link "Ver todas" que navega para `/notificacoes`
+- Badge com contagem de não lidas no sino
+- Realtime: subscribe a `notifications` para updates em tempo real
+
+## 3. Página `/notificacoes`
+- Nova página `src/pages/Notificacoes.tsx`
+- Tabela com todas as notificações do usuário
+- Filtros: tipo, status (lidas/não lidas), período
+- Ações: marcar como lida/não lida, excluir
+- Botão "Marcar todas como lidas"
+
+## 4. Integração no AppLayout
+- Substituir o `<button>` do sino pelo `<NotificationPanel>`
+- Badge dinâmico com contagem real de não lidas (substituindo o dot estático)
+
+## 5. Rota
+- Adicionar `/notificacoes` no `App.tsx`
+
+## Arquivos
+
+| Arquivo | Mudança |
+|---------|---------|
+| Migração SQL | Criar tabela `notifications` com RLS e realtime |
+| `src/components/NotificationPanel.tsx` | Novo componente (popover + lista) |
+| `src/pages/Notificacoes.tsx` | Nova página com histórico completo |
+| `src/components/AppLayout.tsx` | Integrar NotificationPanel no sino |
+| `src/App.tsx` | Adicionar rota `/notificacoes` |
 
