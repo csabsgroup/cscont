@@ -13,6 +13,7 @@ import { PortalSettingsTab } from '@/components/configuracoes/PortalSettingsTab'
 import { Visao360ConfigTab } from '@/components/configuracoes/Visao360ConfigTab';
 import { AutomationRulesTab } from '@/components/configuracoes/AutomationRulesTab';
 import { ChurnReasonsTab } from '@/components/configuracoes/ChurnReasonsTab';
+import { CustomFieldsConfigTab } from '@/components/configuracoes/CustomFieldsConfigTab';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { GoogleCalendarConfig } from '@/components/configuracoes/integrations/GoogleCalendarConfig';
@@ -350,6 +351,8 @@ const SIDEBAR_SECTIONS: SidebarSection[] = [
   // Visão 360
   { key: '360_campos', label: 'Campos e Indicadores', icon: BarChart3, category: 'Visão 360', adminOnly: true },
   { key: '360_abas', label: 'Abas Visíveis', icon: Eye, category: 'Visão 360', adminOnly: true },
+  { key: '360_custom', label: 'Campos Personalizados', icon: ClipboardList, category: 'Visão 360', adminOnly: true },
+  { key: '360_header', label: 'Header do 360', icon: Eye, category: 'Visão 360', adminOnly: true },
   // Automações
   { key: 'auto_regras', label: 'Regras de Automação', icon: Workflow, category: 'Automações', adminOnly: true },
   // Integrações
@@ -437,6 +440,8 @@ export default function Configuracoes() {
       case 'formularios': return <FormTemplatesTab />;
       case '360_campos': return <Visao360ConfigTab mode="campos" />;
       case '360_abas': return <Visao360ConfigTab mode="abas" />;
+      case '360_custom': return <CustomFieldsConfigTab />;
+      case '360_header': return <Visao360ConfigTab mode="header" />;
       case 'auto_regras': return <AutomationRulesTab />;
       case 'int_gcal': return <GoogleCalendarConfig setting={settings.find(s => s.provider === 'google_calendar')} onSave={upsertSetting} />;
       case 'int_slack': return <SlackConfig setting={settings.find(s => s.provider === 'slack')} onSave={upsertSetting} />;
