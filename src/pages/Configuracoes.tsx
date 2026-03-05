@@ -46,6 +46,7 @@ function ProductsTab() {
   const [editProduct, setEditProduct] = useState<any>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [codePrefix, setCodePrefix] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -58,16 +59,16 @@ function ProductsTab() {
 
   useEffect(() => { fetch(); }, [fetch]);
 
-  const openEdit = (p: any) => { setEditProduct(p); setName(p.name); setDescription(p.description || ''); setIsActive(p.is_active); setDialogOpen(true); };
-  const openNew = () => { setEditProduct(null); setName(''); setDescription(''); setIsActive(true); setDialogOpen(true); };
+  const openEdit = (p: any) => { setEditProduct(p); setName(p.name); setDescription(p.description || ''); setCodePrefix(p.code_prefix || ''); setIsActive(p.is_active); setDialogOpen(true); };
+  const openNew = () => { setEditProduct(null); setName(''); setDescription(''); setCodePrefix(''); setIsActive(true); setDialogOpen(true); };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true);
     if (editProduct) {
-      const { error } = await supabase.from('products').update({ name, description: description || null, is_active: isActive }).eq('id', editProduct.id);
+      const { error } = await supabase.from('products').update({ name, description: description || null, is_active: isActive, code_prefix: codePrefix.toUpperCase() || null }).eq('id', editProduct.id);
       if (error) toast.error('Erro: ' + error.message); else toast.success('Produto atualizado!');
     } else {
-      const { error } = await supabase.from('products').insert({ name, description: description || null, is_active: isActive });
+      const { error } = await supabase.from('products').insert({ name, description: description || null, is_active: isActive, code_prefix: codePrefix.toUpperCase() || null });
       if (error) toast.error('Erro: ' + error.message); else toast.success('Produto criado!');
     }
     setSaving(false); setDialogOpen(false); fetch();
@@ -83,11 +84,12 @@ function ProductsTab() {
       </div>
       <Card>
         <Table>
-          <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Descrição</TableHead><TableHead>Status</TableHead><TableHead></TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Prefixo ID</TableHead><TableHead>Descrição</TableHead><TableHead>Status</TableHead><TableHead></TableHead></TableRow></TableHeader>
           <TableBody>
             {products.map(p => (
               <TableRow key={p.id}>
                 <TableCell className="font-medium">{p.name}</TableCell>
+                <TableCell className="font-mono text-sm">{p.code_prefix || '—'}</TableCell>
                 <TableCell className="text-muted-foreground text-sm">{p.description || '—'}</TableCell>
                 <TableCell><Badge variant={p.is_active ? 'default' : 'secondary'}>{p.is_active ? 'Ativo' : 'Inativo'}</Badge></TableCell>
                 <TableCell><Button size="sm" variant="ghost" onClick={() => openEdit(p)}><Edit2 className="h-4 w-4" /></Button></TableCell>
@@ -101,6 +103,11 @@ function ProductsTab() {
           <DialogHeader><DialogTitle>{editProduct ? 'Editar Produto' : 'Novo Produto'}</DialogTitle></DialogHeader>
           <form onSubmit={handleSave} className="space-y-4">
             <div className="space-y-2"><Label>Nome *</Label><Input value={name} onChange={e => setName(e.target.value)} required /></div>
+            <div className="space-y-2">
+              <Label>Prefixo do ID</Label>
+              <Input value={codePrefix} onChange={e => setCodePrefix(e.target.value.replace(/[^a-zA-Z]/g, '').slice(0, 5))} placeholder="Ex: ELT, STR, ACL" maxLength={5} className="font-mono uppercase" />
+              <p className="text-xs text-muted-foreground">Sigla usada para gerar o código único do escritório (ex: ELT-001)</p>
+            </div>
             <div className="space-y-2"><Label>Descrição</Label><Textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} /></div>
             <div className="flex items-center gap-2"><Switch checked={isActive} onCheckedChange={setIsActive} /><Label>Ativo</Label></div>
             <Button type="submit" className="w-full" disabled={saving}>{saving ? 'Salvando...' : 'Salvar'}</Button>

@@ -506,14 +506,34 @@ export default function Clientes() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreating(true);
+
+    // Auto-generate office_code from product prefix
+    let officeCode: string | null = null;
+    if (newProductId) {
+      const { data: prod } = await supabase.from('products').select('code_prefix').eq('id', newProductId).maybeSingle();
+      const prefix = prod?.code_prefix;
+      if (prefix) {
+        // Find max existing code for this prefix
+        const { data: existing } = await supabase.from('offices').select('office_code').ilike('office_code', `${prefix}-%`).order('office_code', { ascending: false }).limit(1);
+        let seq = 1;
+        if (existing && existing.length > 0 && existing[0].office_code) {
+          const parts = existing[0].office_code.split('-');
+          const lastNum = parseInt(parts[parts.length - 1], 10);
+          if (!isNaN(lastNum)) seq = lastNum + 1;
+        }
+        officeCode = `${prefix}-${String(seq).padStart(3, '0')}`;
+      }
+    }
+
     const { error: err } = await supabase.from('offices').insert({
       name: newName, cnpj: newCnpj || null, city: newCity || null,
       state: newState || null, email: newEmail || null, phone: newPhone || null,
       active_product_id: newProductId || null, status: 'nao_iniciado',
+      office_code: officeCode,
     });
     if (err) toast.error('Erro ao criar escritório: ' + err.message);
     else {
-      toast.success('Escritório criado!');
+      toast.success(`Escritório criado!${officeCode ? ` Código: ${officeCode}` : ''}`);
       setDialogOpen(false); setNewName(''); setNewCnpj(''); setNewCity(''); setNewState(''); setNewEmail(''); setNewPhone(''); setNewProductId('');
       fetchData();
     }
