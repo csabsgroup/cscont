@@ -152,6 +152,65 @@ Deno.serve(async (req) => {
         }
       }
 
+      // 3. Execute v2 rules for office.registered trigger
+      const { data: v2Rules } = await supabase
+        .from("automation_rules_v2")
+        .select("*")
+        .eq("trigger_type", "office.registered")
+        .eq("is_active", true);
+
+      if (v2Rules && v2Rules.length > 0) {
+        const { data: office } = await supabase.from("offices").select("*").eq("id", office_id).single();
+        for (const rule of v2Rules) {
+          // Idempotency check
+          const contextKey = `registered_${office_id}`;
+          const { data: existing } = await supabase
+            .from("automation_executions")
+            .select("id")
+            .eq("rule_id", rule.id)
+            .eq("office_id", office_id)
+            .eq("context_key", contextKey)
+            .maybeSingle();
+          if (existing) continue;
+
+          const actions = (rule.actions as any[]) || [];
+          const createdIds: string[] = [];
+          const assignedCsm = csm_id || office?.csm_id;
+
+          for (const action of actions) {
+            if (action.type === "create_activity" && action.config) {
+              const c = action.config;
+              const dueDate = new Date();
+              dueDate.setDate(dueDate.getDate() + (c.due_days || 0));
+              const { data: act } = await supabase.from("activities").insert({
+                title: c.title || rule.name,
+                type: c.activity_type || "task",
+                description: c.description || null,
+                office_id,
+                user_id: assignedCsm || user!.id,
+                due_date: dueDate.toISOString().split("T")[0],
+                priority: c.priority || "medium",
+              }).select("id").single();
+              if (act) createdIds.push(act.id);
+            }
+            if (action.type === "move_stage" && action.config?.stage_id) {
+              await supabase.from("office_journey").upsert({
+                office_id,
+                journey_stage_id: action.config.stage_id,
+                entered_at: new Date().toISOString(),
+              }, { onConflict: "office_id" });
+            }
+          }
+
+          await supabase.from("automation_executions").insert({
+            rule_id: rule.id,
+            office_id,
+            context_key: contextKey,
+            result: { created_activity_ids: createdIds, trigger: "office.registered" },
+          });
+        }
+      }
+
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

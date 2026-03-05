@@ -143,6 +143,23 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
         action: 'bulk_import',
         details: { entity: template.key, success, errors: errorCount, skipped },
       });
+
+      // Fire onNewOffice automations for imported offices
+      if (template.key === 'offices' && insertedIds.length > 0) {
+        for (const officeId of insertedIds) {
+          try {
+            // Get product_id for the office
+            const { data: office } = await supabase.from('offices').select('active_product_id').eq('id', officeId).single();
+            if (office?.active_product_id) {
+              await supabase.functions.invoke('execute-automations', {
+                body: { action: 'onNewOffice', office_id: officeId, product_id: office.active_product_id },
+              });
+            }
+          } catch (e) {
+            console.warn('Automation trigger failed for imported office', officeId, e);
+          }
+        }
+      }
     }
 
     setResult({ success, errors: errorCount, skipped, batchId });
