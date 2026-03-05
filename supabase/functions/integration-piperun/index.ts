@@ -66,14 +66,47 @@ function getNestedValue(obj: any, path: string): any {
   return path.split('.').reduce((o, k) => o?.[k], obj);
 }
 
-// ---- Import helpers ----
+// ---- Smart field resolvers ----
 
-function resolveProductId(rawValue: string | null | undefined, productMappings: any[]): string | null {
-  if (!rawValue || !productMappings?.length) return null;
-  const normalized = String(rawValue).trim().toLowerCase();
-  const match = productMappings.find((m: any) => String(m.piperun_value).trim().toLowerCase() === normalized);
-  return match?.product_id || null;
+async function resolveSmartField(supabase: any, localField: string, rawValue: any): Promise<{ value: any; warning?: string }> {
+  if (rawValue === undefined || rawValue === null || rawValue === '') return { value: null };
+  const strVal = String(rawValue).trim();
+
+  // Product: match by name (case-insensitive)
+  if (localField === 'offices.active_product_id') {
+    const { data } = await supabase.from('products').select('id').ilike('name', strVal).limit(1).maybeSingle();
+    if (data) return { value: data.id };
+    return { value: null, warning: `Produto não encontrado: "${strVal}". Verifique se o nome no Piperun bate com o nome cadastrado no CRM.` };
+  }
+
+  // Status: normalize to valid enum
+  if (localField === 'offices.status') {
+    const STATUS_MAP: Record<string, string> = {
+      'ativo': 'ativo', 'active': 'ativo',
+      'churn': 'churn', 'cancelado': 'churn',
+      'não renovado': 'nao_renovado', 'nao renovado': 'nao_renovado', 'nao_renovado': 'nao_renovado',
+      'não iniciado': 'nao_iniciado', 'nao iniciado': 'nao_iniciado', 'nao_iniciado': 'nao_iniciado',
+      'upsell': 'upsell', 'upgrade': 'upsell',
+      'bônus elite': 'bonus_elite', 'bonus elite': 'bonus_elite', 'bonus_elite': 'bonus_elite',
+      'pausado': 'pausado', 'paused': 'pausado',
+    };
+    const normalized = strVal.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return { value: STATUS_MAP[normalized] || 'ativo' };
+  }
+
+  // CSM: match by name or email
+  if (localField === 'offices.csm_id') {
+    const { data: byName } = await supabase.from('profiles').select('id').ilike('full_name', strVal).limit(1).maybeSingle();
+    if (byName) return { value: byName.id };
+    const { data: byEmail } = await supabase.from('profiles').select('id').ilike('email', strVal).limit(1).maybeSingle();
+    if (byEmail) return { value: byEmail.id };
+    return { value: null, warning: `CSM não encontrado: "${strVal}".` };
+  }
+
+  return { value: rawValue };
 }
+
+const SMART_FIELDS = ['offices.active_product_id', 'offices.status', 'offices.csm_id'];
 
 function buildEntityFields(deal: any, fieldMappings: any[], prefix: string): Record<string, any> {
   const result: Record<string, any> = {};
@@ -443,7 +476,7 @@ Deno.serve(async (req) => {
 
     // ========== importDeals ==========
     if (action === "importDeals") {
-      const { pipeline_id, stage_id, filter_won, field_mappings, product_value_mappings } = body;
+      const { pipeline_id, stage_id, filter_won, field_mappings } = body;
       if (!pipeline_id || !stage_id) throw new Error("pipeline_id and stage_id are required");
 
       let path = `/deals?pipeline_id=${pipeline_id}&stage_id=${stage_id}&show=100`;
@@ -467,23 +500,25 @@ Deno.serve(async (req) => {
         // Step 1: Build office object
         const officeFields = buildEntityFields(deal, field_mappings || [], 'offices');
         officeFields.piperun_deal_id = dealId;
-        officeFields.status = 'ativo';
+        if (!officeFields.status) officeFields.status = 'ativo';
 
-        // Step 2: Resolve product
+        // Step 2: Resolve smart fields (product, status, csm)
         let resolvedProductId: string | null = null;
-        const productMapping = (field_mappings || []).find((m: any) => m.local === 'offices.active_product_id');
-        if (productMapping) {
-          const rawProductValue = getNestedValue(deal, productMapping.piperun);
-          resolvedProductId = resolveProductId(rawProductValue, product_value_mappings || []);
-          if (rawProductValue && !resolvedProductId) {
-            warnings.push(`Produto não mapeado: "${rawProductValue}" (Deal ${dealId})`);
-            console.warn(`[PIPERUN] Unmapped product value: "${rawProductValue}" for deal ${dealId}`);
-          }
-          // Remove raw text from office fields, set resolved ID
-          delete officeFields.active_product_id;
-          if (resolvedProductId) {
-            officeFields.active_product_id = resolvedProductId;
-            officeFields.status = 'ativo';
+        for (const mapping of (field_mappings || [])) {
+          if (SMART_FIELDS.includes(mapping.local)) {
+            const rawValue = getNestedValue(deal, mapping.piperun);
+            const col = mapping.local.split('.')[1];
+            const resolved = await resolveSmartField(supabase, mapping.local, rawValue);
+            if (resolved.warning) {
+              warnings.push(`${resolved.warning} (Deal ${dealId})`);
+              console.warn(`[PIPERUN] ${resolved.warning} (Deal ${dealId})`);
+            }
+            if (resolved.value !== null) {
+              officeFields[col] = resolved.value;
+              if (mapping.local === 'offices.active_product_id') resolvedProductId = resolved.value;
+            } else {
+              delete officeFields[col];
+            }
           }
         }
 
