@@ -53,13 +53,33 @@ export function PortalSettingsTab() {
   const [saving, setSaving] = useState(false);
   const [changes, setChanges] = useState<Record<string, boolean>>({});
 
+  const allKeys = groups.flatMap((g) => g.items.map((i) => i.key));
+
   const fetchSettings = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase.from('portal_settings').select('*');
-    setSettings((data as Setting[]) || []);
+    const rows = (data as Setting[]) || [];
+
+    // Seed default rows if table is empty
+    if (rows.length === 0) {
+      const seedRows = allKeys.map((key) => ({
+        setting_key: key,
+        setting_value: true,
+        updated_at: new Date().toISOString(),
+        updated_by: user?.id || null,
+      }));
+      const { data: inserted } = await supabase
+        .from('portal_settings')
+        .upsert(seedRows, { onConflict: 'setting_key' })
+        .select('*');
+      setSettings((inserted as Setting[]) || []);
+    } else {
+      setSettings(rows);
+    }
+
     setChanges({});
     setLoading(false);
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     fetchSettings();
@@ -78,17 +98,20 @@ export function PortalSettingsTab() {
   const handleSave = async () => {
     setSaving(true);
     const keys = Object.keys(changes);
-    for (const key of keys) {
-      await supabase
-        .from('portal_settings')
-        .update({
-          setting_value: changes[key],
-          updated_at: new Date().toISOString(),
-          updated_by: user?.id,
-        })
-        .eq('setting_key', key);
+    const upsertRows = keys.map((key) => ({
+      setting_key: key,
+      setting_value: changes[key],
+      updated_at: new Date().toISOString(),
+      updated_by: user?.id || null,
+    }));
+    const { error } = await supabase
+      .from('portal_settings')
+      .upsert(upsertRows, { onConflict: 'setting_key' });
+    if (error) {
+      toast.error('Erro ao salvar configurações');
+    } else {
+      toast.success('Configurações do portal salvas!');
     }
-    toast.success('Configurações do portal salvas!');
     setSaving(false);
     fetchSettings();
   };
