@@ -3,7 +3,7 @@ import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/AppSidebar';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocation } from 'react-router-dom';
-import { Bell, Search, User, LogOut, Sun, Moon } from 'lucide-react';
+import { Search, User, LogOut, Sun, Moon } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { NavigationTabs } from '@/components/NavigationTabs';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { UserProfileDialog } from '@/components/UserProfileDialog';
+import { NotificationPanel } from '@/components/NotificationPanel';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -81,10 +82,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                   className="h-9 w-56 rounded-full bg-muted/50 border-0 pl-9 text-sm focus-visible:ring-1"
                 />
               </div>
-              <button className="relative rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
-                <Bell className="h-4 w-4" />
-                <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary" />
-              </button>
+              <NotificationPanel />
               <button
                 onClick={toggleTheme}
                 className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
