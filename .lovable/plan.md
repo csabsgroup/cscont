@@ -1,67 +1,56 @@
 
 
-# Plan: Expandir Ações do Motor de Automação v2
+# Plan: User Management - Edit, Deactivate, Delete
 
-## Resumo
-Adicionar 5 novos tipos de ação ao editor de automações v2 (`AutomationRulesTab.tsx`), além dos 6 já existentes. Também atualizar a edge function `execute-automations` para executar as novas ações.
+## Overview
+Expand the `UsersTab` in Configuracoes and the `admin-create-user` edge function (renamed/extended to `admin-manage-user`) to support editing users: reset password, toggle active/banned status, assign CSM product, and delete/deactivate users.
 
-## Ações Existentes (já implementadas)
-1. `create_activity` — Criar Atividade
-2. `send_notification` — Enviar Notificação
-3. `send_email` — Enviar Email
-4. `move_journey_stage` — Mover Etapa da Jornada
-5. `change_status` — Alterar Status
-6. `create_action_plan` — Criar Plano de Ação
+## 1. Edge Function: `admin-manage-user/index.ts`
 
-## Novas Ações a Adicionar
+Create a new edge function that handles multiple actions via a `action` field in the request body. Reuses the same auth/RBAC pattern from `admin-create-user`.
 
-### 1. `change_csm` — Alterar CSM Responsável
-- Config UI: Select com 3 métodos (Fixo, Menor carteira, Round-robin)
-  - **Fixo**: mostra select de CSMs
-  - **Menor carteira**: mostra multi-select de CSMs elegíveis
-  - **Round-robin**: mostra multi-select de CSMs elegíveis
-- Execução: atualiza `offices.csm_id`
+**Supported actions:**
+- `update_password` — calls `adminClient.auth.admin.updateUserById(userId, { password })`
+- `deactivate` — calls `adminClient.auth.admin.updateUserById(userId, { ban_duration: "876000h" })` (bans for ~100 years)
+- `reactivate` — calls `adminClient.auth.admin.updateUserById(userId, { ban_duration: "none" })`
+- `delete` — calls `adminClient.auth.admin.deleteUser(userId)` + cascade handles the rest
+- `update_profile` — updates `profiles.full_name`, `user_roles.role`, and optionally links CSM to product offices
+- `set_csm_product` — updates which product the CSM is responsible for (stores in a new field or manages office assignments)
 
-### 2. `create_contract` — Criar Contrato
-- Config UI: campos completos — produto (select), valor, valor mensal, data início, data fim, data renovação, status inicial (select: ativo/pendente)
-- Execução: insere na tabela `contracts`
+**RBAC:** Admin can manage all users. Manager can only manage CSM/client users.
 
-### 3. `cancel_contract` — Cancelar/Encerrar Contrato
-- Config UI: select de ação (cancelar ou encerrar), select de produto alvo (para identificar qual contrato)
-- Execução: atualiza `contracts.status` para `cancelado` ou `encerrado` + seta `end_date`
+## 2. Database: Add `product_id` to `profiles` table
 
-### 4. `set_product` — Definir Jornada (Produto)
-- Config UI: select de produto destino
-- Execução: atualiza `offices.active_product_id` e insere/atualiza `office_journey` na primeira etapa do produto
+Add a nullable `product_id` column to the `profiles` table to track which product a CSM is assigned to. This is simpler than creating a separate linking table.
 
-### 5. `add_note` — Adicionar Nota na Timeline
-- Config UI: textarea com texto da nota, select de tipo (observação, ponto de atenção)
-- Execução: insere na tabela `office_notes` (ou campo equivalente de timeline)
+```sql
+ALTER TABLE public.profiles ADD COLUMN product_id uuid;
+```
 
-### 6. `grant_bonus` — Conceder Bônus
-- Config UI: select de item do catálogo (`bonus_catalog`), quantidade, validade (dias)
-- Execução: insere na tabela `bonus_grants`
+## 3. Frontend: Expand `UsersTab` in `Configuracoes.tsx`
 
-## Arquivos Alterados
+### Table columns update
+- Add columns: **E-mail** (from profiles or auth), **Produto** (for CSMs), **Status** (ativo/inativo), **Ações** (edit button)
 
-### `src/components/configuracoes/AutomationRulesTab.tsx`
-- Expandir array `ACTION_TYPES` com os 6 novos tipos
-- Adicionar cases no `renderActionConfig` para cada nova ação com seus campos de configuração
-- Buscar dados adicionais no `fetchRefData`: `bonus_catalog`
+### Edit Dialog
+A dialog with tabs/sections:
+- **Dados**: Name, Role (select), Product assignment (select, shown for CSM role)
+- **Segurança**: Reset password (new password field + confirm)
+- **Status**: Toggle active/inactive, Delete button with confirmation
 
-### `supabase/functions/execute-automations/index.ts`
-- Adicionar handlers para cada novo `action.type` dentro dos blocos de execução de regras v2
-- `change_csm`: lógica de distribuição (fixo/menor carteira/round-robin)
-- `create_contract`: insert na tabela contracts
-- `cancel_contract`: update status do contrato
-- `set_product`: update active_product_id + upsert office_journey
-- `add_note`: insert em tabela de notas (verificar se existe `office_notes`)
-- `grant_bonus`: insert em bonus_grants
+### User status display
+- Show badge "Ativo" / "Inativo" based on profile data
+- Fetch user metadata via the edge function to check ban status
 
-### Verificação necessária (na implementação)
-- Confirmar existência de tabela de notas/timeline para a ação `add_note`
-- Se não existir, criar migração para `office_notes`
+## 4. Edge Function: Fetch users list
 
-## Sem Mudanças de Schema
-As tabelas `contracts`, `bonus_grants`, `offices`, `office_journey` já existem. Apenas precisamos verificar a tabela de notas.
+Add a `list` action to `admin-manage-user` that returns users with their auth metadata (banned status, email, last sign in) since the client can't access `auth.users` directly.
+
+## Files Changed
+
+| File | Change |
+|------|--------|
+| Migration SQL | Add `product_id` to profiles |
+| `supabase/functions/admin-manage-user/index.ts` | New edge function for all user management actions |
+| `src/pages/Configuracoes.tsx` | Expand UsersTab with edit dialog, status management, product assignment |
 
