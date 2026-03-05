@@ -36,7 +36,7 @@ import { cn } from '@/lib/utils';
 
 export default function Cliente360() {
   const { id } = useParams<{ id: string }>();
-  const { isViewer, isAdmin, isManager, user } = useAuth();
+  const { isViewer, isAdmin, isManager, isClient, user } = useAuth();
   const navigate = useNavigate();
   const [office, setOffice] = useState<any>(null);
   const [contacts, setContacts] = useState<any[]>([]);
@@ -276,6 +276,8 @@ export default function Cliente360() {
         contracts={contracts}
         onReassignCSM={openReassign}
         onChangeStatus={() => setShowStatusChange(true)}
+        onStatusSelect={(s) => { setSelectedStatusTarget(s); setShowStatusChange(true); }}
+        canEditStatus={!isViewer && !isClient}
         onQuickNote={() => setShowQuickNote(true)}
         onPreviewOpen={() => setPreviewOpen(true)}
         onWhatsApp={() => setWhatsappOpen(true)}
@@ -317,6 +319,8 @@ export default function Cliente360() {
           stageName={stageName}
           contacts={contacts}
           onNavigateTab={setActiveTab}
+          onStatusSelect={(s) => { setSelectedStatusTarget(s); setShowStatusChange(true); }}
+          canEditStatus={!isViewer && !isClient}
         />
       )}
 
@@ -388,35 +392,16 @@ export default function Cliente360() {
         </DialogContent>
       </Dialog>
 
-      {/* Status Change Flow */}
-      {!selectedStatusTarget ? (
-        <Dialog open={showStatusChange} onOpenChange={setShowStatusChange}>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Alterar Status</DialogTitle></DialogHeader>
-            <div className="space-y-3">
-              <Label>Novo Status</Label>
-              <Select value="" onValueChange={(val) => setSelectedStatusTarget(val)}>
-                <SelectTrigger><SelectValue placeholder="Selecione o novo status" /></SelectTrigger>
-                <SelectContent>
-                  {(Constants.public.Enums.office_status as readonly string[]).filter(s => s !== office.status).map(s => (
-                    <SelectItem key={s} value={s}>{STATUS_LABELS[s] || s}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </DialogContent>
-        </Dialog>
-      ) : (
-        <StatusChangeModal
-          open={showStatusChange}
-          onOpenChange={(open) => { setShowStatusChange(open); if (!open) setSelectedStatusTarget(''); }}
-          officeId={id!}
-          officeName={office.name}
-          currentStatus={office.status}
-          targetStatus={selectedStatusTarget}
-          onStatusChanged={() => { setSelectedStatusTarget(''); fetchAll(); }}
-        />
-      )}
+      {/* Status Change Modal - opens directly with target status */}
+      <StatusChangeModal
+        open={showStatusChange && !!selectedStatusTarget}
+        onOpenChange={(open) => { setShowStatusChange(open); if (!open) setSelectedStatusTarget(''); }}
+        officeId={id!}
+        officeName={office.name}
+        currentStatus={office.status}
+        targetStatus={selectedStatusTarget}
+        onStatusChanged={() => { setSelectedStatusTarget(''); fetchAll(); }}
+      />
 
       {/* Portal Preview Modal */}
       <PortalPreviewModal
