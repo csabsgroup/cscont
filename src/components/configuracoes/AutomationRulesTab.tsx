@@ -94,6 +94,7 @@ const STATUS_OPTIONS = [
   { value: 'nao_iniciado', label: 'Não Iniciado' },
   { value: 'upsell', label: 'Upsell' },
   { value: 'bonus_elite', label: 'Bônus Elite' },
+  { value: 'pausado', label: 'Pausado' },
 ];
 
 const CONTRACT_STATUS_OPTIONS = [
@@ -155,6 +156,13 @@ const CONDITION_FIELDS: ConditionFieldDef[] = [
   // ── Atividades ──
   { value: 'open_activities_count', label: 'Qtd atividades abertas', category: 'Atividades', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.equals] },
   { value: 'overdue_activities_count', label: 'Qtd atividades atrasadas', category: 'Atividades', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.equals] },
+
+  // ── Churn ──
+  { value: 'churn_reason', label: 'Motivo do churn', category: 'Churn', type: 'text', operators: [OPERATORS.equals, OPERATORS.not_equals] },
+  { value: 'days_since_churn', label: 'Dias desde churn', category: 'Churn', type: 'number', operators: [OPERATORS.days_greater_than, OPERATORS.days_less_than, OPERATORS.days_equal], suffix: 'dias' },
+
+  // ── Datas de Ciclo ──
+  { value: 'days_since_cycle_start', label: 'Dias no ciclo atual', category: 'Datas', type: 'number', operators: [OPERATORS.days_greater_than, OPERATORS.days_less_than, OPERATORS.between], suffix: 'dias' },
 ];
 
 const CONDITION_CATEGORIES = [...new Set(CONDITION_FIELDS.map(f => f.category))];
