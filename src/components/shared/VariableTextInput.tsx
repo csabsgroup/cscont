@@ -59,6 +59,17 @@ interface Props {
 export function VariableTextInput({ value, onChange, placeholder, multiline = false, label }: Props) {
   const inputRef = useRef<HTMLTextAreaElement | HTMLInputElement>(null);
   const [flashKey, setFlashKey] = useState<string | null>(null);
+  const [focused, setFocused] = useState(false);
+  const blurTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleFocus = () => {
+    if (blurTimeout.current) clearTimeout(blurTimeout.current);
+    setFocused(true);
+  };
+
+  const handleBlur = () => {
+    blurTimeout.current = setTimeout(() => setFocused(false), 150);
+  };
 
   const insertVariable = (varKey: string) => {
     const el = inputRef.current;
@@ -93,6 +104,8 @@ export function VariableTextInput({ value, onChange, placeholder, multiline = fa
               ref={inputRef as React.RefObject<HTMLTextAreaElement>}
               value={value || ''}
               onChange={e => onChange(e.target.value)}
+              onFocus={handleFocus}
+              onBlur={handleBlur}
               placeholder={placeholder}
               rows={3}
             />
@@ -101,47 +114,51 @@ export function VariableTextInput({ value, onChange, placeholder, multiline = fa
               ref={inputRef as React.RefObject<HTMLInputElement>}
               value={value || ''}
               onChange={e => onChange(e.target.value)}
+              onFocus={handleFocus}
+              onBlur={handleBlur}
               placeholder={placeholder}
             />
           )}
         </div>
-        <TooltipProvider delayDuration={200}>
-          <div className="w-52 border border-border rounded-lg bg-background max-h-64 overflow-y-auto flex-shrink-0">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase px-2.5 pt-2 pb-1 sticky top-0 bg-background z-10 border-b border-border">
-              📋 Variáveis disponíveis
-            </p>
-            {GROUPS.map(group => {
-              const vars = AVAILABLE_VARIABLES.filter(v => v.group === group);
-              const icon = vars[0]?.icon || '';
-              return (
-                <div key={group}>
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase px-2.5 pt-2 pb-0.5 sticky top-7 bg-background z-10">
-                    {icon} {group}
-                  </p>
-                  {vars.map(v => (
-                    <Tooltip key={v.key}>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          onClick={() => insertVariable(v.key)}
-                          className={cn(
-                            "w-full text-left text-[11px] font-mono py-1 px-2.5 cursor-pointer rounded hover:bg-muted/50 transition-colors text-destructive",
-                            flashKey === v.key && "bg-green-500/20"
-                          )}
-                        >
-                          {v.key}
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="left" className="text-xs">
-                        {v.label}
-                      </TooltipContent>
-                    </Tooltip>
-                  ))}
-                </div>
-              );
-            })}
-          </div>
-        </TooltipProvider>
+        {focused && (
+          <TooltipProvider delayDuration={200}>
+            <div className="w-52 border border-border rounded-lg bg-background max-h-64 overflow-y-auto flex-shrink-0">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase px-2.5 pt-2 pb-1 sticky top-0 bg-background z-10 border-b border-border">
+                📋 Variáveis disponíveis
+              </p>
+              {GROUPS.map(group => {
+                const vars = AVAILABLE_VARIABLES.filter(v => v.group === group);
+                const icon = vars[0]?.icon || '';
+                return (
+                  <div key={group}>
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase px-2.5 pt-2 pb-0.5 sticky top-7 bg-background z-10">
+                      {icon} {group}
+                    </p>
+                    {vars.map(v => (
+                      <Tooltip key={v.key}>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onMouseDown={e => { e.preventDefault(); insertVariable(v.key); }}
+                            className={cn(
+                              "w-full text-left text-[11px] font-mono py-1 px-2.5 cursor-pointer rounded hover:bg-muted/50 transition-colors text-destructive",
+                              flashKey === v.key && "bg-green-500/20"
+                            )}
+                          >
+                            {v.key}
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="left" className="text-xs">
+                          {v.label}
+                        </TooltipContent>
+                      </Tooltip>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          </TooltipProvider>
+        )}
       </div>
     </div>
   );
