@@ -5,13 +5,14 @@ import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Upload, Download, CheckCircle2, AlertCircle, Loader2, Undo2 } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Upload, Download, CheckCircle2, AlertCircle, Loader2, Undo2, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   EntityTemplate, autoMapColumns, validateRow, generateTemplateCSV,
-  parseBoolean, parseDateBR,
+  parseBoolean, parseDateBR, getMappingStatus,
 } from '@/lib/import-templates';
 import { parseUploadedFile, downloadCSV } from '@/lib/export-helpers';
 
@@ -21,7 +22,7 @@ interface ImportWizardProps {
   template: EntityTemplate;
 }
 
-type Step = 'upload' | 'map' | 'validate' | 'execute';
+type Step = 'upload' | 'map' | 'preview' | 'validate' | 'execute';
 
 export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps) {
   const { user } = useAuth();
@@ -30,6 +31,7 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
   const [fileHeaders, setFileHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<Record<string, any>[]>([]);
   const [mapping, setMapping] = useState<Record<string, string>>({});
+  const [autoMapping, setAutoMapping] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<string[]>([]);
   const [validCount, setValidCount] = useState(0);
   const [importing, setImporting] = useState(false);
@@ -38,7 +40,7 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
 
   const reset = () => {
     setStep('upload'); setFileHeaders([]); setRows([]); setMapping({});
-    setErrors([]); setValidCount(0); setImporting(false); setProgress(0); setResult(null);
+    setAutoMapping({}); setErrors([]); setValidCount(0); setImporting(false); setProgress(0); setResult(null);
   };
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -52,6 +54,7 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
       setRows(parsed.rows);
       const autoMap = autoMapColumns(parsed.headers, template.fields);
       setMapping(autoMap);
+      setAutoMapping(autoMap);
       setStep('map');
     } catch { toast.error('Erro ao ler o arquivo.'); }
   };
@@ -66,8 +69,9 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
     URL.revokeObjectURL(url);
   };
 
-  const handleValidate = () => {
-    const mappedRows = rows.map(row => {
+  // Get mapped preview rows
+  const getMappedRows = () => {
+    return rows.map(row => {
       const mapped: Record<string, any> = {};
       for (const field of template.fields) {
         const fileCol = mapping[field.key];
@@ -75,6 +79,14 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
       }
       return mapped;
     });
+  };
+
+  const handlePreview = () => {
+    setStep('preview');
+  };
+
+  const handleValidate = () => {
+    const mappedRows = getMappedRows();
     const allErrors: string[] = [];
     let valid = 0;
     mappedRows.forEach((row, i) => {
@@ -89,14 +101,7 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
 
   const handleImport = async () => {
     setImporting(true); setProgress(0);
-    const mappedRows = rows.map(row => {
-      const mapped: Record<string, any> = {};
-      for (const field of template.fields) {
-        const fileCol = mapping[field.key];
-        mapped[field.key] = fileCol ? row[fileCol] : '';
-      }
-      return mapped;
-    }).filter((row, i) => {
+    const mappedRows = getMappedRows().filter((row, i) => {
       const rowErrors = validateRow(row, template.fields, i);
       return rowErrors.length === 0;
     });
@@ -119,7 +124,6 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
       setProgress(Math.round(((i + chunk.length) / mappedRows.length) * 100));
     }
 
-    // Save batch for undo
     let batchId: string | undefined;
     if (user && insertedIds.length > 0) {
       const { data: batchData } = await supabase.from('import_batches' as any).insert({
@@ -132,7 +136,6 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
       batchId = (batchData as any)?.id;
     }
 
-    // Audit log
     if (user) {
       await supabase.from('audit_logs').insert({
         user_id: user.id,
@@ -151,38 +154,38 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
     if (!result?.batchId) return;
     setImporting(true);
     try {
-      const { data: batch } = await supabase.from('import_batches' as any)
-        .select('*').eq('id', result.batchId).single();
+      const { data: batch } = await supabase.from('import_batches' as any).select('*').eq('id', result.batchId).single();
       if (!batch) throw new Error('Batch not found');
       const ids = (batch as any).record_ids as string[];
       const chunkSize = 50;
       for (let i = 0; i < ids.length; i += chunkSize) {
         await supabase.from((batch as any).table_name as any).delete().in('id', ids.slice(i, i + chunkSize));
       }
-      await supabase.from('import_batches' as any)
-        .update({ undone_at: new Date().toISOString() } as any)
-        .eq('id', result.batchId);
+      await supabase.from('import_batches' as any).update({ undone_at: new Date().toISOString() } as any).eq('id', result.batchId);
       if (user) {
         await supabase.from('audit_logs').insert({
-          user_id: user.id,
-          entity_type: template.table,
-          action: 'undo_import',
+          user_id: user.id, entity_type: template.table, action: 'undo_import',
           details: { batch_id: result.batchId, count: ids.length },
         });
       }
       toast.success('Importação desfeita com sucesso.');
       reset();
       onOpenChange(false);
-    } catch {
-      toast.error('Erro ao desfazer importação.');
-    } finally {
-      setImporting(false);
-    }
+    } catch { toast.error('Erro ao desfazer importação.'); } finally { setImporting(false); }
   };
+
+  const mappingStatusBadge = (status: string) => {
+    if (status === 'auto') return <Badge variant="default" className="text-[10px] h-4 bg-success/20 text-success border-success/30">Auto</Badge>;
+    if (status === 'manual') return <Badge variant="default" className="text-[10px] h-4 bg-warning/20 text-warning border-warning/30">Manual</Badge>;
+    return <Badge variant="destructive" className="text-[10px] h-4">Sem mapa</Badge>;
+  };
+
+  const mappedCount = template.fields.filter(f => mapping[f.key]).length;
+  const requiredUnmapped = template.fields.filter(f => f.required && !mapping[f.key]);
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Importar {template.label}</DialogTitle>
         </DialogHeader>
@@ -198,33 +201,83 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
             <Button variant="ghost" size="sm" onClick={handleDownloadTemplate} className="gap-1.5">
               <Download className="h-4 w-4" />Baixar template
             </Button>
-            <p className="text-xs text-muted-foreground">Máximo 5MB, 5000 linhas. Formatos: CSV, XLSX.</p>
+            <p className="text-xs text-muted-foreground">Máximo 5MB, 5000 linhas. Formatos: CSV, XLSX. Use exatamente os nomes dos campos do sistema para auto-mapeamento.</p>
           </div>
         )}
 
         {step === 'map' && (
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">{rows.length} linhas encontradas. Mapeie as colunas:</p>
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">{rows.length} linhas encontradas. Mapeie as colunas:</p>
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary" className="text-xs">{mappedCount}/{template.fields.length} mapeados</Badge>
+                {requiredUnmapped.length > 0 && (
+                  <Badge variant="destructive" className="text-xs">{requiredUnmapped.length} obrigatórios sem mapa</Badge>
+                )}
+              </div>
+            </div>
             <div className="space-y-2">
-              {template.fields.map(field => (
-                <div key={field.key} className="flex items-center gap-3">
-                  <span className="text-sm w-40 shrink-0">
-                    {field.label} {field.required && <span className="text-destructive">*</span>}
-                  </span>
-                  <span className="text-muted-foreground">→</span>
-                  <Select value={mapping[field.key] || ''} onValueChange={(v) => setMapping(prev => ({ ...prev, [field.key]: v }))}>
-                    <SelectTrigger className="flex-1"><SelectValue placeholder="Selecionar coluna..." /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">— Não mapear —</SelectItem>
-                      {fileHeaders.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ))}
+              {template.fields.map(field => {
+                const status = getMappingStatus(field.key, mapping, autoMapping);
+                return (
+                  <div key={field.key} className="flex items-center gap-3">
+                    <div className="w-44 shrink-0 flex items-center gap-1.5">
+                      {mappingStatusBadge(status)}
+                      <span className="text-sm truncate">
+                        {field.label} {field.required && <span className="text-destructive">*</span>}
+                      </span>
+                    </div>
+                    <span className="text-muted-foreground">→</span>
+                    <Select value={mapping[field.key] || ''} onValueChange={(v) => setMapping(prev => ({ ...prev, [field.key]: v }))}>
+                      <SelectTrigger className="flex-1"><SelectValue placeholder="Selecionar coluna..." /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">— Não mapear —</SelectItem>
+                        {fileHeaders.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                );
+              })}
             </div>
             <div className="flex justify-between">
               <Button variant="outline" onClick={() => setStep('upload')}>Voltar</Button>
-              <Button onClick={handleValidate}>Validar</Button>
+              <Button onClick={handlePreview} disabled={requiredUnmapped.length > 0}>
+                <Eye className="mr-2 h-4 w-4" />Pré-visualizar
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {step === 'preview' && (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">Pré-visualização das primeiras 5 linhas mapeadas:</p>
+            <ScrollArea className="border rounded-lg">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-xs w-10">#</TableHead>
+                    {template.fields.filter(f => mapping[f.key]).map(f => (
+                      <TableHead key={f.key} className="text-xs whitespace-nowrap">{f.label}</TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {getMappedRows().slice(0, 5).map((row, i) => (
+                    <TableRow key={i}>
+                      <TableCell className="text-xs text-muted-foreground">{i + 1}</TableCell>
+                      {template.fields.filter(f => mapping[f.key]).map(f => (
+                        <TableCell key={f.key} className="text-xs max-w-[150px] truncate">
+                          {row[f.key] || <span className="text-muted-foreground/50">—</span>}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+            <div className="flex justify-between">
+              <Button variant="outline" onClick={() => setStep('map')}>Voltar</Button>
+              <Button onClick={handleValidate}>Validar dados</Button>
             </div>
           </div>
         )}
@@ -247,7 +300,7 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
             )}
             <p className="text-sm">Serão importados <strong>{validCount}</strong> registros válidos. Linhas com erro serão ignoradas.</p>
             <div className="flex justify-between">
-              <Button variant="outline" onClick={() => setStep('map')}>Voltar</Button>
+              <Button variant="outline" onClick={() => setStep('preview')}>Voltar</Button>
               <Button onClick={handleImport} disabled={validCount === 0 || importing}>
                 {importing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Importando...</> : 'Importar'}
               </Button>
@@ -295,17 +348,44 @@ async function insertRow(template: EntityTemplate, row: Record<string, any>): Pr
       const { data } = await supabase.from('profiles').select('id').ilike('full_name', `%${row.csm_email.trim().split('@')[0]}%`).maybeSingle();
       csmId = data?.id || null;
     }
-    const { data, error } = await supabase.from('offices').insert({
+
+    const insertData: Record<string, any> = {
       name: row.name,
-      email: row.email,
+      email: row.email || null,
       phone: row.phone || null,
+      whatsapp: row.whatsapp || null,
       city: row.city || null,
       state: row.state || null,
+      cnpj: row.cnpj || null,
+      cpf: row.cpf || null,
+      cep: row.cep || null,
+      address: row.address || null,
+      segment: row.segment || null,
+      instagram: row.instagram || null,
       active_product_id: productId,
       csm_id: csmId,
       status: row.status as any,
       activation_date: parseDateBR(row.activation_date),
-    }).select('id').single();
+      first_signature_date: parseDateBR(row.first_signature_date),
+      onboarding_date: parseDateBR(row.onboarding_date),
+      cycle_start_date: parseDateBR(row.cycle_start_date),
+      cycle_end_date: parseDateBR(row.cycle_end_date),
+      churn_date: parseDateBR(row.churn_date),
+      notes: row.notes || null,
+      office_code: row.office_code || null,
+    };
+
+    // Add numeric fields if present
+    if (row.qtd_clientes) insertData.qtd_clientes = Number(row.qtd_clientes) || null;
+    if (row.qtd_colaboradores) insertData.qtd_colaboradores = Number(row.qtd_colaboradores) || null;
+    if (row.faturamento_mensal) insertData.faturamento_mensal = Number(row.faturamento_mensal) || null;
+    if (row.faturamento_anual) insertData.faturamento_anual = Number(row.faturamento_anual) || null;
+
+    // Clean nulls
+    Object.keys(insertData).forEach(k => { if (insertData[k] === null || insertData[k] === undefined || insertData[k] === '') delete insertData[k]; });
+    if (!insertData.name) throw new Error('Name required');
+
+    const { data, error } = await supabase.from('offices').insert(insertData as any).select('id').single();
     if (error) throw error;
     return data?.id || null;
   } else if (t === 'contacts') {
@@ -315,11 +395,15 @@ async function insertRow(template: EntityTemplate, row: Record<string, any>): Pr
       office_id: office.id,
       name: row.name,
       role_title: row.role_title || null,
+      contact_type: row.contact_type || null,
       email: row.email || null,
       phone: row.phone || null,
+      whatsapp: row.whatsapp || null,
       instagram: row.instagram || null,
+      cpf: row.cpf || null,
       birthday: parseDateBR(row.birthday),
       is_main_contact: parseBoolean(row.is_main_contact || 'sim'),
+      notes: row.notes || null,
     }).select('id').single();
     if (error) throw error;
     return data?.id || null;
@@ -337,11 +421,14 @@ async function insertRow(template: EntityTemplate, row: Record<string, any>): Pr
       product_id: productId,
       start_date: parseDateBR(row.start_date),
       end_date: parseDateBR(row.end_date),
+      renewal_date: parseDateBR(row.renewal_date),
       value: Number(row.value) || 0,
       monthly_value: Number(row.monthly_value) || 0,
       installments_total: Number(row.installments_total) || 0,
       installments_overdue: Number(row.installments_overdue) || 0,
       status: row.status as any,
+      negotiation_notes: row.negotiation_notes || null,
+      asaas_link: row.asaas_link || null,
     }).select('id').single();
     if (error) throw error;
     return data?.id || null;
@@ -362,6 +449,7 @@ async function insertRow(template: EntityTemplate, row: Record<string, any>): Pr
       status: row.status as any,
       share_with_client: parseBoolean(row.share_with_client || 'nao'),
       notes: row.notes || null,
+      duration_minutes: row.duration_minutes ? Number(row.duration_minutes) : 30,
     }).select('id').single();
     if (error) throw error;
     return data?.id || null;

@@ -254,6 +254,8 @@ export type Database = {
           is_active: boolean
           name: string
           product_id: string | null
+          schedule_config: Json | null
+          target_type: string | null
           trigger_params: Json
           trigger_type: string
           updated_at: string
@@ -269,6 +271,8 @@ export type Database = {
           is_active?: boolean
           name: string
           product_id?: string | null
+          schedule_config?: Json | null
+          target_type?: string | null
           trigger_params?: Json
           trigger_type: string
           updated_at?: string
@@ -284,6 +288,8 @@ export type Database = {
           is_active?: boolean
           name?: string
           product_id?: string | null
+          schedule_config?: Json | null
+          target_type?: string | null
           trigger_params?: Json
           trigger_type?: string
           updated_at?: string
@@ -1597,6 +1603,7 @@ export type Database = {
           logo_url: string | null
           name: string
           notes: string | null
+          office_code: string | null
           onboarding_date: string | null
           phone: string | null
           photo_url: string | null
@@ -1637,6 +1644,7 @@ export type Database = {
           logo_url?: string | null
           name: string
           notes?: string | null
+          office_code?: string | null
           onboarding_date?: string | null
           phone?: string | null
           photo_url?: string | null
@@ -1677,6 +1685,7 @@ export type Database = {
           logo_url?: string | null
           name?: string
           notes?: string | null
+          office_code?: string | null
           onboarding_date?: string | null
           phone?: string | null
           photo_url?: string | null
@@ -1754,6 +1763,7 @@ export type Database = {
       }
       products: {
         Row: {
+          code_prefix: string | null
           created_at: string
           description: string | null
           id: string
@@ -1762,6 +1772,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          code_prefix?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -1770,6 +1781,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          code_prefix?: string | null
           created_at?: string
           description?: string | null
           id?: string

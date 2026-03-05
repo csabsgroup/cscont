@@ -5,6 +5,7 @@ export interface ImportField {
   type: 'text' | 'email' | 'date' | 'number' | 'enum' | 'boolean';
   enumValues?: string[];
   example: string;
+  dbColumn?: string; // actual DB column name for direct mapping
 }
 
 export interface EntityTemplate {
@@ -22,15 +23,33 @@ export const importTemplates: EntityTemplate[] = [
     table: 'offices',
     matchStrategy: { type: 'email', fields: ['email'] },
     fields: [
-      { key: 'name', label: 'nome', required: true, type: 'text', example: 'Escritório ABC' },
-      { key: 'email', label: 'email', required: true, type: 'email', example: 'contato@abc.com' },
-      { key: 'phone', label: 'whatsapp', required: false, type: 'text', example: '11999999999' },
-      { key: 'city', label: 'cidade', required: false, type: 'text', example: 'São Paulo' },
-      { key: 'state', label: 'estado', required: false, type: 'text', example: 'SP' },
-      { key: 'product_name', label: 'produto_ativo', required: true, type: 'text', example: 'Start CEO' },
-      { key: 'csm_email', label: 'csm_responsavel_email', required: true, type: 'email', example: 'csm@empresa.com' },
-      { key: 'status', label: 'status', required: true, type: 'enum', enumValues: ['ativo', 'churn', 'nao_renovado', 'nao_iniciado', 'upsell', 'bonus_elite'], example: 'ativo' },
-      { key: 'activation_date', label: 'data_primeira_assinatura', required: false, type: 'date', example: '01/01/2024' },
+      { key: 'name', label: 'nome', required: true, type: 'text', example: 'Escritório ABC', dbColumn: 'name' },
+      { key: 'email', label: 'email', required: false, type: 'email', example: 'contato@abc.com', dbColumn: 'email' },
+      { key: 'phone', label: 'whatsapp', required: false, type: 'text', example: '11999999999', dbColumn: 'phone' },
+      { key: 'whatsapp', label: 'whatsapp_numero', required: false, type: 'text', example: '11999999999', dbColumn: 'whatsapp' },
+      { key: 'city', label: 'cidade', required: false, type: 'text', example: 'São Paulo', dbColumn: 'city' },
+      { key: 'state', label: 'estado', required: false, type: 'text', example: 'SP', dbColumn: 'state' },
+      { key: 'cnpj', label: 'cnpj', required: false, type: 'text', example: '12.345.678/0001-90', dbColumn: 'cnpj' },
+      { key: 'cpf', label: 'cpf', required: false, type: 'text', example: '123.456.789-00', dbColumn: 'cpf' },
+      { key: 'cep', label: 'cep', required: false, type: 'text', example: '01001-000', dbColumn: 'cep' },
+      { key: 'address', label: 'endereco', required: false, type: 'text', example: 'Rua Exemplo, 100', dbColumn: 'address' },
+      { key: 'segment', label: 'segmento', required: false, type: 'text', example: 'Contabilidade', dbColumn: 'segment' },
+      { key: 'instagram', label: 'instagram', required: false, type: 'text', example: '@escritorioabc', dbColumn: 'instagram' },
+      { key: 'product_name', label: 'produto_ativo', required: false, type: 'text', example: 'Start CEO' },
+      { key: 'csm_email', label: 'csm_responsavel_email', required: false, type: 'email', example: 'csm@empresa.com' },
+      { key: 'status', label: 'status', required: true, type: 'enum', enumValues: ['ativo', 'churn', 'nao_renovado', 'nao_iniciado', 'upsell', 'bonus_elite', 'pausado'], example: 'ativo', dbColumn: 'status' },
+      { key: 'activation_date', label: 'data_primeira_assinatura', required: false, type: 'date', example: '01/01/2024', dbColumn: 'activation_date' },
+      { key: 'first_signature_date', label: 'data_primeira_assinatura_original', required: false, type: 'date', example: '01/01/2024', dbColumn: 'first_signature_date' },
+      { key: 'onboarding_date', label: 'data_onboarding', required: false, type: 'date', example: '15/01/2024', dbColumn: 'onboarding_date' },
+      { key: 'cycle_start_date', label: 'inicio_ciclo', required: false, type: 'date', example: '01/01/2024', dbColumn: 'cycle_start_date' },
+      { key: 'cycle_end_date', label: 'fim_ciclo', required: false, type: 'date', example: '31/12/2024', dbColumn: 'cycle_end_date' },
+      { key: 'churn_date', label: 'data_churn', required: false, type: 'date', example: '15/06/2024', dbColumn: 'churn_date' },
+      { key: 'qtd_clientes', label: 'qtd_clientes', required: false, type: 'number', example: '150', dbColumn: 'qtd_clientes' },
+      { key: 'qtd_colaboradores', label: 'qtd_colaboradores', required: false, type: 'number', example: '20', dbColumn: 'qtd_colaboradores' },
+      { key: 'faturamento_mensal', label: 'faturamento_mensal', required: false, type: 'number', example: '50000', dbColumn: 'faturamento_mensal' },
+      { key: 'faturamento_anual', label: 'faturamento_anual', required: false, type: 'number', example: '600000', dbColumn: 'faturamento_anual' },
+      { key: 'notes', label: 'observacoes', required: false, type: 'text', example: 'Cliente VIP', dbColumn: 'notes' },
+      { key: 'office_code', label: 'codigo_escritorio', required: false, type: 'text', example: 'ELT-001', dbColumn: 'office_code' },
     ],
   },
   {
@@ -40,14 +59,17 @@ export const importTemplates: EntityTemplate[] = [
     matchStrategy: { type: 'name_combo', fields: ['office_name', 'name'] },
     fields: [
       { key: 'office_name', label: 'escritorio_nome', required: true, type: 'text', example: 'Escritório ABC' },
-      { key: 'name', label: 'nome_contato', required: true, type: 'text', example: 'João Silva' },
-      { key: 'role_title', label: 'cargo', required: false, type: 'text', example: 'Sócio' },
-      { key: 'contact_type', label: 'tipo', required: true, type: 'enum', enumValues: ['decisor', 'usuario', 'financeiro'], example: 'decisor' },
-      { key: 'email', label: 'email', required: false, type: 'email', example: 'joao@abc.com' },
-      { key: 'phone', label: 'telefone', required: false, type: 'text', example: '11999999999' },
-      { key: 'instagram', label: 'instagram', required: false, type: 'text', example: '@joaosilva' },
-      { key: 'birthday', label: 'aniversario', required: false, type: 'date', example: '15/03/1990' },
-      { key: 'is_main_contact', label: 'ativo', required: true, type: 'boolean', example: 'sim' },
+      { key: 'name', label: 'nome_contato', required: true, type: 'text', example: 'João Silva', dbColumn: 'name' },
+      { key: 'role_title', label: 'cargo', required: false, type: 'text', example: 'Sócio', dbColumn: 'role_title' },
+      { key: 'contact_type', label: 'tipo', required: false, type: 'enum', enumValues: ['decisor', 'usuario', 'financeiro'], example: 'decisor', dbColumn: 'contact_type' },
+      { key: 'email', label: 'email', required: false, type: 'email', example: 'joao@abc.com', dbColumn: 'email' },
+      { key: 'phone', label: 'telefone', required: false, type: 'text', example: '11999999999', dbColumn: 'phone' },
+      { key: 'whatsapp', label: 'whatsapp', required: false, type: 'text', example: '11999999999', dbColumn: 'whatsapp' },
+      { key: 'instagram', label: 'instagram', required: false, type: 'text', example: '@joaosilva', dbColumn: 'instagram' },
+      { key: 'cpf', label: 'cpf', required: false, type: 'text', example: '123.456.789-00', dbColumn: 'cpf' },
+      { key: 'birthday', label: 'aniversario', required: false, type: 'date', example: '15/03/1990', dbColumn: 'birthday' },
+      { key: 'is_main_contact', label: 'ativo', required: false, type: 'boolean', example: 'sim', dbColumn: 'is_main_contact' },
+      { key: 'notes', label: 'observacoes', required: false, type: 'text', example: 'Contato principal', dbColumn: 'notes' },
     ],
   },
   {
@@ -58,13 +80,16 @@ export const importTemplates: EntityTemplate[] = [
     fields: [
       { key: 'office_name', label: 'escritorio_nome', required: true, type: 'text', example: 'Escritório ABC' },
       { key: 'product_name', label: 'produto', required: true, type: 'text', example: 'Start CEO' },
-      { key: 'start_date', label: 'data_inicio', required: true, type: 'date', example: '01/01/2024' },
-      { key: 'end_date', label: 'data_fim', required: true, type: 'date', example: '31/12/2024' },
-      { key: 'value', label: 'valor_total', required: true, type: 'number', example: '12000' },
-      { key: 'monthly_value', label: 'valor_parcela', required: true, type: 'number', example: '1000' },
-      { key: 'installments_total', label: 'qtd_parcelas', required: true, type: 'number', example: '12' },
-      { key: 'installments_overdue', label: 'parcelas_vencidas', required: false, type: 'number', example: '0' },
-      { key: 'status', label: 'status', required: true, type: 'enum', enumValues: ['ativo', 'encerrado', 'cancelado'], example: 'ativo' },
+      { key: 'start_date', label: 'data_inicio', required: true, type: 'date', example: '01/01/2024', dbColumn: 'start_date' },
+      { key: 'end_date', label: 'data_fim', required: false, type: 'date', example: '31/12/2024', dbColumn: 'end_date' },
+      { key: 'renewal_date', label: 'data_renovacao', required: false, type: 'date', example: '01/01/2025', dbColumn: 'renewal_date' },
+      { key: 'value', label: 'valor_total', required: false, type: 'number', example: '12000', dbColumn: 'value' },
+      { key: 'monthly_value', label: 'valor_parcela', required: false, type: 'number', example: '1000', dbColumn: 'monthly_value' },
+      { key: 'installments_total', label: 'qtd_parcelas', required: false, type: 'number', example: '12', dbColumn: 'installments_total' },
+      { key: 'installments_overdue', label: 'parcelas_vencidas', required: false, type: 'number', example: '0', dbColumn: 'installments_overdue' },
+      { key: 'status', label: 'status', required: true, type: 'enum', enumValues: ['ativo', 'encerrado', 'cancelado', 'pendente'], example: 'ativo', dbColumn: 'status' },
+      { key: 'negotiation_notes', label: 'notas_negociacao', required: false, type: 'text', example: 'Desconto aplicado', dbColumn: 'negotiation_notes' },
+      { key: 'asaas_link', label: 'link_asaas', required: false, type: 'text', example: 'https://...', dbColumn: 'asaas_link' },
     ],
   },
   {
@@ -73,12 +98,13 @@ export const importTemplates: EntityTemplate[] = [
     table: 'meetings',
     fields: [
       { key: 'office_name', label: 'escritorio_nome', required: true, type: 'text', example: 'Escritório ABC' },
-      { key: 'scheduled_at', label: 'data', required: true, type: 'date', example: '15/03/2024' },
-      { key: 'title', label: 'titulo', required: false, type: 'text', example: 'Reunião mensal' },
-      { key: 'status', label: 'status', required: true, type: 'enum', enumValues: ['scheduled', 'completed', 'cancelled'], example: 'completed' },
+      { key: 'scheduled_at', label: 'data', required: true, type: 'date', example: '15/03/2024', dbColumn: 'scheduled_at' },
+      { key: 'title', label: 'titulo', required: false, type: 'text', example: 'Reunião mensal', dbColumn: 'title' },
+      { key: 'status', label: 'status', required: true, type: 'enum', enumValues: ['scheduled', 'completed', 'cancelled'], example: 'completed', dbColumn: 'status' },
       { key: 'csm_email', label: 'responsavel_email', required: true, type: 'email', example: 'csm@empresa.com' },
-      { key: 'share_with_client', label: 'share_with_client', required: false, type: 'boolean', example: 'sim' },
-      { key: 'notes', label: 'observacoes', required: false, type: 'text', example: 'Discussão de metas' },
+      { key: 'share_with_client', label: 'share_with_client', required: false, type: 'boolean', example: 'sim', dbColumn: 'share_with_client' },
+      { key: 'notes', label: 'observacoes', required: false, type: 'text', example: 'Discussão de metas', dbColumn: 'notes' },
+      { key: 'duration_minutes', label: 'duracao_minutos', required: false, type: 'number', example: '30', dbColumn: 'duration_minutes' },
     ],
   },
   {
@@ -112,12 +138,28 @@ export function generateTemplateCSV(template: EntityTemplate): string {
 export function autoMapColumns(fileHeaders: string[], templateFields: ImportField[]): Record<string, string> {
   const mapping: Record<string, string> = {};
   for (const field of templateFields) {
+    // 1. Exact match on dbColumn or key name
+    const exactMatch = fileHeaders.find(h => {
+      const nh = h.toLowerCase().trim();
+      return nh === field.key || nh === (field.dbColumn || '').toLowerCase() || nh === field.label.toLowerCase();
+    });
+    if (exactMatch) { mapping[field.key] = exactMatch; continue; }
+
+    // 2. Fuzzy match on normalized label
     const normalized = field.label.toLowerCase().replace(/[_\s]/g, '');
-    const match = fileHeaders.find(h => {
+    const fuzzyMatch = fileHeaders.find(h => {
       const nh = h.toLowerCase().replace(/[_\s]/g, '');
       return nh === normalized || nh.includes(normalized) || normalized.includes(nh);
     });
-    if (match) mapping[field.key] = match;
+    if (fuzzyMatch) { mapping[field.key] = fuzzyMatch; continue; }
+
+    // 3. Fuzzy match on key
+    const keyNorm = field.key.toLowerCase().replace(/[_\s]/g, '');
+    const keyMatch = fileHeaders.find(h => {
+      const nh = h.toLowerCase().replace(/[_\s]/g, '');
+      return nh === keyNorm || nh.includes(keyNorm) || keyNorm.includes(nh);
+    });
+    if (keyMatch) mapping[field.key] = keyMatch;
   }
   return mapping;
 }
@@ -160,4 +202,12 @@ export function parseDateBR(val: string): string | null {
     return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
   }
   return val;
+}
+
+export type MappingStatus = 'auto' | 'manual' | 'unmapped';
+
+export function getMappingStatus(fieldKey: string, mapping: Record<string, string>, autoMapping: Record<string, string>): MappingStatus {
+  if (!mapping[fieldKey]) return 'unmapped';
+  if (autoMapping[fieldKey] === mapping[fieldKey]) return 'auto';
+  return 'manual';
 }
