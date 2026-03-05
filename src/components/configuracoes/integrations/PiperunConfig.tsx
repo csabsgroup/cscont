@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, CheckCircle2, XCircle, Download, ArrowRight, Plus, Trash2, RotateCcw, Search, Zap } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Loader2, CheckCircle2, XCircle, Download, ArrowRight, Plus, Trash2, RotateCcw, Search, Zap, Copy, Webhook, ExternalLink } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { IntegrationSetting } from '@/hooks/useIntegrationSettings';
@@ -84,22 +85,23 @@ const CRM_FIELDS: CrmFieldDef[] = [
 const GROUPS = ['Escritório', 'Contrato', 'Contato Principal', 'Sócio 2', 'Sócio 3'];
 
 const DEFAULT_MAPPINGS: MappingRow[] = [
-  { id: '1', crm: 'offices.name', piperun_key: 'title', piperun_label: 'Título' },
+  { id: '1', crm: 'offices.name', piperun_key: 'deal.title', piperun_label: 'Título da oportunidade' },
   { id: '2', crm: 'offices.email', piperun_key: 'person.email', piperun_label: 'Email do contato' },
-  { id: '3', crm: 'offices.phone', piperun_key: 'person.phone', piperun_label: 'Telefone do contato' },
-  { id: '4', crm: 'offices.city', piperun_key: 'person.city', piperun_label: 'Cidade' },
-  { id: '5', crm: 'offices.state', piperun_key: 'person.state', piperun_label: 'Estado' },
-  { id: '6', crm: 'offices.cnpj', piperun_key: 'organization.cnpj', piperun_label: 'CNPJ' },
-  { id: '7', crm: 'contracts.value', piperun_key: 'value', piperun_label: 'Valor' },
+  { id: '3', crm: 'offices.phone', piperun_key: 'person.phone', piperun_label: 'Telefone' },
+  { id: '4', crm: 'offices.city', piperun_key: 'company.city.name', piperun_label: 'Cidade' },
+  { id: '5', crm: 'offices.state', piperun_key: 'company.state.abbr', piperun_label: 'Estado (UF)' },
+  { id: '6', crm: 'offices.cnpj', piperun_key: 'company.cnpj', piperun_label: 'CNPJ' },
+  { id: '7', crm: 'contracts.value', piperun_key: 'deal.value', piperun_label: 'Valor da oportunidade' },
   { id: '8', crm: 'contacts.name', piperun_key: 'person.name', piperun_label: 'Nome do contato' },
   { id: '9', crm: 'contacts.email', piperun_key: 'person.email', piperun_label: 'Email do contato' },
-  { id: '10', crm: 'contacts.phone', piperun_key: 'person.phone', piperun_label: 'Telefone do contato' },
+  { id: '10', crm: 'contacts.phone', piperun_key: 'person.phone', piperun_label: 'Telefone' },
 ];
 
 interface MappingRow { id: string; crm: string; piperun_key: string; piperun_label: string; }
+interface PreviewDeal { id: number; title: string; company_name: string; person_name: string; value: number; won_at: string; }
 
 export function PiperunConfig({ setting, onSave }: Props) {
-  const config = setting?.config || {};
+  const config = (setting?.config || {}) as any;
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean } | null>(null);
   const [pipelines, setPipelines] = useState<any[]>([]);
@@ -107,7 +109,6 @@ export function PiperunConfig({ setting, onSave }: Props) {
   const [pipelineId, setPipelineId] = useState(config.pipeline_id || '');
   const [stageId, setStageId] = useState(config.stage_id || '');
   const [autoImport, setAutoImport] = useState(config.auto_import || false);
-  const [filterWon, setFilterWon] = useState(config.filter_won !== false);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ imported: number; skipped: number; automations_triggered: number } | null>(null);
   const [mappings, setMappings] = useState<MappingRow[]>(() => {
@@ -117,13 +118,23 @@ export function PiperunConfig({ setting, onSave }: Props) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerTargetId, setPickerTargetId] = useState('');
 
+  // Preview state
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewDeals, setPreviewDeals] = useState<PreviewDeal[]>([]);
+  const [previewAlreadyImported, setPreviewAlreadyImported] = useState(0);
+
+  const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+  const webhookUrl = `https://${projectId}.supabase.co/functions/v1/piperun-webhook`;
+  const lastWebhookAt = config.last_webhook_at;
+
   const testConnection = async () => {
     setTesting(true);
     try {
       const { data, error } = await supabase.functions.invoke('integration-piperun', { body: { action: 'testConnection' } });
       if (error) throw error;
       setTestResult(data);
-      if (data.success) { toast.success('Conectado ao Piperun!'); loadPipelines(); }
+      if (data.success) { toast.success(data.message || 'Conectado ao Piperun!'); loadPipelines(); }
       else { toast.error(data.error || 'Falha ao conectar'); }
     } catch (e: any) { setTestResult({ success: false }); toast.error('Falha: ' + e.message); }
     setTesting(false);
@@ -148,15 +159,8 @@ export function PiperunConfig({ setting, onSave }: Props) {
   };
 
   const openPicker = (id: string) => { setPickerTargetId(id); setPickerOpen(true); };
-
-  const addMapping = () => {
-    setMappings(prev => [...prev, { id: crypto.randomUUID(), crm: '', piperun_key: '', piperun_label: '' }]);
-  };
-
-  const removeMapping = (id: string) => {
-    setMappings(prev => prev.filter(m => m.id !== id));
-  };
-
+  const addMapping = () => { setMappings(prev => [...prev, { id: crypto.randomUUID(), crm: '', piperun_key: '', piperun_label: '' }]); };
+  const removeMapping = (id: string) => { setMappings(prev => prev.filter(m => m.id !== id)); };
 
   const validateMappings = (): string | null => {
     const crmTargets = mappings.filter(m => m.crm && m.piperun_key).map(m => m.crm);
@@ -168,19 +172,28 @@ export function PiperunConfig({ setting, onSave }: Props) {
     return null;
   };
 
-  const importNow = async () => {
+  // Preview flow
+  const handleImportClick = async () => {
     if (!pipelineId || !stageId) { toast.error('Selecione funil e etapa'); return; }
+    setPreviewLoading(true);
+    setPreviewOpen(true);
+    try {
+      const { data } = await supabase.functions.invoke('integration-piperun', {
+        body: { action: 'previewDeals', pipeline_id: pipelineId, stage_id: stageId },
+      });
+      setPreviewDeals(data?.deals || []);
+      setPreviewAlreadyImported(data?.already_imported || 0);
+    } catch (e: any) { toast.error('Erro ao buscar deals: ' + e.message); }
+    setPreviewLoading(false);
+  };
+
+  const confirmImport = async () => {
     setImporting(true);
+    setPreviewOpen(false);
     try {
       const fieldMappings = mappings.filter(m => m.crm && m.piperun_key).map(m => ({ piperun: m.piperun_key, local: m.crm }));
       const { data } = await supabase.functions.invoke('integration-piperun', {
-        body: {
-          action: 'importDeals',
-          pipeline_id: pipelineId,
-          stage_id: stageId,
-          filter_won: filterWon,
-          field_mappings: fieldMappings,
-        },
+        body: { action: 'importDeals', pipeline_id: pipelineId, stage_id: stageId, field_mappings: fieldMappings },
       });
       setImportResult(data);
       toast.success(`${data.imported} novos clientes importados, ${data.skipped} já existiam`);
@@ -191,25 +204,19 @@ export function PiperunConfig({ setting, onSave }: Props) {
   const handleSave = async () => {
     const validationError = validateMappings();
     if (validationError) { toast.error(validationError); return; }
-
     await onSave('piperun', {
       is_connected: testResult?.success || setting?.is_connected || false,
-      config: {
-        pipeline_id: pipelineId,
-        stage_id: stageId,
-        auto_import: autoImport,
-        filter_won: filterWon,
-        field_mappings_v2: mappings,
-      },
+      config: { pipeline_id: pipelineId, stage_id: stageId, auto_import: autoImport, field_mappings_v2: mappings, last_webhook_at: lastWebhookAt },
     });
     toast.success('Configuração do Piperun salva!');
   };
 
-  // Group fields for select
-  const groupedFields = GROUPS.map(g => ({
-    group: g,
-    fields: CRM_FIELDS.filter(f => f.group === g),
-  }));
+  const copyWebhookUrl = () => {
+    navigator.clipboard.writeText(webhookUrl);
+    toast.success('URL copiada!');
+  };
+
+  const groupedFields = GROUPS.map(g => ({ group: g, fields: CRM_FIELDS.filter(f => f.group === g) }));
 
   return (
     <div className="space-y-4">
@@ -245,12 +252,7 @@ export function PiperunConfig({ setting, onSave }: Props) {
       </div>
 
       <div className="flex items-center justify-between">
-        <Label>Filtrar apenas deals ganhos (status=won)</Label>
-        <Switch checked={filterWon} onCheckedChange={setFilterWon} />
-      </div>
-
-      <div className="flex items-center justify-between">
-        <Label>Importação automática</Label>
+        <Label>Importação automática (webhook)</Label>
         <Switch checked={autoImport} onCheckedChange={setAutoImport} />
       </div>
 
@@ -269,7 +271,6 @@ export function PiperunConfig({ setting, onSave }: Props) {
             const isProductField = m.crm === 'offices.active_product_id';
             return (
               <div key={m.id} className={`flex items-center gap-2 ${isProductField ? 'bg-amber-500/10 rounded-md p-1.5 border border-amber-500/30' : ''}`}>
-                {/* CRM field dropdown with groups */}
                 <Select value={m.crm} onValueChange={v => updateMappingCrm(m.id, v)}>
                   <SelectTrigger className="w-[200px] h-9 text-xs">
                     <SelectValue placeholder="Campo CRM">
@@ -300,7 +301,6 @@ export function PiperunConfig({ setting, onSave }: Props) {
 
                 <ArrowRight className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
 
-                {/* Piperun field picker trigger */}
                 <button
                   onClick={() => openPicker(m.id)}
                   className="flex-1 flex items-center gap-2 h-9 px-3 rounded-md border border-input bg-background text-sm hover:bg-muted/50 transition-colors"
@@ -323,10 +323,8 @@ export function PiperunConfig({ setting, onSave }: Props) {
         <Button variant="outline" size="sm" onClick={addMapping}><Plus className="mr-1 h-3.5 w-3.5" />Adicionar mapeamento</Button>
       </div>
 
-
-
-
-      <Button variant="outline" onClick={importNow} disabled={importing || !pipelineId || !stageId}>
+      {/* ========== Import Button ========== */}
+      <Button variant="outline" onClick={handleImportClick} disabled={importing || !pipelineId || !stageId}>
         {importing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
         Importar deals agora
       </Button>
@@ -337,6 +335,51 @@ export function PiperunConfig({ setting, onSave }: Props) {
           {importResult.automations_triggered > 0 && `, ${importResult.automations_triggered} automações disparadas`}
         </p>
       )}
+
+      {/* ========== Webhook Section ========== */}
+      <div className="rounded-lg border border-border p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Webhook className="h-4 w-4 text-primary" />
+          <Label className="text-sm font-semibold">Webhook (Recebimento em tempo real)</Label>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Configure no Piperun (Ajustes → Ações Automáticas) para enviar oportunidades ganhas automaticamente.
+        </p>
+        <div className="space-y-2">
+          <Label className="text-xs">URL do Webhook</Label>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 text-xs bg-muted px-3 py-2 rounded-md border border-border break-all">
+              {webhookUrl}
+            </code>
+            <Button variant="outline" size="sm" onClick={copyWebhookUrl}>
+              <Copy className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+        <div className="text-xs text-muted-foreground space-y-1">
+          <p className="font-medium">Como configurar:</p>
+          <ol className="list-decimal list-inside space-y-0.5">
+            <li>No Piperun, vá em <strong>Ajustes → Ações Automáticas</strong></li>
+            <li>Crie uma nova ação para o funil selecionado</li>
+            <li>Quando: <strong>"Oportunidade for ganha"</strong></li>
+            <li>Ação: <strong>"Enviar oportunidade para URL"</strong></li>
+            <li>Cole a URL acima</li>
+          </ol>
+        </div>
+        <div className="flex items-center gap-2 text-xs">
+          {lastWebhookAt ? (
+            <>
+              <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+              <span className="text-muted-foreground">Último webhook: {new Date(lastWebhookAt).toLocaleString('pt-BR')}</span>
+            </>
+          ) : (
+            <>
+              <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+              <span className="text-muted-foreground">Aguardando primeiro webhook...</span>
+            </>
+          )}
+        </div>
+      </div>
 
       <Button onClick={handleSave} className="w-full">Salvar Configuração</Button>
 
@@ -349,6 +392,63 @@ export function PiperunConfig({ setting, onSave }: Props) {
           setMappings(prev => prev.map(m => m.id === pickerTargetId ? { ...m, piperun_key: field.key, piperun_label: field.label } : m));
         }}
       />
+
+      {/* Preview Dialog */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Preview — Deals elegíveis para importação</DialogTitle>
+            <DialogDescription>
+              Deals ganhos no funil e etapa configurados que ainda não foram importados.
+            </DialogDescription>
+          </DialogHeader>
+          {previewLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <>
+              <div className="text-sm text-muted-foreground">
+                {previewDeals.length} elegíveis para importação
+                {previewAlreadyImported > 0 && `, ${previewAlreadyImported} já importados`}
+              </div>
+              {previewDeals.length > 0 ? (
+                <div className="max-h-[300px] overflow-y-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Deal</TableHead>
+                        <TableHead>Empresa</TableHead>
+                        <TableHead>Valor</TableHead>
+                        <TableHead>Data</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {previewDeals.map(d => (
+                        <TableRow key={d.id}>
+                          <TableCell className="font-medium">{d.title}</TableCell>
+                          <TableCell>{d.company_name}</TableCell>
+                          <TableCell>{d.value ? `R$ ${Number(d.value).toLocaleString('pt-BR')}` : '—'}</TableCell>
+                          <TableCell>{d.won_at ? new Date(d.won_at).toLocaleDateString('pt-BR') : '—'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">Nenhum deal elegível encontrado.</p>
+              )}
+            </>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPreviewOpen(false)}>Cancelar</Button>
+            <Button onClick={confirmImport} disabled={previewDeals.length === 0 || previewLoading}>
+              <Download className="mr-2 h-4 w-4" />
+              Confirmar importação ({previewDeals.length})
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
