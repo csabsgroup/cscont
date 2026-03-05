@@ -1,235 +1,133 @@
 
 
-# Plan: Date Fields, Churn Flow, Custom Fields, Configurable Header, System-Wide Impacts
+# Plan: Automation Rules Redesign, Flexible Import, Office IDs & Product Prefixes
 
-This is a very large request spanning 5 blocks. Due to the scope, I recommend implementing in **3 phases** to keep changes manageable and testable.
+## Overview
+Three major changes: (1) Redesign automation rules to a 4-step SenseData-style layout with condition groups, full scheduling, and multiple action types; (2) Make imports fully flexible with auto-mapping and preview; (3) Add unique office IDs based on product prefix.
 
 ---
 
-## Phase 1: Database Schema + Status/Churn Flow (Blocos 1 + 2)
+## 1. Automation Rules — 4-Step SenseData Layout
 
-### 1.1 Database Migration
+### Current state
+Single dialog with trigger, conditions (flat list), no actions section, no scheduling.
 
-**Migration 1 - Add columns and tables:**
+### New layout
+Replace the dialog with a **full-page editor** (or large modal) with 4 numbered sections:
 
+**Step 1 — Informações**
+- Name, Status (Ativo/Inativo), Produto (dropdown), Atingir (Cliente/Contato)
+
+**Step 2 — Condições (Groups)**
+- Support multiple **Condition Groups** (Grupo A, Grupo B, etc.)
+- Each group has multiple conditions: `[Categoria] [Campo] [Operação] [Valor]`
+- User chooses logic **within** each group (AND/OR) and **between** groups (AND/OR)
+- Buttons: "Adicionar Grupo", "Duplicar Grupo", "Excluir Grupo"
+- Each condition row has copy/add/remove icons
+- "Ver amostra de clientes" link to preview matching offices (future)
+- Keep all existing 38+ condition fields + custom fields
+
+**Step 3 — Agendamento e Recorrência**
+- Data de Início (date picker, default today)
+- Executar Regra: dropdown (1 única vez, Todos os dias, Toda semana, Todo mês, Último dia do mês)
+- Parar Execução: radio (Nunca / Em [date] / Após [X] ocorrências)
+- Atingir novamente o mesmo cliente: dropdown (Sempre / Nunca / A cada intervalo de [X] dias)
+
+**Step 4 — Ações (multiple)**
+- Support multiple actions, each with type dropdown + config:
+  - **Criar Atividade**: descrição, instruções, checklist items, tipo, categoria, prioridade, hora início/fim, conclusão (dias ou data fixa), responsável (CSM do cliente / fixo / gestor), anotações, checkbox "enviar alerta"
+  - **Enviar Notificação**: destinatário (CSM/Gestor/Admin), título, mensagem
+  - **Enviar Email**: destinatário (CSM/cliente/contato), assunto, corpo
+  - **Mover Etapa da Jornada**: etapa destino (dropdown)
+  - **Alterar Status**: novo status
+  - **Criar Plano de Ação**: título, descrição, prazo
+- "Adicionar Ação" link to add more
+
+### DB changes
+Update `automation_rules_v2` table:
 ```sql
--- Add new date/churn columns to offices
-ALTER TABLE public.offices ADD COLUMN IF NOT EXISTS cycle_start_date date;
-ALTER TABLE public.offices ADD COLUMN IF NOT EXISTS cycle_end_date date;
-ALTER TABLE public.offices ADD COLUMN IF NOT EXISTS churn_date date;
-ALTER TABLE public.offices ADD COLUMN IF NOT EXISTS churn_reason_id uuid;
-ALTER TABLE public.offices ADD COLUMN IF NOT EXISTS churn_observation text;
+ALTER TABLE public.automation_rules_v2 
+  ADD COLUMN IF NOT EXISTS schedule_config jsonb DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS target_type text DEFAULT 'client';
+```
+The `conditions` column changes format to support groups:
+```json
+{
+  "logic": "and",
+  "groups": [
+    { "logic": "or", "conditions": [{ "field": "...", "operator": "...", "value": "..." }] }
+  ]
+}
+```
+The `actions` column stores array of action configs.
 
--- Add 'pausado' to office_status enum
-ALTER TYPE public.office_status ADD VALUE IF NOT EXISTS 'pausado';
+### Files
+- **Rewrite** `src/components/configuracoes/AutomationRulesTab.tsx` — list page + full editor
+- Keep existing triggers and condition fields, add group structure
 
--- Churn reasons table
-CREATE TABLE public.churn_reasons (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name text NOT NULL,
-  is_active boolean DEFAULT true,
-  sort_order integer DEFAULT 0,
-  created_at timestamptz DEFAULT now()
-);
-ALTER TABLE public.churn_reasons ENABLE ROW LEVEL SECURITY;
+---
 
--- RLS: Admin manage, all authenticated read
-CREATE POLICY "Admin can manage churn_reasons" ON public.churn_reasons FOR ALL TO authenticated
-  USING (has_role(auth.uid(), 'admin')) WITH CHECK (has_role(auth.uid(), 'admin'));
-CREATE POLICY "Authenticated can view churn_reasons" ON public.churn_reasons FOR SELECT TO authenticated
-  USING (true);
+## 2. Flexible Import System
 
--- Insert default reasons
-INSERT INTO public.churn_reasons (name, sort_order) VALUES
-  ('Insatisfação com o serviço', 1),
-  ('Preço/Valor', 2),
-  ('Mudança de estratégia', 3),
-  ('Fechou a empresa', 4),
-  ('Migrou para concorrente', 5),
-  ('Inadimplência', 6),
-  ('Não viu valor no programa', 7),
-  ('Problemas internos do cliente', 8),
-  ('Outro', 99);
+### Current state
+Each entity has hardcoded fields in `import-templates.ts`. Only those fields can be imported.
+
+### Changes
+
+**Dynamic field discovery**: Instead of hardcoded field lists, build import templates dynamically from the actual DB schema columns + custom fields. The template still defines the entity and table, but the field list includes ALL columns.
+
+**Enhanced auto-mapping**: 
+- Current: fuzzy match on normalized field labels
+- New: also match on exact column name (e.g., if CSV header is `cnpj` and DB column is `cnpj`, auto-match)
+- Show visual preview of mapping with status badges (green = auto-mapped, yellow = manual, red = unmapped required)
+
+**Preview step**: Between mapping and validation, show a table preview of the first 5 rows with mapped data so the user can visually verify before proceeding.
+
+**Custom fields in import**: For offices, also show custom fields as mapping targets. Values go to `custom_field_values`.
+
+### Files
+- **Update** `src/lib/import-templates.ts` — expand field lists to include ALL native columns per table
+- **Update** `src/components/import-export/ImportWizard.tsx` — add preview step, improve auto-map UI with status indicators
+- **Update** `insertRow` function — handle additional columns dynamically
+
+---
+
+## 3. Office Unique ID (Product Prefix + Sequential)
+
+### Concept
+Each office gets a human-readable code like `ELT-001`, `STR-042` based on the product it's assigned to at creation. This ID is **fixed forever** — never changes even if product changes.
+
+### DB changes
+```sql
+ALTER TABLE public.offices ADD COLUMN IF NOT EXISTS office_code text UNIQUE;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS code_prefix text;
 ```
 
-### 1.2 Status Change Modal (`StatusChangeModal.tsx` - new component)
+### Logic
+- Admin configures `code_prefix` per product in the Products settings (e.g., Elite = "ELT", Start = "STR", Aceleração = "ACL")
+- On office creation: query max existing sequential for that prefix, increment, format as `{PREFIX}-{NNN}`
+- Store in `offices.office_code`
+- Display in the 360 header, clients table, and import/export
 
-- Detects if target status is churn-like (`churn`, `nao_renovado`, `nao_iniciado`)
-- If churn-like: shows date picker (default today, no future), reason dropdown (from `churn_reasons`), observation textarea
-- If non-churn: simple confirmation
-- On confirm for churn: updates `offices` with `status`, `churn_date`, `churn_reason_id`, `churn_observation`
-- On confirm for reactivation (back to ativo/upsell/bonus_elite): clears `churn_date`, `churn_reason_id`, `churn_observation`
-- Logs to `audit_logs` with details including reason name
-
-### 1.3 StatusBadge update
-
-- Add `pausado` entry: `bg-purple-100 text-purple-700` / dark mode variant
-
-### 1.4 ClienteVisao360 updates
-
-- Show `cycle_start_date`, `cycle_end_date`, `churn_date` in info fields
-- Compute "Tempo de vida" from `activation_date` to now (or `churn_date`)
-- Compute "Dias para renovação" from `cycle_end_date`
-
-### 1.5 Churn Reasons Config Tab (`ChurnReasonsTab.tsx`)
-
-- CRUD list with drag-and-drop reorder, toggle active, add/edit
-- Add to Configuracoes sidebar under new "Dados Mestres" category (or alongside "Produtos")
-
-### 1.6 Cliente360 integration
-
-- Replace current simple status change dialog with `StatusChangeModal`
-- Pass churn reasons data
+### Files
+- **Update** Products config UI to add prefix field
+- **Update** office creation logic (wherever offices are created) to auto-generate code
+- **Update** `ClienteHeader.tsx` to display office_code
+- **Update** `Clientes.tsx` to show ID column
+- **Update** import templates to support office_code as a field
 
 ---
 
-## Phase 2: Custom Fields (Bloco 3)
+## Summary of Changes
 
-### 2.1 Database Migration
+| Area | Files | Type |
+|------|-------|------|
+| Automation rules | `AutomationRulesTab.tsx` (major rewrite) | UI |
+| DB: automation schedule | Migration: add `schedule_config`, `target_type` to `automation_rules_v2` | DB |
+| DB: conditions format | Existing `conditions` jsonb column, new group format | Data format |
+| Import flexibility | `import-templates.ts`, `ImportWizard.tsx` | UI + Logic |
+| Office ID | Migration: add `office_code` to offices, `code_prefix` to products | DB |
+| Office ID display | `ClienteHeader.tsx`, `Clientes.tsx`, Products config | UI |
 
-```sql
-CREATE TABLE public.custom_fields (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name text NOT NULL,
-  slug text NOT NULL UNIQUE,
-  field_type text NOT NULL,
-  description text,
-  scope text NOT NULL DEFAULT 'global',
-  product_id uuid,
-  is_required boolean DEFAULT false,
-  default_value text,
-  options jsonb,
-  data_source text DEFAULT 'manual',
-  data_source_config jsonb,
-  position text DEFAULT 'body',
-  is_visible boolean DEFAULT true,
-  is_editable boolean DEFAULT true,
-  sort_order integer DEFAULT 0,
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now(),
-  created_by uuid
-);
-
-CREATE TABLE public.custom_field_values (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  office_id uuid NOT NULL,
-  custom_field_id uuid NOT NULL REFERENCES custom_fields(id) ON DELETE CASCADE,
-  value_text text,
-  value_number numeric,
-  value_date date,
-  value_boolean boolean,
-  value_json jsonb,
-  updated_at timestamptz DEFAULT now(),
-  updated_by uuid,
-  UNIQUE(office_id, custom_field_id)
-);
-
--- RLS for both tables
-ALTER TABLE public.custom_fields ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.custom_field_values ENABLE ROW LEVEL SECURITY;
-
--- custom_fields: Admin manage, all read
-CREATE POLICY "Admin manage custom_fields" ON public.custom_fields FOR ALL TO authenticated
-  USING (has_role(auth.uid(), 'admin')) WITH CHECK (has_role(auth.uid(), 'admin'));
-CREATE POLICY "Authenticated view custom_fields" ON public.custom_fields FOR SELECT TO authenticated
-  USING (true);
-
--- custom_field_values: follows office visibility
-CREATE POLICY "Admin manage custom_field_values" ON public.custom_field_values FOR ALL TO authenticated
-  USING (has_role(auth.uid(), 'admin')) WITH CHECK (has_role(auth.uid(), 'admin'));
-CREATE POLICY "CSM manage own office values" ON public.custom_field_values FOR ALL TO authenticated
-  USING (has_role(auth.uid(), 'csm') AND office_id IN (SELECT get_csm_office_ids(auth.uid())))
-  WITH CHECK (has_role(auth.uid(), 'csm') AND office_id IN (SELECT get_csm_office_ids(auth.uid())));
-CREATE POLICY "Users view visible office values" ON public.custom_field_values FOR SELECT TO authenticated
-  USING (office_id IN (SELECT get_visible_office_ids(auth.uid())));
-```
-
-### 2.2 Custom Fields Config UI (`CustomFieldsConfigTab.tsx`)
-
-- Add to Visao360ConfigTab or as separate section in Configuracoes > Visão 360
-- Form: name, auto-slug, type dropdown (11 types), scope (global/product), required toggle, default value, options list (for dropdown/multi), data source, position (header/body), visible, editable toggles
-- List with drag-and-drop reorder, edit, deactivate
-
-### 2.3 Custom Fields Display in ClienteVisao360
-
-- Fetch `custom_fields` + `custom_field_values` for current office
-- Filter by scope (global or matching product)
-- Render in info fields grid (position='body') with proper type-specific display
-- Inline edit for editable + manual source fields
-
-### 2.4 Custom Fields in Header (feeds into Phase 3)
-
----
-
-## Phase 3: Configurable Header + System-Wide Impacts (Blocos 4 + 5)
-
-### 3.1 Header Config (via `product_360_config` with `config_type='header'`)
-
-- New section in Visao360ConfigTab: "Configuração do Header"
-- Drag-and-drop list of native + custom fields with visibility toggles
-- Native fields: status, health_score, product, csm, stage, activation_date, cycle dates, renewal_days, overdue, ltv, nps, revenue, city/state, cnpj, whatsapp, email
-- Custom fields with `position='header'` auto-included
-- Name field always ON, not removable
-
-### 3.2 ClienteHeader refactor
-
-- Fetch header config for the office's product
-- Render Line 1 (logo + name + action buttons) always
-- Render Line 2 as flex-wrap badges/chips based on config order and visibility
-- Type-aware rendering (status badge, health bars, date format, currency format, etc.)
-
-### 3.3 System-Wide Impacts (Bloco 5)
-
-**Automation engine:**
-- Add `churn_reason` as condition field in AutomationRulesTab
-- Add `activation_date`, `cycle_start_date`, `days_in_cycle` condition fields
-- Custom fields available as conditions (types: text->equals, number->comparisons, boolean->is, dropdown->equals)
-- `pausado` status in trigger options
-- Edge function `execute-automations`: skip offices with `status='pausado'` in cron mode
-
-**Health Score:**
-- Edge function `calculate-health-score`: skip offices with `status='pausado'`
-- On status change from `pausado` to `ativo`: trigger health recalculation
-
-**Reports (`Relatorios.tsx`):**
-- Churn by reason chart (donut/bar breakdown)
-- Filter by churn reason
-- `pausado` excluded from active and churn counts
-- "Tempo até churn" uses `activation_date` → `churn_date`
-
-**Clients table (`Clientes.tsx`):**
-- New available columns: Data Ativação, Data Início Ciclo, Data Fim Ciclo, Data Churn, Motivo Churn
-- Pausado status filter + badge styling
-
-**Portal:**
-- If office `status='pausado'`: show banner "Seu acesso está temporariamente pausado"
-
-**Contract auto-fill logic (in ClienteContratos or hook):**
-- On creating first contract: set `cycle_start_date`, `cycle_end_date`, and `activation_date` (if null) on the office
-- On creating renewal contract: update `cycle_start_date` and `cycle_end_date` only
-
----
-
-## Files to Create
-- `src/components/clientes/StatusChangeModal.tsx` - Churn/status change modal
-- `src/components/configuracoes/ChurnReasonsTab.tsx` - Manage churn reasons
-- `src/components/configuracoes/CustomFieldsConfigTab.tsx` - Custom fields CRUD
-- `src/components/clientes/CustomFieldsDisplay.tsx` - Render custom fields in 360
-- `src/components/clientes/ConfigurableHeader.tsx` - Dynamic header based on config
-
-## Files to Modify
-- `src/components/clientes/StatusBadge.tsx` - Add `pausado`
-- `src/pages/Cliente360.tsx` - Replace status dialog, add custom fields, use configurable header
-- `src/components/clientes/ClienteHeader.tsx` - Refactor for configurable fields
-- `src/components/clientes/ClienteVisao360.tsx` - Add new date fields, custom fields
-- `src/pages/Configuracoes.tsx` - Add ChurnReasons + CustomFields sections
-- `src/components/configuracoes/Visao360ConfigTab.tsx` - Add header config section
-- `src/components/configuracoes/AutomationRulesTab.tsx` - Add churn reason + custom field conditions
-- `src/components/clientes/ClienteContratos.tsx` - Auto-fill date logic on contract create
-- `src/pages/Relatorios.tsx` - Churn by reason chart, pausado exclusion
-- `src/pages/Clientes.tsx` - New columns, pausado badge/filter
-
-## Estimated: ~15 file changes, 3 migrations
-
-Due to the massive scope, I recommend implementing Phase 1 first (dates + churn flow + pausado status), then Phase 2 (custom fields), then Phase 3 (configurable header + system impacts). Shall I proceed with Phase 1?
+Estimated: ~3 migrations, ~6 file changes (1 major rewrite).
 
