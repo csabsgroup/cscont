@@ -18,7 +18,6 @@ function jsonResponse(data: any, status = 200) {
 // Status validation removed — trigger is now "proposta assinada" (signed contract), not "deal won"
 
 function extractDeal(body: any): any {
-  // Try different formats Piperun may send
   if (body.data) {
     const d = Array.isArray(body.data) ? body.data[0] : body.data;
     if (d?.id) return d;
@@ -33,7 +32,6 @@ function extractDeal(body: any): any {
   if (Array.isArray(body) && body[0]?.id) {
     return body[0];
   }
-  // Last resort: return body itself if it has an id
   if (body.id) return body;
   return null;
 }
@@ -50,7 +48,28 @@ async function piperunGet(path: string, token: string) {
 }
 
 function resolveNestedValue(source: any, path: string): any {
-  return path.split('.').reduce((o: any, k: string) => o?.[k], source);
+  // Handle custom fields: fields.find.{id}
+  if (path.startsWith('fields.find.')) {
+    const fieldId = parseInt(path.split('.')[2]);
+    const field = source.fields?.find((f: any) => f.id === fieldId);
+    return field?.valor ?? field?.value ?? null;
+  }
+
+  // Handle paths with array indices like proposals[0].value, company.contact_emails[0].address
+  const parts = path.replace(/\[(\d+)\]/g, '.$1').split('.');
+  let current = source;
+  for (const part of parts) {
+    if (current === null || current === undefined) return null;
+    if (part === 'length' && Array.isArray(current)) {
+      return current.length;
+    }
+    if (/^\d+$/.test(part)) {
+      current = current[parseInt(part)];
+    } else {
+      current = current[part];
+    }
+  }
+  return current ?? null;
 }
 
 const SMART_FIELDS = ['offices.active_product_id', 'offices.status', 'offices.csm_id'];
@@ -60,8 +79,22 @@ async function resolveSmartField(supabase: any, localField: string, rawValue: an
   const strVal = String(rawValue).trim();
 
   if (localField === 'offices.active_product_id') {
-    const { data } = await supabase.from('products').select('id').ilike('name', strVal).limit(1).maybeSingle();
-    if (data) return { value: data.id };
+    // CONTAINS matching: fetch all products and find best match
+    const { data: products } = await supabase.from('products').select('id, name');
+    if (products && products.length > 0) {
+      const lowerVal = strVal.toLowerCase();
+      const matched = products.find((p: any) => {
+        const pName = p.name.toLowerCase();
+        return lowerVal.includes(pName) || pName.includes(lowerVal);
+      });
+      if (matched) return { value: matched.id };
+      // Try matching by last word
+      const words = lowerVal.split(/\s+/).filter((w: string) => w.length > 3);
+      for (const word of words.reverse()) {
+        const m = products.find((p: any) => p.name.toLowerCase().includes(word));
+        if (m) return { value: m.id };
+      }
+    }
     return { value: null, warning: `Produto não encontrado: "${strVal}".` };
   }
 
@@ -120,7 +153,7 @@ async function processAndCreateOffice(
     }
   }
 
-  if (!officeFields.name) officeFields.name = sourceData.deal?.title || `Deal ${dealId}`;
+  if (!officeFields.name) officeFields.name = sourceData.title || sourceData.deal?.title || `Deal ${dealId}`;
 
   console.log('[PIPERUN-WEBHOOK] Inserting office with fields:', JSON.stringify(officeFields).substring(0, 500));
 
@@ -199,7 +232,6 @@ Deno.serve(async (req) => {
 
   try {
     console.log('[PIPERUN-WEBHOOK] Webhook received');
-    console.log('[PIPERUN-WEBHOOK] Method:', req.method);
 
     const rawBody = await req.text();
     let body: any;
@@ -220,9 +252,8 @@ Deno.serve(async (req) => {
       processed: false,
     }).select('id').single();
     webhookLogId = logRow?.id || null;
-    console.log('[PIPERUN-WEBHOOK] Webhook log saved:', webhookLogId);
 
-    // Extract deal from body (robust multi-format)
+    // Extract deal from body
     const deal = extractDeal(body);
     if (!deal || !deal.id) {
       const errMsg = 'Could not extract deal from webhook body';
@@ -231,11 +262,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ success: false, error: errMsg }, 400);
     }
 
-    console.log('[PIPERUN-WEBHOOK] Deal ID:', deal.id);
-    console.log('[PIPERUN-WEBHOOK] Deal title:', deal.title);
-    console.log('[PIPERUN-WEBHOOK] Deal status:', deal.status);
-    console.log('[PIPERUN-WEBHOOK] Deal pipeline_id:', deal.pipeline_id);
-    console.log('[PIPERUN-WEBHOOK] Deal stage_id:', deal.stage_id);
+    console.log('[PIPERUN-WEBHOOK] Deal ID:', deal.id, 'Title:', deal.title);
 
     // No status validation — webhook is triggered by "proposta assinada" event
     console.log('[PIPERUN-WEBHOOK] Accepting deal (trigger: proposta assinada)');
@@ -256,27 +283,19 @@ Deno.serve(async (req) => {
     const config = settings.config as any;
     const { pipeline_id, stage_id, field_mappings_v2 } = config;
 
-    console.log('[PIPERUN-WEBHOOK] Config pipeline_id:', pipeline_id);
-    console.log('[PIPERUN-WEBHOOK] Config stage_id:', stage_id);
-
-    // Validate pipeline/stage with type normalization
+    // Validate pipeline/stage
     const dealPipelineId = String(deal.pipeline_id ?? '');
     const configPipelineId = String(pipeline_id ?? '');
     const dealStageId = String(deal.stage_id ?? '');
     const configStageId = String(stage_id ?? '');
 
-    console.log('[PIPERUN-WEBHOOK] Pipeline check:', dealPipelineId, '===', configPipelineId);
-    console.log('[PIPERUN-WEBHOOK] Stage check:', dealStageId, '===', configStageId);
-
     if (configPipelineId && dealPipelineId && dealPipelineId !== configPipelineId) {
       const msg = `Pipeline mismatch: deal=${dealPipelineId}, config=${configPipelineId}`;
-      console.log('[PIPERUN-WEBHOOK]', msg);
       if (webhookLogId) await supabase.from('webhook_logs').update({ error: msg }).eq('id', webhookLogId);
       return jsonResponse({ success: false, message: 'Deal não é do funil configurado' });
     }
     if (configStageId && dealStageId && dealStageId !== configStageId) {
       const msg = `Stage mismatch: deal=${dealStageId}, config=${configStageId}`;
-      console.log('[PIPERUN-WEBHOOK]', msg);
       if (webhookLogId) await supabase.from('webhook_logs').update({ error: msg }).eq('id', webhookLogId);
       return jsonResponse({ success: false, message: 'Deal não é da etapa configurada' });
     }
@@ -318,16 +337,17 @@ Deno.serve(async (req) => {
       } catch (e) { /* ok */ }
     }
 
-    let proposalData = null;
-    if (deal.proposals && deal.proposals.length > 0) {
-      proposalData = deal.proposals[0];
-    } else {
+    // Fetch proposals
+    let proposalsArray = deal.proposals || [];
+    if (proposalsArray.length === 0) {
       try {
         const res = await piperunGet(`/proposals?deal_id=${deal.id}`, token);
-        proposalData = (res.data || [])[0];
+        proposalsArray = res.data || [];
       } catch (e) { /* ok */ }
     }
+    const proposalData = proposalsArray[0] || null;
 
+    // Fetch signature
     let signatureData = null;
     if (proposalData) {
       try {
@@ -337,24 +357,28 @@ Deno.serve(async (req) => {
       } catch (e) { /* ok */ }
     }
 
-    const customFields: Record<string, any> = {};
-    if (deal.custom_fields && Array.isArray(deal.custom_fields)) {
-      for (const cf of deal.custom_fields) {
-        customFields[cf.id || cf.custom_field_id] = cf.value;
-      }
-    }
-
+    // Build sourceData — flat structure matching real Piperun JSON
     const sourceData = {
-      deal: { ...deal, owner: deal.owner || {}, stage: deal.stage || {}, pipeline: deal.pipeline || {}, custom: customFields },
+      // Deal root fields (title, value, status, closed_at, created_at, etc.)
+      ...deal,
+      // Nested objects already on deal: stage, pipeline, user, city
+      // Explicit overrides for related entities
       company: companyData || {},
       person: personData || {},
-      proposal: proposalData || {},
+      proposals: proposalsArray,
+      fields: deal.fields || [],
       signature: signatureData || {},
+      action: body.action || {},
+      // Backward compat
+      deal: { ...deal, owner: deal.owner || deal.user || {}, stage: deal.stage || {}, pipeline: deal.pipeline || {} },
+      proposal: proposalData || {},
     };
 
-    console.log('[PIPERUN-WEBHOOK] sourceData keys:', Object.keys(sourceData));
+    console.log('[PIPERUN-WEBHOOK] sourceData top keys:', Object.keys(sourceData));
     console.log('[PIPERUN-WEBHOOK] company name:', sourceData.company?.name);
     console.log('[PIPERUN-WEBHOOK] person name:', sourceData.person?.name);
+    console.log('[PIPERUN-WEBHOOK] proposals count:', sourceData.proposals?.length);
+    console.log('[PIPERUN-WEBHOOK] fields count:', sourceData.fields?.length);
 
     // Convert field_mappings_v2 to the format processAndCreateOffice expects
     const mappings = (field_mappings_v2 || [])
@@ -380,7 +404,7 @@ Deno.serve(async (req) => {
       .eq('provider', 'piperun')
       .catch(() => {});
 
-    console.log('[PIPERUN-WEBHOOK] Successfully imported deal', deal.id, 'as office', result.office_id);
+    console.log('[PIPERUN-WEBHOOK] Contrato assinado — escritório criado:', result.office_id);
     return jsonResponse({ success: true, office_id: result.office_id });
   } catch (err: any) {
     console.error("[PIPERUN-WEBHOOK] ERROR:", err?.message, err?.stack);

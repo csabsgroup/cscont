@@ -17,77 +17,79 @@ interface FieldCategory {
 }
 
 const FIELD_CATEGORIES: FieldCategory[] = [
-  { label: '📋 Oportunidade (Deal)', prefix: 'deal.' },
+  { label: '📋 Oportunidade (Deal)', prefix: 'deal' },
   { label: '🏢 Empresa (Company)', prefix: 'company.' },
   { label: '👤 Contato (Pessoa)', prefix: 'person.' },
-  { label: '📄 Proposta', prefix: 'proposal.' },
-  { label: '🔏 Assinatura', prefix: 'signature.' },
+  { label: '📄 Proposta', prefix: 'proposals[' },
+  { label: '🔏 Assinatura / Ação', prefix: 'signature.' },
+  { label: '🔧 Campos Customizados', prefix: 'fields.find.' },
 ];
 
 const FALLBACK_FIELDS: PiperunField[] = [
-  // ── Deal ──
-  { key: 'deal.title', label: 'Título da oportunidade', example_value: 'Escritório ABC' },
-  { key: 'deal.value', label: 'Valor da oportunidade', example_value: '5000' },
-  { key: 'deal.monthly_value', label: 'Valor mensal', example_value: '500' },
-  { key: 'deal.status', label: 'Status', example_value: 'won' },
-  { key: 'deal.won_at', label: 'Data de ganho', example_value: '2026-02-20' },
-  { key: 'deal.closed_at', label: 'Data de fechamento', example_value: '2026-02-20' },
-  { key: 'deal.close_forecast', label: 'Previsão de fechamento', example_value: '2026-04-01' },
-  { key: 'deal.observation', label: 'Observação', example_value: 'Cliente indicado' },
-  { key: 'deal.origin', label: 'Origem', example_value: 'Indicação' },
-  { key: 'deal.tags', label: 'Tags', example_value: 'premium, contabil' },
-  { key: 'deal.created_at', label: 'Criado em', example_value: '2026-01-15' },
-  { key: 'deal.updated_at', label: 'Atualizado em', example_value: '2026-03-04' },
-  { key: 'deal.owner.name', label: 'Responsável (vendedor)', example_value: 'Maria CSM' },
-  { key: 'deal.owner.email', label: 'Email do responsável', example_value: 'maria@empresa.com' },
-  { key: 'deal.stage.name', label: 'Etapa do funil', example_value: 'Fechamento' },
-  { key: 'deal.pipeline.name', label: 'Nome do funil', example_value: 'Vendas' },
+  // ── Deal (root level) ──
+  { key: 'title', label: 'Título da oportunidade', example_value: 'Leme Contábil' },
+  { key: 'value', label: 'Valor da oportunidade', example_value: '80000.00' },
+  { key: 'closed_at', label: 'Data de fechamento', example_value: '2026-03-05' },
+  { key: 'created_at', label: 'Data de criação', example_value: '2026-03-05' },
+  { key: 'observation', label: 'Observação', example_value: '' },
+  { key: 'stage.name', label: 'Etapa do funil', example_value: 'Venda Realizada (Ganho)' },
+  { key: 'pipeline.name', label: 'Nome do funil', example_value: 'Contador CEO | CLOSER' },
+  { key: 'user.name', label: 'Responsável (vendedor)', example_value: 'Matheus Leme' },
+  { key: 'user.email', label: 'Email do responsável', example_value: 'matheus@empresa.com' },
+  { key: 'city.name', label: 'Cidade da oportunidade', example_value: 'Votuporanga' },
+  { key: 'city.uf', label: 'Estado da oportunidade', example_value: 'SP' },
 
   // ── Empresa (Company) ──
   { key: 'company.name', label: 'Nome da empresa', example_value: 'Empresa XYZ' },
-  { key: 'company.corporate_name', label: 'Razão social', example_value: 'XYZ Ltda' },
-  { key: 'company.cnpj', label: 'CNPJ', example_value: '12.345.678/0001-99' },
-  { key: 'company.phone', label: 'Telefone da empresa', example_value: '1133334444' },
-  { key: 'company.email', label: 'Email da empresa', example_value: 'contato@xyz.com' },
+  { key: 'company.company_name', label: 'Razão social', example_value: 'XYZ Ltda' },
+  { key: 'company.cnpj', label: 'CNPJ', example_value: '42.904.689/0001-29' },
+  { key: 'company.contact_phones[0].number', label: 'Telefone da empresa', example_value: '5511939448809' },
+  { key: 'company.contact_emails[0].address', label: 'Email da empresa', example_value: 'contato@xyz.com' },
   { key: 'company.website', label: 'Site', example_value: 'https://xyz.com' },
-  { key: 'company.address', label: 'Endereço', example_value: 'Rua Augusta 500' },
-  { key: 'company.city.name', label: 'Cidade', example_value: 'São Paulo' },
-  { key: 'company.state.abbr', label: 'Estado (UF)', example_value: 'SP' },
-  { key: 'company.zip_code', label: 'CEP', example_value: '01305-000' },
+  { key: 'company.address.street', label: 'Rua', example_value: 'RUA TIBAGI' },
+  { key: 'company.address.number', label: 'Número', example_value: '2798' },
+  { key: 'company.address.district', label: 'Bairro', example_value: 'Patrimonio Novo' },
+  { key: 'company.address.complement', label: 'Complemento', example_value: 'N/A' },
+  { key: 'company.address.postal_code', label: 'CEP', example_value: '15500007' },
+  { key: 'company.city.name', label: 'Cidade da empresa', example_value: 'Votuporanga' },
+  { key: 'company.city.uf', label: 'Estado da empresa (UF)', example_value: 'SP' },
   { key: 'company.segment.name', label: 'Segmento', example_value: 'Contabilidade' },
-  { key: 'company.number_of_employees', label: 'Qtd funcionários', example_value: '50' },
-  { key: 'company.annual_revenue', label: 'Faturamento anual', example_value: '1200000' },
-  { key: 'company.observation', label: 'Observações', example_value: '' },
+  { key: 'company.cnae', label: 'CNAE', example_value: '73.19-0-02' },
+  { key: 'company.open_at', label: 'Data de abertura', example_value: '2021-07-28' },
 
   // ── Contato (Person) ──
   { key: 'person.name', label: 'Nome do contato', example_value: 'João Silva' },
-  { key: 'person.email', label: 'Email do contato', example_value: 'joao@email.com' },
-  { key: 'person.phone', label: 'Telefone', example_value: '11999998888' },
-  { key: 'person.cell_phone', label: 'Celular', example_value: '11988887777' },
-  { key: 'person.cpf', label: 'CPF', example_value: '123.456.789-00' },
-  { key: 'person.birth_date', label: 'Data de nascimento', example_value: '1990-05-15' },
-  { key: 'person.position', label: 'Cargo', example_value: 'Sócio' },
+  { key: 'person.contact_emails[0].address', label: 'Email do contato', example_value: 'joao@email.com' },
+  { key: 'person.contact_phones[0].number', label: 'Telefone/Celular do contato', example_value: '5511999998888' },
+  { key: 'person.cpf', label: 'CPF', example_value: '403.054.218-24' },
+  { key: 'person.birth_day', label: 'Data de nascimento', example_value: '1995-01-23' },
+  { key: 'person.job_title', label: 'Cargo', example_value: 'Sócio' },
   { key: 'person.city.name', label: 'Cidade do contato', example_value: 'São Paulo' },
-  { key: 'person.state.abbr', label: 'Estado do contato', example_value: 'SP' },
-  { key: 'person.whatsapp', label: 'WhatsApp', example_value: '5511999998888' },
-  { key: 'person.instagram', label: 'Instagram', example_value: '@joaosilva' },
-  { key: 'person.linkedin', label: 'LinkedIn', example_value: '' },
-  { key: 'person.observation', label: 'Observações do contato', example_value: '' },
+  { key: 'person.city.uf', label: 'Estado do contato (UF)', example_value: 'SP' },
+  { key: 'person.address.street', label: 'Endereço do contato', example_value: 'Rua Professor Henrique' },
+  { key: 'person.address.postal_code', label: 'CEP do contato', example_value: '04637001' },
 
   // ── Proposta ──
-  { key: 'proposal.number', label: 'Número da proposta', example_value: 'P-001' },
-  { key: 'proposal.value', label: 'Valor da proposta', example_value: '15000' },
-  { key: 'proposal.status', label: 'Status da proposta', example_value: 'accepted' },
-  { key: 'proposal.sent_at', label: 'Data de envio', example_value: '2026-01-15' },
-  { key: 'proposal.accepted_at', label: 'Data de aceite', example_value: '2026-02-01' },
-  { key: 'proposal.payment_terms', label: 'Condições de pagamento', example_value: '30/60/90' },
-  { key: 'proposal.items', label: 'Itens/Produtos da proposta', example_value: '[]' },
-  { key: 'proposal.observation', label: 'Observação da proposta', example_value: '' },
+  { key: 'proposals[0].value', label: 'Valor da proposta', example_value: '80000' },
+  { key: 'proposals[0].status', label: 'Status da proposta', example_value: '5' },
+  { key: 'proposals[0].items[0].name', label: 'Nome do produto/item', example_value: 'CONTADOR CEO ELITE' },
+  { key: 'proposals[0].items[0].code', label: 'Código do produto', example_value: 'ELT' },
+  { key: 'proposals[0].items[0].value', label: 'Valor do item', example_value: '80000' },
+  { key: 'proposals[0].items[0].characteristics[0].name', label: 'Característica do item', example_value: 'ACELERAÇÃO' },
+  { key: 'proposals[0].parcels.length', label: 'Quantidade de parcelas', example_value: '12' },
+  { key: 'proposals[0].parcels[0].value', label: 'Valor da entrada/1ª parcela', example_value: '80000' },
+  { key: 'proposals[0].parcels[0].due_date', label: 'Data da 1ª parcela', example_value: '2026-03-05' },
+  { key: 'proposals[0].parcels[1].value', label: 'Valor da mensalidade', example_value: '0' },
+  { key: 'proposals[0].valid_until', label: 'Validade da proposta', example_value: '2026-03-10' },
+  { key: 'proposals[0].created_at', label: 'Data de criação da proposta', example_value: '2026-03-05' },
+  { key: 'proposals[0].user.name', label: 'Vendedor da proposta', example_value: 'Matheus Leme' },
 
-  // ── Assinatura ──
+  // ── Assinatura / Ação ──
   { key: 'signature.status', label: 'Status da assinatura', example_value: 'signed' },
   { key: 'signature.signed_at', label: 'Data da assinatura', example_value: '2026-02-10' },
-  { key: 'signature.document_url', label: 'PDF do contrato assinado (baixar e salvar)', example_value: '' },
+  { key: 'signature.document_url', label: 'PDF do contrato assinado', example_value: '' },
+  { key: 'action.trigger_type', label: 'Tipo do trigger', example_value: 'A assinatura eletrônica...' },
+  { key: 'action.create', label: 'Data da ação/assinatura', example_value: '2026-03-05 20:30:53' },
 ];
 
 interface Props {
@@ -138,11 +140,12 @@ export function PiperunFieldPicker({ open, onClose, onSelect, isConnected }: Pro
   );
 
   const getCategoryForField = (key: string): FieldCategory => {
-    if (key.startsWith('signature.')) return FIELD_CATEGORIES[4];
-    if (key.startsWith('proposal.')) return FIELD_CATEGORIES[3];
+    if (key.startsWith('fields.find.')) return FIELD_CATEGORIES[5];
+    if (key.startsWith('signature.') || key.startsWith('action.')) return FIELD_CATEGORIES[4];
+    if (key.startsWith('proposals[') || key.startsWith('proposals.')) return FIELD_CATEGORIES[3];
     if (key.startsWith('person.')) return FIELD_CATEGORIES[2];
     if (key.startsWith('company.')) return FIELD_CATEGORIES[1];
-    return FIELD_CATEGORIES[0]; // deal.*
+    return FIELD_CATEGORIES[0]; // deal root fields
   };
 
   const groupedFields = FIELD_CATEGORIES.map(cat => ({
