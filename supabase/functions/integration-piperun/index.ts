@@ -66,7 +66,28 @@ async function piperunGetAll(path: string, token?: string) {
 }
 
 function resolveNestedValue(source: any, path: string): any {
-  return path.split('.').reduce((o: any, k: string) => o?.[k], source);
+  // Handle custom fields: fields.find.{id}
+  if (path.startsWith('fields.find.')) {
+    const fieldId = parseInt(path.split('.')[2]);
+    const field = source.fields?.find((f: any) => f.id === fieldId);
+    return field?.valor ?? field?.value ?? null;
+  }
+
+  // Handle paths with array indices like proposals[0].value
+  const parts = path.replace(/\[(\d+)\]/g, '.$1').split('.');
+  let current = source;
+  for (const part of parts) {
+    if (current === null || current === undefined) return null;
+    if (part === 'length' && Array.isArray(current)) {
+      return current.length;
+    }
+    if (/^\d+$/.test(part)) {
+      current = current[parseInt(part)];
+    } else {
+      current = current[part];
+    }
+  }
+  return current ?? null;
 }
 
 // ---- Smart field resolvers ----
@@ -78,8 +99,22 @@ async function resolveSmartField(supabase: any, localField: string, rawValue: an
   const strVal = String(rawValue).trim();
 
   if (localField === 'offices.active_product_id') {
-    const { data } = await supabase.from('products').select('id').ilike('name', strVal).limit(1).maybeSingle();
-    if (data) return { value: data.id };
+    // CONTAINS matching: fetch all products and find best match
+    const { data: products } = await supabase.from('products').select('id, name');
+    if (products && products.length > 0) {
+      const lowerVal = strVal.toLowerCase();
+      const matched = products.find((p: any) => {
+        const pName = p.name.toLowerCase();
+        return lowerVal.includes(pName) || pName.includes(lowerVal);
+      });
+      if (matched) return { value: matched.id };
+      // Try matching by significant words
+      const words = lowerVal.split(/\s+/).filter((w: string) => w.length > 3);
+      for (const word of words.reverse()) {
+        const m = products.find((p: any) => p.name.toLowerCase().includes(word));
+        if (m) return { value: m.id };
+      }
+    }
     return { value: null, warning: `Produto não encontrado: "${strVal}".` };
   }
 
@@ -156,7 +191,7 @@ async function processAndCreateOffice(
     }
   }
 
-  if (!officeFields.name) officeFields.name = sourceData.deal?.title || `Deal ${dealId}`;
+  if (!officeFields.name) officeFields.name = sourceData.title || sourceData.deal?.title || `Deal ${dealId}`;
 
   // Insert office
   const { data: newOffice, error: officeErr } = await supabase.from("offices").insert(officeFields).select("id").single();
@@ -219,7 +254,7 @@ async function processAndCreateOffice(
     user_id: userId,
     entity_type: "office",
     entity_id: officeId,
-    action: "piperun_import",
+    action: "piperun_contract_signed_import",
     details: { deal_id: dealId, product_id: resolvedProductId },
   }).catch(() => {});
 
@@ -229,7 +264,6 @@ async function processAndCreateOffice(
 // ---- Fetch full deal source data ----
 
 async function fetchFullSourceData(dealId: number | string, token: string): Promise<any> {
-  // Fetch deal with expanded relations
   const fullDealRes = await piperunGet(`/deals/${dealId}?with=person,company,proposals,customFields,stage,pipeline,owner`, token);
   const dealData = fullDealRes.data || fullDealRes;
 
@@ -252,24 +286,14 @@ async function fetchFullSourceData(dealId: number | string, token: string): Prom
   }
 
   // Proposals
-  let proposalData = null;
-  if (dealData.proposals && dealData.proposals.length > 0) {
-    proposalData = dealData.proposals
-      .filter((p: any) => p.status === 'accepted' || p.status === 'sent')
-      .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
-      || dealData.proposals[0];
-  } else {
+  let proposalsArray = dealData.proposals || [];
+  if (proposalsArray.length === 0) {
     try {
       const proposalsRes = await piperunGet(`/proposals?deal_id=${dealId}`, token);
-      const proposals = proposalsRes.data || [];
-      if (proposals.length > 0) {
-        proposalData = proposals
-          .filter((p: any) => p.status === 'accepted' || p.status === 'sent')
-          .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
-          || proposals[0];
-      }
+      proposalsArray = proposalsRes.data || [];
     } catch (e) { console.warn('[PIPERUN] Proposals fetch failed:', e); }
   }
+  const proposalData = proposalsArray[0] || null;
 
   // Signature
   let signatureData = null;
@@ -281,26 +305,24 @@ async function fetchFullSourceData(dealId: number | string, token: string): Prom
     } catch (e) { /* no signature, ok */ }
   }
 
-  // Build unified sourceData
-  const customFields: Record<string, any> = {};
-  if (dealData.custom_fields && Array.isArray(dealData.custom_fields)) {
-    for (const cf of dealData.custom_fields) {
-      customFields[cf.id || cf.custom_field_id] = cf.value;
-    }
-  }
-
+  // Build unified sourceData — flat structure matching real Piperun JSON
   return {
-    deal: {
-      ...dealData,
-      owner: dealData.owner || {},
-      stage: dealData.stage || {},
-      pipeline: dealData.pipeline || {},
-      custom: customFields,
-    },
+    // Deal root fields spread at top level
+    ...dealData,
+    // Related entities
     company: companyData || {},
     person: personData || {},
-    proposal: proposalData || {},
+    proposals: proposalsArray,
+    fields: dealData.fields || [],
     signature: signatureData || {},
+    // Backward compat
+    deal: {
+      ...dealData,
+      owner: dealData.owner || dealData.user || {},
+      stage: dealData.stage || {},
+      pipeline: dealData.pipeline || {},
+    },
+    proposal: proposalData || {},
   };
 }
 
@@ -514,75 +536,75 @@ Deno.serve(async (req) => {
     if (action === "listFields") {
       const fields: Array<{ key: string; label: string; example_value: string; category: string }> = [];
 
-      // Static deal fields
+      // Deal fields (root-level paths matching real Piperun JSON)
       const dealFields = [
-        { key: 'deal.title', label: 'Título da oportunidade', category: 'Oportunidade' },
-        { key: 'deal.value', label: 'Valor da oportunidade', category: 'Oportunidade' },
-        { key: 'deal.monthly_value', label: 'Valor mensal', category: 'Oportunidade' },
-        { key: 'deal.status', label: 'Status', category: 'Oportunidade' },
-        { key: 'deal.won_at', label: 'Data de ganho', category: 'Oportunidade' },
-        { key: 'deal.closed_at', label: 'Data de fechamento', category: 'Oportunidade' },
-        { key: 'deal.expected_close_date', label: 'Data prevista de fechamento', category: 'Oportunidade' },
-        { key: 'deal.close_forecast', label: 'Previsão de fechamento', category: 'Oportunidade' },
-        { key: 'deal.observation', label: 'Observação', category: 'Oportunidade' },
-        { key: 'deal.origin', label: 'Origem', category: 'Oportunidade' },
-        { key: 'deal.tags', label: 'Tags', category: 'Oportunidade' },
-        { key: 'deal.created_at', label: 'Criado em', category: 'Oportunidade' },
-        { key: 'deal.updated_at', label: 'Atualizado em', category: 'Oportunidade' },
-        { key: 'deal.owner.name', label: 'Responsável (vendedor)', category: 'Oportunidade' },
-        { key: 'deal.owner.email', label: 'Email do responsável', category: 'Oportunidade' },
-        { key: 'deal.stage.name', label: 'Etapa do funil', category: 'Oportunidade' },
-        { key: 'deal.pipeline.name', label: 'Nome do funil', category: 'Oportunidade' },
+        { key: 'title', label: 'Título da oportunidade', category: 'Oportunidade' },
+        { key: 'value', label: 'Valor da oportunidade', category: 'Oportunidade' },
+        { key: 'closed_at', label: 'Data de fechamento', category: 'Oportunidade' },
+        { key: 'created_at', label: 'Data de criação', category: 'Oportunidade' },
+        { key: 'observation', label: 'Observação', category: 'Oportunidade' },
+        { key: 'stage.name', label: 'Etapa do funil', category: 'Oportunidade' },
+        { key: 'pipeline.name', label: 'Nome do funil', category: 'Oportunidade' },
+        { key: 'user.name', label: 'Responsável (vendedor)', category: 'Oportunidade' },
+        { key: 'user.email', label: 'Email do responsável', category: 'Oportunidade' },
+        { key: 'city.name', label: 'Cidade da oportunidade', category: 'Oportunidade' },
+        { key: 'city.uf', label: 'Estado da oportunidade', category: 'Oportunidade' },
       ];
 
       const companyFields = [
         { key: 'company.name', label: 'Nome da empresa', category: 'Empresa' },
-        { key: 'company.corporate_name', label: 'Razão social', category: 'Empresa' },
+        { key: 'company.company_name', label: 'Razão social', category: 'Empresa' },
         { key: 'company.cnpj', label: 'CNPJ', category: 'Empresa' },
-        { key: 'company.phone', label: 'Telefone da empresa', category: 'Empresa' },
-        { key: 'company.email', label: 'Email da empresa', category: 'Empresa' },
+        { key: 'company.contact_phones[0].number', label: 'Telefone da empresa', category: 'Empresa' },
+        { key: 'company.contact_emails[0].address', label: 'Email da empresa', category: 'Empresa' },
         { key: 'company.website', label: 'Site', category: 'Empresa' },
-        { key: 'company.address', label: 'Endereço', category: 'Empresa' },
-        { key: 'company.city.name', label: 'Cidade', category: 'Empresa' },
-        { key: 'company.state.abbr', label: 'Estado (UF)', category: 'Empresa' },
-        { key: 'company.zip_code', label: 'CEP', category: 'Empresa' },
+        { key: 'company.address.street', label: 'Rua', category: 'Empresa' },
+        { key: 'company.address.number', label: 'Número', category: 'Empresa' },
+        { key: 'company.address.district', label: 'Bairro', category: 'Empresa' },
+        { key: 'company.address.complement', label: 'Complemento', category: 'Empresa' },
+        { key: 'company.address.postal_code', label: 'CEP', category: 'Empresa' },
+        { key: 'company.city.name', label: 'Cidade da empresa', category: 'Empresa' },
+        { key: 'company.city.uf', label: 'Estado da empresa (UF)', category: 'Empresa' },
         { key: 'company.segment.name', label: 'Segmento', category: 'Empresa' },
-        { key: 'company.number_of_employees', label: 'Qtd funcionários', category: 'Empresa' },
-        { key: 'company.annual_revenue', label: 'Faturamento anual', category: 'Empresa' },
-        { key: 'company.observation', label: 'Observações', category: 'Empresa' },
+        { key: 'company.cnae', label: 'CNAE', category: 'Empresa' },
+        { key: 'company.open_at', label: 'Data de abertura', category: 'Empresa' },
       ];
 
       const personFields = [
         { key: 'person.name', label: 'Nome do contato', category: 'Contato' },
-        { key: 'person.email', label: 'Email do contato', category: 'Contato' },
-        { key: 'person.phone', label: 'Telefone', category: 'Contato' },
-        { key: 'person.cell_phone', label: 'Celular', category: 'Contato' },
+        { key: 'person.contact_emails[0].address', label: 'Email do contato', category: 'Contato' },
+        { key: 'person.contact_phones[0].number', label: 'Telefone/Celular do contato', category: 'Contato' },
         { key: 'person.cpf', label: 'CPF', category: 'Contato' },
-        { key: 'person.birth_date', label: 'Data de nascimento', category: 'Contato' },
-        { key: 'person.position', label: 'Cargo', category: 'Contato' },
+        { key: 'person.birth_day', label: 'Data de nascimento', category: 'Contato' },
+        { key: 'person.job_title', label: 'Cargo', category: 'Contato' },
         { key: 'person.city.name', label: 'Cidade do contato', category: 'Contato' },
-        { key: 'person.state.abbr', label: 'Estado do contato', category: 'Contato' },
-        { key: 'person.whatsapp', label: 'WhatsApp', category: 'Contato' },
-        { key: 'person.instagram', label: 'Instagram', category: 'Contato' },
-        { key: 'person.linkedin', label: 'LinkedIn', category: 'Contato' },
-        { key: 'person.observation', label: 'Observações do contato', category: 'Contato' },
+        { key: 'person.city.uf', label: 'Estado do contato (UF)', category: 'Contato' },
+        { key: 'person.address.street', label: 'Endereço do contato', category: 'Contato' },
+        { key: 'person.address.postal_code', label: 'CEP do contato', category: 'Contato' },
       ];
 
       const proposalFields = [
-        { key: 'proposal.number', label: 'Número da proposta', category: 'Proposta' },
-        { key: 'proposal.value', label: 'Valor da proposta', category: 'Proposta' },
-        { key: 'proposal.status', label: 'Status da proposta', category: 'Proposta' },
-        { key: 'proposal.sent_at', label: 'Data de envio', category: 'Proposta' },
-        { key: 'proposal.accepted_at', label: 'Data de aceite', category: 'Proposta' },
-        { key: 'proposal.payment_terms', label: 'Condições de pagamento', category: 'Proposta' },
-        { key: 'proposal.items', label: 'Itens/Produtos da proposta', category: 'Proposta' },
-        { key: 'proposal.observation', label: 'Observação da proposta', category: 'Proposta' },
+        { key: 'proposals[0].value', label: 'Valor da proposta', category: 'Proposta' },
+        { key: 'proposals[0].status', label: 'Status da proposta', category: 'Proposta' },
+        { key: 'proposals[0].items[0].name', label: 'Nome do produto/item', category: 'Proposta' },
+        { key: 'proposals[0].items[0].code', label: 'Código do produto', category: 'Proposta' },
+        { key: 'proposals[0].items[0].value', label: 'Valor do item', category: 'Proposta' },
+        { key: 'proposals[0].items[0].characteristics[0].name', label: 'Característica do item', category: 'Proposta' },
+        { key: 'proposals[0].parcels.length', label: 'Quantidade de parcelas', category: 'Proposta' },
+        { key: 'proposals[0].parcels[0].value', label: 'Valor da entrada/1ª parcela', category: 'Proposta' },
+        { key: 'proposals[0].parcels[0].due_date', label: 'Data da 1ª parcela', category: 'Proposta' },
+        { key: 'proposals[0].parcels[1].value', label: 'Valor da mensalidade', category: 'Proposta' },
+        { key: 'proposals[0].valid_until', label: 'Validade da proposta', category: 'Proposta' },
+        { key: 'proposals[0].created_at', label: 'Data de criação da proposta', category: 'Proposta' },
+        { key: 'proposals[0].user.name', label: 'Vendedor da proposta', category: 'Proposta' },
       ];
 
       const signatureFields = [
         { key: 'signature.status', label: 'Status da assinatura', category: 'Assinatura' },
         { key: 'signature.signed_at', label: 'Data da assinatura', category: 'Assinatura' },
-        { key: 'signature.document_url', label: 'PDF do contrato assinado (baixar e salvar)', category: 'Assinatura' },
+        { key: 'signature.document_url', label: 'PDF do contrato assinado', category: 'Assinatura' },
+        { key: 'action.trigger_type', label: 'Tipo do trigger', category: 'Assinatura' },
+        { key: 'action.create', label: 'Data da ação/assinatura', category: 'Assinatura' },
       ];
 
       // Merge static fields
@@ -591,47 +613,45 @@ Deno.serve(async (req) => {
         fields.push({ ...f, example_value: '' });
       }
 
-      // Try to fetch custom fields from API
-      try {
-        const customFieldsRes = await piperunGet('/customFields?entity=deal', token);
-        const customFieldsList = customFieldsRes.data || [];
-        for (const cf of customFieldsList) {
-          fields.push({
-            key: `deal.custom.${cf.id || cf.custom_field_id}`,
-            label: cf.name || cf.label || `Custom ${cf.id}`,
-            example_value: '',
-            category: 'Oportunidade (Custom)',
-          });
-        }
-      } catch (e) {
-        console.warn('[PIPERUN] Failed to fetch custom fields:', e);
-      }
-
-      // Try to enrich with example data from a sample deal
+      // Try to fetch custom fields (deal fields array) from a sample deal
       try {
         const { pipeline_id, stage_id } = body;
         let samplePath = '/deals?show=1';
         if (pipeline_id) samplePath += `&pipeline_id=${pipeline_id}`;
         if (stage_id) samplePath += `&stage_id=${stage_id}`;
-        samplePath += '&with=person,company,customFields';
-        
+        samplePath += '&with=person,company,proposals';
+
         const sampleRes = await piperunGet(samplePath, token);
         const sampleDeal = (sampleRes.data || [])[0];
         if (sampleDeal) {
-          const sampleSource = {
-            deal: { ...sampleDeal, owner: sampleDeal.owner || {}, stage: sampleDeal.stage || {}, pipeline: sampleDeal.pipeline || {}, custom: {} as Record<string, any> },
-            company: sampleDeal.company || {},
-            person: sampleDeal.person || {},
-            proposal: {},
-            signature: {},
-          };
-          if (sampleDeal.custom_fields && Array.isArray(sampleDeal.custom_fields)) {
-            for (const cf of sampleDeal.custom_fields) {
-              sampleSource.deal.custom[cf.id || cf.custom_field_id] = cf.value;
+          // Add custom fields from deal.fields array
+          if (sampleDeal.fields && Array.isArray(sampleDeal.fields)) {
+            for (const cf of sampleDeal.fields) {
+              fields.push({
+                key: `fields.find.${cf.id}`,
+                label: `${cf.nome || cf.name || `Custom ${cf.id}`} (custom)`,
+                example_value: cf.valor != null ? String(cf.valor) : '',
+                category: 'Campos Customizados',
+              });
             }
           }
+
+          // Build sample sourceData for enriching example values
+          const sampleSource = {
+            ...sampleDeal,
+            company: sampleDeal.company || {},
+            person: sampleDeal.person || {},
+            proposals: sampleDeal.proposals || [],
+            fields: sampleDeal.fields || [],
+            signature: {},
+            action: {},
+            deal: { ...sampleDeal, owner: sampleDeal.owner || sampleDeal.user || {}, stage: sampleDeal.stage || {}, pipeline: sampleDeal.pipeline || {} },
+            proposal: (sampleDeal.proposals || [])[0] || {},
+          };
+
           // Enrich example values
           for (const f of fields) {
+            if (f.key.startsWith('fields.find.')) continue; // already set
             const val = resolveNestedValue(sampleSource, f.key);
             if (val !== undefined && val !== null && val !== '') {
               f.example_value = typeof val === 'object' ? JSON.stringify(val) : String(val);

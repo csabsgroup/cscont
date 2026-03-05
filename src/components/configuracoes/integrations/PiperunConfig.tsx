@@ -86,16 +86,21 @@ const CRM_FIELDS: CrmFieldDef[] = [
 const GROUPS = ['Escritório', 'Contrato', 'Contato Principal', 'Sócio 2', 'Sócio 3'];
 
 const DEFAULT_MAPPINGS: MappingRow[] = [
-  { id: '1', crm: 'offices.name', piperun_key: 'deal.title', piperun_label: 'Título da oportunidade' },
-  { id: '2', crm: 'offices.email', piperun_key: 'person.email', piperun_label: 'Email do contato' },
-  { id: '3', crm: 'offices.phone', piperun_key: 'person.phone', piperun_label: 'Telefone' },
-  { id: '4', crm: 'offices.city', piperun_key: 'company.city.name', piperun_label: 'Cidade' },
-  { id: '5', crm: 'offices.state', piperun_key: 'company.state.abbr', piperun_label: 'Estado (UF)' },
+  { id: '1', crm: 'offices.name', piperun_key: 'company.company_name', piperun_label: 'Razão social' },
+  { id: '2', crm: 'offices.email', piperun_key: 'person.contact_emails[0].address', piperun_label: 'Email do contato' },
+  { id: '3', crm: 'offices.whatsapp', piperun_key: 'person.contact_phones[0].number', piperun_label: 'Telefone/Celular' },
+  { id: '4', crm: 'offices.city', piperun_key: 'company.city.name', piperun_label: 'Cidade da empresa' },
+  { id: '5', crm: 'offices.state', piperun_key: 'company.city.uf', piperun_label: 'Estado (UF)' },
   { id: '6', crm: 'offices.cnpj', piperun_key: 'company.cnpj', piperun_label: 'CNPJ' },
-  { id: '7', crm: 'contracts.value', piperun_key: 'deal.value', piperun_label: 'Valor da oportunidade' },
-  { id: '8', crm: 'contacts.name', piperun_key: 'person.name', piperun_label: 'Nome do contato' },
-  { id: '9', crm: 'contacts.email', piperun_key: 'person.email', piperun_label: 'Email do contato' },
-  { id: '10', crm: 'contacts.phone', piperun_key: 'person.phone', piperun_label: 'Telefone' },
+  { id: '7', crm: 'offices.cep', piperun_key: 'company.address.postal_code', piperun_label: 'CEP' },
+  { id: '8', crm: 'offices.active_product_id', piperun_key: 'proposals[0].items[0].name', piperun_label: 'Nome do produto/item' },
+  { id: '9', crm: 'contracts.value', piperun_key: 'proposals[0].value', piperun_label: 'Valor da proposta' },
+  { id: '10', crm: 'contracts.installments_total', piperun_key: 'proposals[0].parcels.length', piperun_label: 'Qtd de parcelas' },
+  { id: '11', crm: 'contracts.start_date', piperun_key: 'proposals[0].parcels[0].due_date', piperun_label: 'Data da 1ª parcela' },
+  { id: '12', crm: 'contacts.name', piperun_key: 'person.name', piperun_label: 'Nome do contato' },
+  { id: '13', crm: 'contacts.cpf', piperun_key: 'person.cpf', piperun_label: 'CPF' },
+  { id: '14', crm: 'contacts.phone', piperun_key: 'person.contact_phones[0].number', piperun_label: 'Telefone/Celular' },
+  { id: '15', crm: 'contacts.email', piperun_key: 'person.contact_emails[0].address', piperun_label: 'Email do contato' },
 ];
 
 interface MappingRow { id: string; crm: string; piperun_key: string; piperun_label: string; }
