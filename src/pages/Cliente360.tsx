@@ -1,10 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel } from '@/components/ui/alert-dialog';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -33,7 +35,8 @@ import { cn } from '@/lib/utils';
 
 export default function Cliente360() {
   const { id } = useParams<{ id: string }>();
-  const { isViewer, user } = useAuth();
+  const { isViewer, isAdmin, isManager, user } = useAuth();
+  const navigate = useNavigate();
   const [office, setOffice] = useState<any>(null);
   const [contacts, setContacts] = useState<any[]>([]);
   const [contracts, setContracts] = useState<any[]>([]);
@@ -63,6 +66,9 @@ export default function Cliente360() {
   const [actionSaving, setActionSaving] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [whatsappOpen, setWhatsappOpen] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   const fetchAll = useCallback(async () => {
     if (!id) return;
@@ -157,6 +163,72 @@ export default function Cliente360() {
     setActionSaving(false); setShowQuickNote(false); setQuickNoteText(''); fetchAll();
   };
 
+  const handleDeleteClient = async () => {
+    if (!id || !user) return;
+    setDeleting(true);
+    try {
+      // 1. Get activity IDs to delete checklists
+      const { data: acts } = await supabase.from('activities').select('id').eq('office_id', id);
+      const actIds = (acts || []).map(a => a.id);
+      if (actIds.length > 0) {
+        await supabase.from('activity_checklists').delete().in('activity_id', actIds);
+      }
+      // 2. Activities
+      await supabase.from('activities').delete().eq('office_id', id);
+
+      // 3. Form action executions (via submission IDs)
+      const { data: subs } = await supabase.from('form_submissions').select('id').eq('office_id', id);
+      const subIds = (subs || []).map(s => s.id);
+      if (subIds.length > 0) {
+        await supabase.from('form_action_executions').delete().in('submission_id', subIds);
+      }
+      // 4. Form submissions
+      await supabase.from('form_submissions').delete().eq('office_id', id);
+
+      // 5. Meeting transcripts (via meeting IDs)
+      const { data: mtgs } = await supabase.from('meetings').select('id').eq('office_id', id);
+      const mtgIds = (mtgs || []).map(m => m.id);
+      if (mtgIds.length > 0) {
+        await supabase.from('meeting_transcripts').delete().in('meeting_id', mtgIds);
+      }
+      // 6. Meetings
+      await supabase.from('meetings').delete().eq('office_id', id);
+
+      // 7-17. Direct office_id references
+      const directTables = [
+        'contacts', 'contracts', 'action_plans', 'bonus_grants', 'bonus_requests',
+        'health_scores', 'health_playbook_executions', 'office_stage_history',
+        'office_journey', 'automation_executions', 'event_participants',
+        'client_office_links', 'shared_files', 'whatsapp_messages',
+      ] as const;
+      for (const table of directTables) {
+        await supabase.from(table).delete().eq('office_id', id);
+      }
+
+      // 18. Delete the office itself
+      const { error } = await supabase.from('offices').delete().eq('id', id);
+      if (error) throw error;
+
+      // Log to audit
+      await supabase.from('audit_logs').insert({
+        user_id: user.id,
+        action: 'delete_client',
+        entity_type: 'office',
+        entity_id: id,
+        details: { office_name: office?.name },
+      });
+
+      toast.success('Cliente excluído com sucesso!');
+      navigate('/clientes');
+    } catch (err: any) {
+      toast.error('Erro ao excluir cliente: ' + (err.message || 'Erro desconhecido'));
+    } finally {
+      setDeleting(false);
+      setShowDeleteConfirm(false);
+      setDeleteConfirmText('');
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -202,6 +274,7 @@ export default function Cliente360() {
       <ClienteHeader
         office={office}
         onEdit={isViewer ? undefined : () => setEditOpen(true)}
+        onDelete={(isAdmin || isManager) ? () => setShowDeleteConfirm(true) : undefined}
         health={health}
         stageName={stageName}
         csmProfile={csmProfile}
@@ -361,6 +434,37 @@ export default function Cliente360() {
         officeName={office.name}
         contacts={contacts.filter((c: any) => c.phone)}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteConfirm} onOpenChange={(open) => { setShowDeleteConfirm(open); if (!open) setDeleteConfirmText(''); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir Cliente</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação é irreversível. Todos os dados relacionados ao cliente <strong>{office?.name}</strong> serão excluídos permanentemente (contatos, contratos, reuniões, atividades, notas, jornada, health scores, etc).
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2">
+            <Label>Digite <strong>EXCLUIR</strong> para confirmar</Label>
+            <Input
+              value={deleteConfirmText}
+              onChange={e => setDeleteConfirmText(e.target.value)}
+              placeholder="EXCLUIR"
+              disabled={deleting}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteClient}
+              disabled={deleteConfirmText !== 'EXCLUIR' || deleting}
+            >
+              {deleting ? 'Excluindo...' : 'Excluir Permanentemente'}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

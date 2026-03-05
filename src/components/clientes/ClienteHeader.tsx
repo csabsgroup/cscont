@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from './StatusBadge';
 import { HealthScoreBars } from './HealthScoreBars';
-import { ArrowLeft, Pencil, MoreVertical, UserCog, RefreshCw, StickyNote, Eye, Camera, Phone } from 'lucide-react';
+import { ArrowLeft, Pencil, MoreVertical, UserCog, RefreshCw, StickyNote, Eye, Camera, Phone, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -25,6 +25,7 @@ interface Office {
 interface ClienteHeaderProps {
   office: Office;
   onEdit?: () => void;
+  onDelete?: () => void;
   health?: { score: number; band: string } | null;
   stageName?: string | null;
   csmProfile?: { full_name: string | null; avatar_url: string | null } | null;
@@ -37,11 +38,11 @@ interface ClienteHeaderProps {
 }
 
 export function ClienteHeader({
-  office, onEdit, health, stageName, csmProfile,
+  office, onEdit, onDelete, health, stageName, csmProfile,
   onReassignCSM, onChangeStatus, onQuickNote, onLogoUpdated, onPreviewOpen, onWhatsApp,
 }: ClienteHeaderProps) {
   const navigate = useNavigate();
-  const { isViewer, isClient } = useAuth();
+  const { isViewer, isClient, isAdmin, isManager } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
   const initials = office.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
   const csmInitials = csmProfile?.full_name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?';
@@ -165,6 +166,11 @@ export function ClienteHeader({
             <DropdownMenuItem onClick={onQuickNote}>
               <StickyNote className="mr-2 h-4 w-4" />Nota Rápida
             </DropdownMenuItem>
+            {(isAdmin || isManager) && onDelete && (
+              <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive focus:bg-destructive/10">
+                <Trash2 className="mr-2 h-4 w-4" />Excluir Cliente
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       )}
