@@ -1,84 +1,67 @@
 
 
-# Plan: Central de Notificações Completa
+# Plan: Expandir Ações do Motor de Automação v2
 
-## Visão Geral
-Criar uma tabela `notifications` no banco, um componente de painel de notificações (Popover) no ícone do sino, e uma página dedicada `/notificacoes` com histórico, filtros e marcação de leitura.
+## Resumo
+Adicionar 5 novos tipos de ação ao editor de automações v2 (`AutomationRulesTab.tsx`), além dos 6 já existentes. Também atualizar a edge function `execute-automations` para executar as novas ações.
 
-## 1. Tabela `notifications` (migração)
+## Ações Existentes (já implementadas)
+1. `create_activity` — Criar Atividade
+2. `send_notification` — Enviar Notificação
+3. `send_email` — Enviar Email
+4. `move_journey_stage` — Mover Etapa da Jornada
+5. `change_status` — Alterar Status
+6. `create_action_plan` — Criar Plano de Ação
 
-```sql
-CREATE TABLE public.notifications (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL,
-  title text NOT NULL,
-  message text,
-  type text NOT NULL DEFAULT 'info',  -- info, warning, success, error
-  entity_type text,                    -- office, activity, meeting, etc.
-  entity_id uuid,
-  link text,                           -- rota para navegar ao clicar
-  read boolean NOT NULL DEFAULT false,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
+## Novas Ações a Adicionar
 
-ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+### 1. `change_csm` — Alterar CSM Responsável
+- Config UI: Select com 3 métodos (Fixo, Menor carteira, Round-robin)
+  - **Fixo**: mostra select de CSMs
+  - **Menor carteira**: mostra multi-select de CSMs elegíveis
+  - **Round-robin**: mostra multi-select de CSMs elegíveis
+- Execução: atualiza `offices.csm_id`
 
--- Users see own notifications
-CREATE POLICY "Users see own notifications"
-  ON public.notifications FOR SELECT TO authenticated
-  USING (user_id = auth.uid());
+### 2. `create_contract` — Criar Contrato
+- Config UI: campos completos — produto (select), valor, valor mensal, data início, data fim, data renovação, status inicial (select: ativo/pendente)
+- Execução: insere na tabela `contracts`
 
--- Users can update own (mark read)
-CREATE POLICY "Users update own notifications"
-  ON public.notifications FOR UPDATE TO authenticated
-  USING (user_id = auth.uid());
+### 3. `cancel_contract` — Cancelar/Encerrar Contrato
+- Config UI: select de ação (cancelar ou encerrar), select de produto alvo (para identificar qual contrato)
+- Execução: atualiza `contracts.status` para `cancelado` ou `encerrado` + seta `end_date`
 
--- System/admin can insert
-CREATE POLICY "Authenticated can insert notifications"
-  ON public.notifications FOR INSERT TO authenticated
-  WITH CHECK (true);
+### 4. `set_product` — Definir Jornada (Produto)
+- Config UI: select de produto destino
+- Execução: atualiza `offices.active_product_id` e insere/atualiza `office_journey` na primeira etapa do produto
 
--- Users can delete own
-CREATE POLICY "Users delete own notifications"
-  ON public.notifications FOR DELETE TO authenticated
-  USING (user_id = auth.uid());
+### 5. `add_note` — Adicionar Nota na Timeline
+- Config UI: textarea com texto da nota, select de tipo (observação, ponto de atenção)
+- Execução: insere na tabela `office_notes` (ou campo equivalente de timeline)
 
--- Enable realtime
-ALTER PUBLICATION supabase_realtime ADD TABLE public.notifications;
-```
+### 6. `grant_bonus` — Conceder Bônus
+- Config UI: select de item do catálogo (`bonus_catalog`), quantidade, validade (dias)
+- Execução: insere na tabela `bonus_grants`
 
-## 2. Componente `NotificationPanel.tsx`
-- Popover que abre ao clicar no sino em `AppLayout.tsx`
-- Lista as últimas 20 notificações do usuário logado
-- Mostra título, mensagem resumida, tempo relativo (ex: "há 5 min")
-- Ícone colorido por tipo (info=azul, warning=amarelo, success=verde, error=vermelho)
-- Notificações não lidas com fundo destacado
-- Botão "Marcar todas como lidas"
-- Link "Ver todas" que navega para `/notificacoes`
-- Badge com contagem de não lidas no sino
-- Realtime: subscribe a `notifications` para updates em tempo real
+## Arquivos Alterados
 
-## 3. Página `/notificacoes`
-- Nova página `src/pages/Notificacoes.tsx`
-- Tabela com todas as notificações do usuário
-- Filtros: tipo, status (lidas/não lidas), período
-- Ações: marcar como lida/não lida, excluir
-- Botão "Marcar todas como lidas"
+### `src/components/configuracoes/AutomationRulesTab.tsx`
+- Expandir array `ACTION_TYPES` com os 6 novos tipos
+- Adicionar cases no `renderActionConfig` para cada nova ação com seus campos de configuração
+- Buscar dados adicionais no `fetchRefData`: `bonus_catalog`
 
-## 4. Integração no AppLayout
-- Substituir o `<button>` do sino pelo `<NotificationPanel>`
-- Badge dinâmico com contagem real de não lidas (substituindo o dot estático)
+### `supabase/functions/execute-automations/index.ts`
+- Adicionar handlers para cada novo `action.type` dentro dos blocos de execução de regras v2
+- `change_csm`: lógica de distribuição (fixo/menor carteira/round-robin)
+- `create_contract`: insert na tabela contracts
+- `cancel_contract`: update status do contrato
+- `set_product`: update active_product_id + upsert office_journey
+- `add_note`: insert em tabela de notas (verificar se existe `office_notes`)
+- `grant_bonus`: insert em bonus_grants
 
-## 5. Rota
-- Adicionar `/notificacoes` no `App.tsx`
+### Verificação necessária (na implementação)
+- Confirmar existência de tabela de notas/timeline para a ação `add_note`
+- Se não existir, criar migração para `office_notes`
 
-## Arquivos
-
-| Arquivo | Mudança |
-|---------|---------|
-| Migração SQL | Criar tabela `notifications` com RLS e realtime |
-| `src/components/NotificationPanel.tsx` | Novo componente (popover + lista) |
-| `src/pages/Notificacoes.tsx` | Nova página com histórico completo |
-| `src/components/AppLayout.tsx` | Integrar NotificationPanel no sino |
-| `src/App.tsx` | Adicionar rota `/notificacoes` |
+## Sem Mudanças de Schema
+As tabelas `contracts`, `bonus_grants`, `offices`, `office_journey` já existem. Apenas precisamos verificar a tabela de notas.
 
