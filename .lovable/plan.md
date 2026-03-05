@@ -1,39 +1,95 @@
 
 
-# Plan: Change Trigger from "Won Deal" to "Signed Contract"
+# Plan: Fix Field Paths to Match Real Piperun JSON Structure
 
-## Overview
+## Problem
+The webhook creates offices with empty fields because the field paths in mappings (e.g., `person.email`, `company.address`, `proposal.value`) don't match the real Piperun JSON structure (e.g., `person.contact_emails[0].address`, `company.address.street`, `proposals[0].value`). Additionally, `resolveNestedValue` doesn't support array access (`[0]`), `.length`, or custom field lookups.
 
-Switch the Piperun integration trigger from "deal won" to "proposal signed". Remove all `status=won` filtering from webhook and manual import. Update UI instructions accordingly.
+## Changes
 
-## File Changes
+### 1. Fix `resolveNestedValue` in both edge functions
 
-### 1. `supabase/functions/piperun-webhook/index.ts`
+Replace the simple dot-split reducer with a robust resolver that handles:
+- Array index access: `proposals[0].value` → `source.proposals[0].value`
+- `.length` on arrays: `proposals[0].parcels.length` → count
+- Custom fields: `fields.find.{id}` → searches `source.fields` array for `{id: N}` and returns `.valor`
 
-- **Remove** `isWonDeal` function (lines 18-31) and the status validation block (lines 253-260) that rejects non-won deals
-- Replace with a log: `console.log('[PIPERUN-WEBHOOK] Accepting deal (trigger: proposta assinada)');`
-- In signature fetch (lines 350-356), prefer signed signature: find `s.status === 'signed' || s.status === 'assinado'` first, fallback to `[0]`
-- Update audit action from `piperun_webhook_import` to `piperun_contract_signed_import`
+Applies to: `piperun-webhook/index.ts` (line 52-54) and `integration-piperun/index.ts` (line 68-70)
 
-### 2. `supabase/functions/integration-piperun/index.ts`
+### 2. Fix `sourceData` construction in webhook
 
-- **`previewDeals`** (lines 651-683): Remove `&status=won` from the API path (line 655). Remove the code filter for won status (lines 659-662). Fetch deals from configured pipeline+stage without status filter.
-- **`importDeals`** (lines 687-729): Same — remove `&status=won` from path (line 691) and the won filter (lines 694-697).
-- **`listFields` sample** (line 616): Remove `&status=won` from sample deal path.
-- In `fetchFullSourceData` (lines 274-281): When fetching signature, prefer signed ones: `sigs.find(s => s.status === 'signed' || s.status === 'assinado') || sigs[0]`
+Currently wraps deal data under `{ deal: {...}, company: ..., person: ..., proposal: (single), signature: ... }`. The real JSON has `proposals` as an array and `fields` as an array on the deal. Change to:
+- Keep `proposals` as the full array (not just first one as `proposal`)
+- Keep `fields` from the deal root
+- Keep `action` from body for trigger metadata
+- Also keep `proposal` and `signature` for backward compat
 
-### 3. `src/components/configuracoes/integrations/PiperunConfig.tsx`
+In `piperun-webhook/index.ts` (lines 340-353): restructure sourceData to include `proposals: deal.proposals || []`, `fields: deal.fields || []`, `action: body.action || {}`
 
-- **Line 260**: Change description from "importar deals ganhos" to "importar clientes quando o contrato for assinado"
-- **Line 283**: Change label from "Etapa (deal ganho)" to "Etapa"
-- **Line 382**: Change webhook description to "Configure no Piperun para importar automaticamente quando a proposta for assinada."
-- **Line 400**: Change instruction from `"Oportunidade for ganha"` to `"Proposta for assinada"`
-- **Line 495**: Change preview dialog description from "Deals ganhos" to "Deals no funil e etapa configurados"
+In `integration-piperun/index.ts` `fetchFullSourceData` (lines 284-304): same restructure
 
-## Technical Notes
+### 3. Update field paths in `listFields` (integration-piperun, lines 514-647)
 
-- The pipeline_id and stage_id filters remain — they still constrain which deals are eligible
-- The duplicate check (`piperun_deal_id`) remains unchanged
-- All other validations (pipeline, stage, duplicate) are kept intact
-- The signature data fetch is improved to prefer `signed`/`assinado` status
+Replace all static field definitions with paths matching the real API:
+
+**Deal fields** — change:
+- `deal.owner.name` → `user.name`, `deal.owner.email` → `user.email`
+- `deal.stage.name` → `stage.name`, `deal.pipeline.name` → `pipeline.name`
+- Remove `deal.` prefix for root deal fields: `deal.title` → `title`, `deal.value` → `value`, etc.
+- Add `city.name`, `city.uf`, `observation`
+
+**Company fields** — change:
+- `company.corporate_name` → `company.company_name`
+- `company.phone` → `company.contact_phones[0].number`
+- `company.email` → `company.contact_emails[0].address`
+- `company.address` → `company.address.street` + add `company.address.number`, `.district`, `.complement`, `.postal_code`
+- `company.state.abbr` → `company.city.uf`
+- `company.zip_code` → `company.address.postal_code`
+- Add `company.cnae`, `company.open_at`
+
+**Person fields** — change:
+- `person.email` → `person.contact_emails[0].address`
+- `person.phone` → `person.contact_phones[0].number`
+- `person.cell_phone` → remove (same as phone)
+- `person.birth_date` → `person.birth_day`
+- `person.position` → `person.job_title`
+- `person.state.abbr` → `person.city.uf`
+- `person.whatsapp`/`person.instagram` → `person.contact_phones[0].number` (same field)
+- Add `person.address.street`, `person.address.postal_code`
+
+**Proposal fields** — change all `proposal.*` to `proposals[0].*`:
+- `proposal.value` → `proposals[0].value`
+- Add `proposals[0].items[0].name`, `proposals[0].items[0].code`, `proposals[0].parcels.length`, `proposals[0].parcels[0].value`, `proposals[0].parcels[0].due_date`, `proposals[0].user.name`
+
+**Signature** — keep `signature.*` but also add `action.trigger_type`, `action.create`
+
+**Custom fields** — change `deal.custom.{id}` to `fields.find.{id}`
+
+### 4. Update `FALLBACK_FIELDS` in PiperunFieldPicker.tsx
+
+Mirror the same path changes from step 3. Update all keys and example values.
+
+### 5. Update `DEFAULT_MAPPINGS` in PiperunConfig.tsx (lines 88-99)
+
+Change to use correct paths:
+- `deal.title` → `title`
+- `person.email` → `person.contact_emails[0].address`
+- `person.phone` → `person.contact_phones[0].number`
+- `company.state.abbr` → `company.city.uf`
+- `deal.value` → `proposals[0].value`
+- Add `proposals[0].items[0].name` → `offices.active_product_id`
+
+### 6. Improve product matching (smart field for `active_product_id`)
+
+In `resolveSmartField` for `offices.active_product_id` in both edge functions: use CONTAINS matching instead of exact `ilike`. Fetch all products, then find one whose name is contained in (or contains) the raw value string.
+
+### 7. Update `getCategoryForField` in PiperunFieldPicker
+
+Add handling for paths that start with `proposals` or `fields.find.` or `action.` prefixes. Update `FIELD_CATEGORIES` to include proposals category.
+
+## Files Modified
+- `supabase/functions/piperun-webhook/index.ts`
+- `supabase/functions/integration-piperun/index.ts`
+- `src/components/configuracoes/integrations/PiperunFieldPicker.tsx`
+- `src/components/configuracoes/integrations/PiperunConfig.tsx`
 
