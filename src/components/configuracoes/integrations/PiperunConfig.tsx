@@ -257,7 +257,7 @@ export function PiperunConfig({ setting, onSave }: Props) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Configure a integração com o Piperun para importar deals ganhos como clientes.
+        Configure a integração com o Piperun para importar clientes quando o contrato for assinado.
       </p>
 
       <Button onClick={testConnection} disabled={testing} variant="outline" size="sm">
@@ -280,7 +280,7 @@ export function PiperunConfig({ setting, onSave }: Props) {
       </div>
 
       <div className="space-y-2">
-        <Label>Etapa (deal ganho)</Label>
+        <Label>Etapa</Label>
         <Select value={stageId} onValueChange={setStageId}>
           <SelectTrigger><SelectValue placeholder="Selecione a etapa" /></SelectTrigger>
           <SelectContent>{stages.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}</SelectContent>
@@ -379,7 +379,7 @@ export function PiperunConfig({ setting, onSave }: Props) {
           <Label className="text-sm font-semibold">Webhook (Recebimento em tempo real)</Label>
         </div>
         <p className="text-xs text-muted-foreground">
-          Configure no Piperun (Ajustes → Ações Automáticas) para enviar oportunidades ganhas automaticamente.
+          Configure no Piperun (Ajustes → Ações Automáticas) para importar automaticamente quando a proposta for assinada.
         </p>
         <div className="space-y-2">
           <Label className="text-xs">URL do Webhook</Label>
@@ -397,7 +397,7 @@ export function PiperunConfig({ setting, onSave }: Props) {
           <ol className="list-decimal list-inside space-y-0.5">
             <li>No Piperun, vá em <strong>Ajustes → Ações Automáticas</strong></li>
             <li>Crie uma nova ação para o funil selecionado</li>
-            <li>Quando: <strong>"Oportunidade for ganha"</strong></li>
+            <li>Quando: <strong>"Proposta for assinada"</strong></li>
             <li>Ação: <strong>"Enviar oportunidade para URL"</strong></li>
             <li>Cole a URL acima</li>
             <li>Header e Valor: <strong>deixe em branco</strong></li>
@@ -492,7 +492,7 @@ export function PiperunConfig({ setting, onSave }: Props) {
           <DialogHeader>
             <DialogTitle>Preview — Deals elegíveis para importação</DialogTitle>
             <DialogDescription>
-              Deals ganhos no funil e etapa configurados que ainda não foram importados.
+              Deals no funil e etapa configurados que ainda não foram importados.
             </DialogDescription>
           </DialogHeader>
           {previewLoading ? (
