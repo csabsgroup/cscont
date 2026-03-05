@@ -1,5 +1,6 @@
 
 
+
 # Plan: Piperun Full Data Extraction + Automation Conditional Fields Expansion
 
 ## Part 1: Piperun — Extract ALL data from deals, persons, organizations
@@ -63,4 +64,3 @@
 
 ## No Database Changes Required
 All tables (`offices`, `contacts`, `contracts`, `custom_fields`, `custom_field_values`) already exist with the necessary columns.
-

@@ -185,6 +185,129 @@ async function handleAction(supabase: any, action: any, office_id: string, assig
   }
 }
 
+// ─── Condition Evaluation Helpers ─────────────────────────────
+function daysBetween(dateStr: string | null | undefined): number | null {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return null;
+  return Math.floor((Date.now() - d.getTime()) / 86400000);
+}
+
+function daysUntil(dateStr: string | null | undefined): number | null {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return null;
+  return Math.floor((d.getTime() - Date.now()) / 86400000);
+}
+
+async function resolveConditionValue(supabase: any, cond: any, office: any, officeId: string) {
+  const field = cond.field;
+
+  // Office fields
+  const officeFieldMap: Record<string, string> = {
+    office_name: 'name', office_cnpj: 'cnpj', office_cpf: 'cpf', office_cep: 'cep',
+    office_address: 'address', office_city: 'city', office_state: 'state',
+    office_segment: 'segment', office_instagram: 'instagram', office_whatsapp: 'whatsapp',
+    office_email: 'email', office_phone: 'phone', office_tags: 'tags',
+    office_qtd_clientes: 'qtd_clientes', office_qtd_colaboradores: 'qtd_colaboradores',
+    office_faturamento_mensal: 'faturamento_mensal', office_faturamento_anual: 'faturamento_anual',
+  };
+  if (officeFieldMap[field]) {
+    return office?.[officeFieldMap[field]] ?? null;
+  }
+
+  // Contact fields
+  if (field.startsWith('contact_')) {
+    const contactCol: Record<string, string> = {
+      contact_name: 'name', contact_email: 'email', contact_phone: 'phone',
+      contact_whatsapp: 'whatsapp', contact_role_title: 'role_title',
+      contact_cpf: 'cpf', contact_instagram: 'instagram', contact_type: 'contact_type',
+    };
+    const col = contactCol[field];
+    if (!col) return null;
+    const scope = cond.contact_scope || 'main';
+    let q = supabase.from('contacts').select(col).eq('office_id', officeId);
+    if (scope === 'main') q = q.eq('is_main_contact', true);
+    const { data } = await q;
+    if (!data || data.length === 0) return null;
+    if (scope === 'any') {
+      // Return array of values for "any" matching
+      return data.map((r: any) => r[col]).filter((v: any) => v != null);
+    }
+    return data[0]?.[col] ?? null;
+  }
+
+  // Contract fields
+  if (field.startsWith('contract_') || field === 'installments_overdue' || field === 'installments_total') {
+    const { data: contracts } = await supabase.from('contracts').select('*')
+      .eq('office_id', officeId).order('created_at', { ascending: false }).limit(1);
+    const contract = contracts?.[0];
+    if (!contract) return null;
+
+    const contractFieldMap: Record<string, any> = {
+      contract_status: contract.status,
+      contract_monthly_value: contract.monthly_value,
+      contract_total_value: contract.value,
+      installments_overdue: contract.installments_overdue,
+      installments_total: contract.installments_total,
+      contract_start_date: daysBetween(contract.start_date),
+      contract_end_date: daysUntil(contract.end_date),
+      contract_renewal_date: daysUntil(contract.renewal_date),
+      contract_product_id: contract.product_id,
+      contract_negotiation_notes: contract.negotiation_notes,
+    };
+    return contractFieldMap[field] ?? null;
+  }
+
+  // Custom fields (cf_ prefix)
+  if (field.startsWith('cf_')) {
+    const slug = field.substring(3);
+    const { data: cfData } = await supabase.from('custom_field_values')
+      .select('value_text, value_number, value_boolean, value_date, value_json, custom_fields!inner(slug, field_type)')
+      .eq('office_id', officeId)
+      .eq('custom_fields.slug', slug)
+      .limit(1);
+    if (!cfData || cfData.length === 0) return null;
+    const row = cfData[0];
+    const ft = (row as any).custom_fields?.field_type;
+    if (ft === 'number' || ft === 'currency' || ft === 'percentage') return row.value_number;
+    if (ft === 'boolean') return row.value_boolean;
+    if (ft === 'date') return daysBetween(row.value_date);
+    if (ft === 'select' || ft === 'multi_select') return row.value_json ?? row.value_text;
+    return row.value_text;
+  }
+
+  // Fallback: direct office column
+  return office?.[field] ?? null;
+}
+
+function evaluateCondition(resolvedValue: any, operator: string, condValue: any, condValue2?: any): boolean {
+  // Handle "any" contact scope (array of values)
+  if (Array.isArray(resolvedValue) && !['is_in', 'contains'].includes(operator)) {
+    return resolvedValue.some(v => evaluateCondition(v, operator, condValue, condValue2));
+  }
+
+  const v = resolvedValue;
+  switch (operator) {
+    case 'equals': return String(v) === String(condValue);
+    case 'not_equals': return String(v) !== String(condValue);
+    case 'contains': return String(v ?? '').toLowerCase().includes(String(condValue ?? '').toLowerCase());
+    case 'greater_than': case 'days_greater_than': return Number(v) > Number(condValue);
+    case 'less_than': case 'days_less_than': return Number(v) < Number(condValue);
+    case 'days_equal': return Number(v) === Number(condValue);
+    case 'between': return Number(v) >= Number(condValue) && Number(v) <= Number(condValue2);
+    case 'is_in': {
+      const list = String(condValue).split(',').map(s => s.trim().toLowerCase());
+      return list.includes(String(v).toLowerCase());
+    }
+    case 'is_empty': return v == null || v === '';
+    case 'is_not_empty': return v != null && v !== '';
+    case 'is_true': return v === true;
+    case 'is_false': return v === false;
+    default: return true;
+  }
+}
+
 // ─── Execute v2 rules for a given trigger ────────────────────
 async function executeV2Rules(supabase: any, triggerType: string, office_id: string, csm_id: string | null, userId: string, extraContext?: Record<string, any>) {
   const { data: v2Rules } = await supabase
@@ -208,6 +331,31 @@ async function executeV2Rules(supabase: any, triggerType: string, office_id: str
       .eq("context_key", contextKey)
       .maybeSingle();
     if (existing) continue;
+
+    // Evaluate conditions
+    const conditionsPayload = rule.conditions as any;
+    const groups = conditionsPayload?.groups || (Array.isArray(conditionsPayload) ? [{ logic: rule.condition_logic || 'and', conditions: conditionsPayload }] : []);
+    const groupLogic = conditionsPayload?.logic || rule.condition_logic || 'and';
+
+    let ruleMatches = true;
+    if (groups.length > 0) {
+      const groupResults: boolean[] = [];
+      for (const group of groups) {
+        const conds = group.conditions || [];
+        if (conds.length === 0) { groupResults.push(true); continue; }
+        const condResults: boolean[] = [];
+        for (const cond of conds) {
+          if (!cond.field || !cond.operator) { condResults.push(true); continue; }
+          const resolved = await resolveConditionValue(supabase, cond, office, office_id);
+          condResults.push(evaluateCondition(resolved, cond.operator, cond.value, cond.value2));
+        }
+        const groupMatch = (group.logic || 'and') === 'and' ? condResults.every(Boolean) : condResults.some(Boolean);
+        groupResults.push(groupMatch);
+      }
+      ruleMatches = groupLogic === 'and' ? groupResults.every(Boolean) : groupResults.some(Boolean);
+    }
+
+    if (!ruleMatches) continue;
 
     const actions = (rule.actions as any[]) || [];
     const assignedCsm = csm_id || office?.csm_id;

@@ -76,10 +76,11 @@ interface ConditionFieldDef {
   value: string;
   label: string;
   category: string;
-  type: 'enum' | 'number' | 'text' | 'uuid';
+  type: 'enum' | 'number' | 'text' | 'uuid' | 'boolean' | 'date';
   operators: { value: string; label: string }[];
   options?: { value: string; label: string }[];
   suffix?: string;
+  contact_field?: boolean;
 }
 
 const OPERATORS = {
@@ -95,6 +96,8 @@ const OPERATORS = {
   days_equal: { value: 'days_equal', label: 'Há exatamente X dias' },
   is_empty: { value: 'is_empty', label: 'Está vazio' },
   is_not_empty: { value: 'is_not_empty', label: 'Não está vazio' },
+  is_true: { value: 'is_true', label: 'É verdadeiro' },
+  is_false: { value: 'is_false', label: 'É falso' },
 };
 
 const STATUS_OPTIONS = [
@@ -120,7 +123,15 @@ const BAND_OPTIONS = [
   { value: 'red', label: 'Vermelho' },
 ];
 
-const CONDITION_FIELDS: ConditionFieldDef[] = [
+const CONTACT_TYPE_OPTIONS = [
+  { value: 'socio', label: 'Sócio' },
+  { value: 'funcionario', label: 'Funcionário' },
+  { value: 'financeiro', label: 'Financeiro' },
+  { value: 'outro', label: 'Outro' },
+];
+
+const STATIC_CONDITION_FIELDS: ConditionFieldDef[] = [
+  // ── Cliente ──
   { value: 'product_id', label: 'Produto', category: 'Cliente', type: 'uuid', operators: [OPERATORS.equals, OPERATORS.not_equals] },
   { value: 'status', label: 'Status do cliente', category: 'Cliente', type: 'enum', operators: [OPERATORS.equals, OPERATORS.not_equals, OPERATORS.is_in], options: STATUS_OPTIONS },
   { value: 'csm_id', label: 'CSM responsável', category: 'Cliente', type: 'uuid', operators: [OPERATORS.equals, OPERATORS.not_equals, OPERATORS.is_empty, OPERATORS.is_not_empty] },
@@ -132,6 +143,49 @@ const CONDITION_FIELDS: ConditionFieldDef[] = [
   { value: 'ltv', label: 'LTV', category: 'Cliente', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between] },
   { value: 'okr_completion', label: '% OKR concluído', category: 'Cliente', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than] },
   { value: 'partner_count', label: 'Qtd de sócios', category: 'Cliente', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.equals] },
+
+  // ── Escritório ──
+  { value: 'office_name', label: 'Nome do escritório', category: 'Escritório', type: 'text', operators: [OPERATORS.equals, OPERATORS.contains, OPERATORS.is_not_empty] },
+  { value: 'office_cnpj', label: 'CNPJ', category: 'Escritório', type: 'text', operators: [OPERATORS.equals, OPERATORS.contains, OPERATORS.is_empty, OPERATORS.is_not_empty] },
+  { value: 'office_cpf', label: 'CPF', category: 'Escritório', type: 'text', operators: [OPERATORS.equals, OPERATORS.contains, OPERATORS.is_empty, OPERATORS.is_not_empty] },
+  { value: 'office_cep', label: 'CEP', category: 'Escritório', type: 'text', operators: [OPERATORS.equals, OPERATORS.contains, OPERATORS.is_empty, OPERATORS.is_not_empty] },
+  { value: 'office_address', label: 'Endereço', category: 'Escritório', type: 'text', operators: [OPERATORS.contains, OPERATORS.is_empty, OPERATORS.is_not_empty] },
+  { value: 'office_city', label: 'Cidade', category: 'Escritório', type: 'text', operators: [OPERATORS.equals, OPERATORS.contains] },
+  { value: 'office_state', label: 'Estado', category: 'Escritório', type: 'text', operators: [OPERATORS.equals] },
+  { value: 'office_segment', label: 'Segmento', category: 'Escritório', type: 'text', operators: [OPERATORS.equals, OPERATORS.not_equals, OPERATORS.contains] },
+  { value: 'office_instagram', label: 'Instagram', category: 'Escritório', type: 'text', operators: [OPERATORS.contains, OPERATORS.is_empty, OPERATORS.is_not_empty] },
+  { value: 'office_whatsapp', label: 'WhatsApp', category: 'Escritório', type: 'text', operators: [OPERATORS.contains, OPERATORS.is_empty, OPERATORS.is_not_empty] },
+  { value: 'office_email', label: 'Email', category: 'Escritório', type: 'text', operators: [OPERATORS.equals, OPERATORS.contains, OPERATORS.is_empty, OPERATORS.is_not_empty] },
+  { value: 'office_phone', label: 'Telefone', category: 'Escritório', type: 'text', operators: [OPERATORS.contains, OPERATORS.is_empty, OPERATORS.is_not_empty] },
+  { value: 'office_tags', label: 'Tags', category: 'Escritório', type: 'text', operators: [OPERATORS.contains] },
+  { value: 'office_qtd_clientes', label: 'Qtd de clientes', category: 'Escritório', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between] },
+  { value: 'office_qtd_colaboradores', label: 'Qtd de colaboradores', category: 'Escritório', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between] },
+  { value: 'office_faturamento_mensal', label: 'Faturamento mensal', category: 'Escritório', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between] },
+  { value: 'office_faturamento_anual', label: 'Faturamento anual', category: 'Escritório', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between] },
+
+  // ── Contato ──
+  { value: 'contact_name', label: 'Nome do contato', category: 'Contato', type: 'text', operators: [OPERATORS.equals, OPERATORS.contains, OPERATORS.is_not_empty], contact_field: true },
+  { value: 'contact_email', label: 'Email do contato', category: 'Contato', type: 'text', operators: [OPERATORS.equals, OPERATORS.contains, OPERATORS.is_empty, OPERATORS.is_not_empty], contact_field: true },
+  { value: 'contact_phone', label: 'Telefone do contato', category: 'Contato', type: 'text', operators: [OPERATORS.contains, OPERATORS.is_empty, OPERATORS.is_not_empty], contact_field: true },
+  { value: 'contact_whatsapp', label: 'WhatsApp do contato', category: 'Contato', type: 'text', operators: [OPERATORS.contains, OPERATORS.is_empty, OPERATORS.is_not_empty], contact_field: true },
+  { value: 'contact_role_title', label: 'Cargo do contato', category: 'Contato', type: 'text', operators: [OPERATORS.equals, OPERATORS.contains, OPERATORS.is_empty, OPERATORS.is_not_empty], contact_field: true },
+  { value: 'contact_cpf', label: 'CPF do contato', category: 'Contato', type: 'text', operators: [OPERATORS.equals, OPERATORS.contains, OPERATORS.is_empty, OPERATORS.is_not_empty], contact_field: true },
+  { value: 'contact_instagram', label: 'Instagram do contato', category: 'Contato', type: 'text', operators: [OPERATORS.contains, OPERATORS.is_empty, OPERATORS.is_not_empty], contact_field: true },
+  { value: 'contact_type', label: 'Tipo do contato', category: 'Contato', type: 'enum', operators: [OPERATORS.equals, OPERATORS.not_equals], options: CONTACT_TYPE_OPTIONS, contact_field: true },
+
+  // ── Contrato ──
+  { value: 'contract_status', label: 'Status do contrato', category: 'Contrato', type: 'enum', operators: [OPERATORS.equals, OPERATORS.not_equals], options: CONTRACT_STATUS_OPTIONS },
+  { value: 'contract_monthly_value', label: 'Valor mensal do contrato', category: 'Contrato', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between] },
+  { value: 'contract_total_value', label: 'Valor total do contrato', category: 'Contrato', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between] },
+  { value: 'installments_overdue', label: 'Parcelas vencidas', category: 'Contrato', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.equals] },
+  { value: 'installments_total', label: 'Total de parcelas', category: 'Contrato', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.equals] },
+  { value: 'contract_start_date', label: 'Dias desde início do contrato', category: 'Contrato', type: 'number', operators: [OPERATORS.days_greater_than, OPERATORS.days_less_than, OPERATORS.days_equal], suffix: 'dias' },
+  { value: 'contract_end_date', label: 'Dias para fim do contrato', category: 'Contrato', type: 'number', operators: [OPERATORS.days_greater_than, OPERATORS.days_less_than, OPERATORS.between], suffix: 'dias' },
+  { value: 'contract_renewal_date', label: 'Dias para renovação do contrato', category: 'Contrato', type: 'number', operators: [OPERATORS.days_greater_than, OPERATORS.days_less_than, OPERATORS.between], suffix: 'dias' },
+  { value: 'contract_product_id', label: 'Produto do contrato', category: 'Contrato', type: 'uuid', operators: [OPERATORS.equals, OPERATORS.not_equals] },
+  { value: 'contract_negotiation_notes', label: 'Notas de negociação', category: 'Contrato', type: 'text', operators: [OPERATORS.contains, OPERATORS.is_empty, OPERATORS.is_not_empty] },
+
+  // ── Datas ──
   { value: 'days_since_creation', label: 'Dias desde criação', category: 'Datas', type: 'number', operators: [OPERATORS.days_greater_than, OPERATORS.days_less_than, OPERATORS.days_equal, OPERATORS.between], suffix: 'dias' },
   { value: 'days_since_activation', label: 'Dias desde ativação', category: 'Datas', type: 'number', operators: [OPERATORS.days_greater_than, OPERATORS.days_less_than, OPERATORS.days_equal, OPERATORS.between], suffix: 'dias' },
   { value: 'days_since_onboarding', label: 'Dias desde onboarding', category: 'Datas', type: 'number', operators: [OPERATORS.days_greater_than, OPERATORS.days_less_than, OPERATORS.days_equal, OPERATORS.between], suffix: 'dias' },
@@ -139,30 +193,40 @@ const CONDITION_FIELDS: ConditionFieldDef[] = [
   { value: 'last_activity_completed_days', label: 'Dias desde última atividade concluída', category: 'Datas', type: 'number', operators: [OPERATORS.days_greater_than, OPERATORS.days_less_than, OPERATORS.days_equal], suffix: 'dias' },
   { value: 'last_meeting_days', label: 'Dias desde última reunião', category: 'Datas', type: 'number', operators: [OPERATORS.days_greater_than, OPERATORS.days_less_than, OPERATORS.days_equal], suffix: 'dias' },
   { value: 'days_without_meeting', label: 'Dias sem reunião', category: 'Datas', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than], suffix: 'dias' },
-  { value: 'days_to_renewal', label: 'Dias para renovação', category: 'Datas', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between], suffix: 'dias' },
-  { value: 'days_to_contract_end', label: 'Dias para fim do contrato', category: 'Datas', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between], suffix: 'dias' },
   { value: 'days_since_cycle_start', label: 'Dias no ciclo atual', category: 'Datas', type: 'number', operators: [OPERATORS.days_greater_than, OPERATORS.days_less_than, OPERATORS.between], suffix: 'dias' },
+
+  // ── Churn ──
   { value: 'days_since_churn', label: 'Dias desde churn', category: 'Churn', type: 'number', operators: [OPERATORS.days_greater_than, OPERATORS.days_less_than, OPERATORS.days_equal], suffix: 'dias' },
   { value: 'churn_reason', label: 'Motivo do churn', category: 'Churn', type: 'text', operators: [OPERATORS.equals, OPERATORS.not_equals, OPERATORS.is_empty, OPERATORS.is_not_empty] },
-  { value: 'segment', label: 'Segmento', category: 'Empresa', type: 'text', operators: [OPERATORS.equals, OPERATORS.not_equals, OPERATORS.contains] },
-  { value: 'city', label: 'Cidade', category: 'Empresa', type: 'text', operators: [OPERATORS.equals, OPERATORS.contains] },
-  { value: 'state', label: 'Estado', category: 'Empresa', type: 'text', operators: [OPERATORS.equals] },
-  { value: 'tags', label: 'Tags', category: 'Empresa', type: 'text', operators: [OPERATORS.contains] },
-  { value: 'cnpj', label: 'CNPJ', category: 'Empresa', type: 'text', operators: [OPERATORS.equals, OPERATORS.contains, OPERATORS.is_empty, OPERATORS.is_not_empty] },
-  { value: 'qtd_clientes', label: 'Qtd de clientes da empresa', category: 'Empresa', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between] },
-  { value: 'qtd_colaboradores', label: 'Qtd de colaboradores', category: 'Empresa', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between] },
-  { value: 'faturamento_mensal', label: 'Faturamento mensal', category: 'Empresa', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between] },
-  { value: 'faturamento_anual', label: 'Faturamento anual', category: 'Empresa', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between] },
-  { value: 'contract_status', label: 'Status do contrato', category: 'Contrato', type: 'enum', operators: [OPERATORS.equals, OPERATORS.not_equals], options: CONTRACT_STATUS_OPTIONS },
-  { value: 'contract_monthly_value', label: 'Valor mensal do contrato', category: 'Contrato', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between] },
-  { value: 'contract_total_value', label: 'Valor total do contrato', category: 'Contrato', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between] },
-  { value: 'installments_overdue', label: 'Parcelas vencidas', category: 'Contrato', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.equals] },
-  { value: 'installments_total', label: 'Total de parcelas', category: 'Contrato', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.equals] },
+
+  // ── Atividades ──
   { value: 'open_activities_count', label: 'Qtd atividades abertas', category: 'Atividades', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.equals] },
   { value: 'overdue_activities_count', label: 'Qtd atividades atrasadas', category: 'Atividades', type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.equals] },
 ];
 
-const CONDITION_CATEGORIES = [...new Set(CONDITION_FIELDS.map(f => f.category))];
+// Helper to convert custom_fields to ConditionFieldDefs
+function customFieldToConditionDef(cf: any): ConditionFieldDef {
+  const base = { value: `cf_${cf.slug}`, label: cf.name, category: 'Campos Personalizados' };
+  switch (cf.field_type) {
+    case 'number':
+    case 'currency':
+    case 'percentage':
+      return { ...base, type: 'number', operators: [OPERATORS.greater_than, OPERATORS.less_than, OPERATORS.between, OPERATORS.equals] };
+    case 'boolean':
+      return { ...base, type: 'boolean', operators: [OPERATORS.is_true, OPERATORS.is_false] };
+    case 'date':
+      return { ...base, type: 'number', operators: [OPERATORS.days_greater_than, OPERATORS.days_less_than, OPERATORS.days_equal], suffix: 'dias' };
+    case 'select':
+    case 'multi_select': {
+      const opts = Array.isArray(cf.options) ? cf.options.map((o: any) => ({ value: typeof o === 'string' ? o : o.value, label: typeof o === 'string' ? o : o.label })) : [];
+      return { ...base, type: 'enum', operators: [OPERATORS.equals, OPERATORS.not_equals, OPERATORS.is_in], options: opts };
+    }
+    default:
+      return { ...base, type: 'text', operators: [OPERATORS.equals, OPERATORS.contains, OPERATORS.is_empty, OPERATORS.is_not_empty] };
+  }
+}
+
+const CONDITION_CATEGORIES_STATIC = [...new Set(STATIC_CONDITION_FIELDS.map(f => f.category))];
 
 // ─── Types ───────────────────────────────────────────────────
 interface Condition {
@@ -170,6 +234,7 @@ interface Condition {
   operator: string;
   value: any;
   value2?: any;
+  contact_scope?: 'main' | 'any';
 }
 
 interface ConditionGroup {
@@ -264,6 +329,14 @@ export function AutomationRulesTab() {
   const [csms, setCsms] = useState<any[]>([]);
   const [formTemplates, setFormTemplates] = useState<any[]>([]);
   const [bonusCatalog, setBonusCatalog] = useState<any[]>([]);
+  const [customFields, setCustomFields] = useState<any[]>([]);
+
+  // Computed: merge static + dynamic custom field conditions
+  const CONDITION_FIELDS: ConditionFieldDef[] = [
+    ...STATIC_CONDITION_FIELDS,
+    ...customFields.map(customFieldToConditionDef),
+  ];
+  const CONDITION_CATEGORIES = [...new Set(CONDITION_FIELDS.map(f => f.category))];
 
   const fetchRules = useCallback(async () => {
     setLoading(true);
@@ -273,18 +346,20 @@ export function AutomationRulesTab() {
   }, []);
 
   const fetchRefData = useCallback(async () => {
-    const [pRes, sRes, cRes, fRes, bRes] = await Promise.all([
+    const [pRes, sRes, cRes, fRes, bRes, cfRes] = await Promise.all([
       supabase.from('products').select('id, name').eq('is_active', true).order('name'),
       supabase.from('journey_stages').select('id, name, product_id').order('position'),
       supabase.from('profiles').select('id, full_name'),
       supabase.from('form_templates').select('id, name').order('name'),
       supabase.from('bonus_catalog').select('id, name, unit, default_validity_days'),
+      supabase.from('custom_fields').select('id, name, slug, field_type, options'),
     ]);
     setProducts(pRes.data || []);
     setStages(sRes.data || []);
     setCsms(cRes.data || []);
     setFormTemplates(fRes.data || []);
     setBonusCatalog(bRes.data || []);
+    setCustomFields(cfRes.data || []);
   }, []);
 
   useEffect(() => { fetchRules(); fetchRefData(); }, [fetchRules, fetchRefData]);
@@ -434,7 +509,7 @@ export function AutomationRulesTab() {
         if (g.id !== groupId) return g;
         const conds = [...g.conditions];
         conds[idx] = { ...conds[idx], ...patch };
-        if (patch.field) { conds[idx].operator = ''; conds[idx].value = ''; conds[idx].value2 = undefined; }
+        if (patch.field) { conds[idx].operator = ''; conds[idx].value = ''; conds[idx].value2 = undefined; conds[idx].contact_scope = undefined; }
         return { ...g, conditions: conds };
       }),
     }));
@@ -588,6 +663,14 @@ export function AutomationRulesTab() {
         <Select value={cond.value || ''} onValueChange={v => updateConditionInGroup(groupId, idx, { value: v })}>
           <SelectTrigger className="flex-1"><SelectValue placeholder="Etapa" /></SelectTrigger>
           <SelectContent>{stages.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+        </Select>
+      );
+    }
+    if (fieldDef.value === 'contract_product_id') {
+      return (
+        <Select value={cond.value || ''} onValueChange={v => updateConditionInGroup(groupId, idx, { value: v })}>
+          <SelectTrigger className="flex-1"><SelectValue placeholder="Produto" /></SelectTrigger>
+          <SelectContent>{products.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
         </Select>
       );
     }
@@ -1144,6 +1227,15 @@ export function AutomationRulesTab() {
                             </Select>
                           )}
                           {fieldDef && cond.operator && renderConditionValue(cond, group.id, idx)}
+                          {fieldDef?.contact_field && (
+                            <Select value={cond.contact_scope || 'main'} onValueChange={v => updateConditionInGroup(group.id, idx, { contact_scope: v } as any)}>
+                              <SelectTrigger className="w-[130px]"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="main">Principal</SelectItem>
+                                <SelectItem value="any">Qualquer</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          )}
                           <div className="flex gap-0.5 flex-shrink-0">
                             <Button size="icon" variant="ghost" className="h-9 w-9" onClick={() => copyConditionInGroup(group.id, idx)}><Copy className="h-3.5 w-3.5 text-muted-foreground" /></Button>
                             <Button size="icon" variant="ghost" className="h-9 w-9" onClick={() => removeConditionFromGroup(group.id, idx)}><X className="h-3.5 w-3.5 text-muted-foreground" /></Button>
