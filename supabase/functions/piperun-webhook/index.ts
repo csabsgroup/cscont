@@ -15,6 +15,42 @@ function jsonResponse(data: any, status = 200) {
   });
 }
 
+function isWonDeal(deal: any): boolean {
+  if (!deal) return false;
+  if (deal.won === true) return true;
+  const status = String(deal.status || '').toLowerCase().trim();
+  if (['won', 'ganho', 'ganha'].includes(status)) return true;
+  const statusLabel = String(deal.status_label || '').toLowerCase().trim();
+  if (['ganho', 'ganha', 'won'].includes(statusLabel)) return true;
+  // If webhook is configured for "oportunidade ganha", status may be absent
+  if (!deal.status && !deal.won && deal.id) {
+    console.log('[PIPERUN-WEBHOOK] No status field, assuming won (webhook configured for won deals)');
+    return true;
+  }
+  return false;
+}
+
+function extractDeal(body: any): any {
+  // Try different formats Piperun may send
+  if (body.data) {
+    const d = Array.isArray(body.data) ? body.data[0] : body.data;
+    if (d?.id) return d;
+  }
+  if (body.deal) {
+    const d = Array.isArray(body.deal) ? body.deal[0] : body.deal;
+    if (d?.id) return d;
+  }
+  if (body.id && (body.title || body.pipeline_id)) {
+    return body;
+  }
+  if (Array.isArray(body) && body[0]?.id) {
+    return body[0];
+  }
+  // Last resort: return body itself if it has an id
+  if (body.id) return body;
+  return null;
+}
+
 async function piperunGet(path: string, token: string) {
   const separator = path.includes('?') ? '&' : '?';
   const url = `${PIPERUN_BASE}${path}${separator}show=200`;
@@ -99,9 +135,13 @@ async function processAndCreateOffice(
 
   if (!officeFields.name) officeFields.name = sourceData.deal?.title || `Deal ${dealId}`;
 
+  console.log('[PIPERUN-WEBHOOK] Inserting office with fields:', JSON.stringify(officeFields).substring(0, 500));
+
   const { data: newOffice, error: officeErr } = await supabase.from("offices").insert(officeFields).select("id").single();
   if (officeErr || !newOffice) throw new Error(`Failed to insert office: ${officeErr?.message}`);
   const officeId = newOffice.id;
+
+  console.log('[PIPERUN-WEBHOOK] Office created:', officeId);
 
   // Contract
   if (Object.keys(contractFields).length > 0) {
@@ -138,16 +178,14 @@ async function processAndCreateOffice(
     } catch (e: any) { console.log('[PIPERUN-WEBHOOK] PDF download failed:', e.message); }
   }
 
-  // Automations (simplified — distribution, onboarding, journey, health, slack)
+  // Automations
   if (resolvedProductId) {
     try {
-      // Journey stage
       const { data: firstStage } = await supabase.from("journey_stages").select("id")
         .eq("product_id", resolvedProductId).order("position", { ascending: true }).limit(1).maybeSingle();
       if (firstStage) {
         await supabase.from("office_journey").insert({ office_id: officeId, journey_stage_id: firstStage.id }).catch(() => {});
       }
-      // Health score
       await supabase.functions.invoke('calculate-health-score', { body: { office_id: officeId } }).catch(() => {});
     } catch (e) { console.error('[PIPERUN-WEBHOOK] Automation error:', e); }
   }
@@ -168,17 +206,58 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return jsonResponse({ error: "Method not allowed" }, 405);
 
-  try {
-    const deal = await req.json();
-    console.log('[PIPERUN-WEBHOOK] Received deal:', deal.id, deal.title, deal.status);
+  const url = Deno.env.get("SUPABASE_URL")!;
+  const supabase = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  let webhookLogId: string | null = null;
 
-    // Validate status
-    if (deal.status !== 'won' && deal.status !== 'ganho') {
-      return jsonResponse({ success: false, message: 'Deal não é ganho, ignorando' });
+  try {
+    console.log('[PIPERUN-WEBHOOK] Webhook received');
+    console.log('[PIPERUN-WEBHOOK] Method:', req.method);
+
+    const rawBody = await req.text();
+    let body: any;
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      console.error('[PIPERUN-WEBHOOK] Failed to parse JSON body');
+      return jsonResponse({ success: false, error: 'Invalid JSON body' }, 400);
     }
 
-    const url = Deno.env.get("SUPABASE_URL")!;
-    const supabase = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    console.log('[PIPERUN-WEBHOOK] Body keys:', Object.keys(body));
+    console.log('[PIPERUN-WEBHOOK] Full body (first 2000 chars):', rawBody.substring(0, 2000));
+
+    // Save raw payload for debug
+    const { data: logRow } = await supabase.from('webhook_logs').insert({
+      provider: 'piperun',
+      payload: body,
+      processed: false,
+    }).select('id').single();
+    webhookLogId = logRow?.id || null;
+    console.log('[PIPERUN-WEBHOOK] Webhook log saved:', webhookLogId);
+
+    // Extract deal from body (robust multi-format)
+    const deal = extractDeal(body);
+    if (!deal || !deal.id) {
+      const errMsg = 'Could not extract deal from webhook body';
+      console.error('[PIPERUN-WEBHOOK]', errMsg);
+      if (webhookLogId) await supabase.from('webhook_logs').update({ error: errMsg }).eq('id', webhookLogId);
+      return jsonResponse({ success: false, error: errMsg }, 400);
+    }
+
+    console.log('[PIPERUN-WEBHOOK] Deal ID:', deal.id);
+    console.log('[PIPERUN-WEBHOOK] Deal title:', deal.title);
+    console.log('[PIPERUN-WEBHOOK] Deal status:', deal.status);
+    console.log('[PIPERUN-WEBHOOK] Deal pipeline_id:', deal.pipeline_id);
+    console.log('[PIPERUN-WEBHOOK] Deal stage_id:', deal.stage_id);
+
+    // Validate status (flexible)
+    if (!isWonDeal(deal)) {
+      const msg = `Deal não é ganho (status=${deal.status}, won=${deal.won}), ignorando`;
+      console.log('[PIPERUN-WEBHOOK]', msg);
+      if (webhookLogId) await supabase.from('webhook_logs').update({ error: msg }).eq('id', webhookLogId);
+      return jsonResponse({ success: false, message: msg });
+    }
+    console.log('[PIPERUN-WEBHOOK] Status check passed');
 
     // Fetch integration settings
     const { data: settings } = await supabase
@@ -188,17 +267,36 @@ Deno.serve(async (req) => {
       .single();
 
     if (!settings?.config) {
-      return jsonResponse({ success: false, message: 'Integração Piperun não configurada' });
+      const msg = 'Integração Piperun não configurada';
+      if (webhookLogId) await supabase.from('webhook_logs').update({ error: msg }).eq('id', webhookLogId);
+      return jsonResponse({ success: false, message: msg });
     }
 
     const config = settings.config as any;
     const { pipeline_id, stage_id, field_mappings_v2 } = config;
 
-    // Validate pipeline/stage
-    if (pipeline_id && deal.pipeline_id !== undefined && String(deal.pipeline_id) !== String(pipeline_id)) {
+    console.log('[PIPERUN-WEBHOOK] Config pipeline_id:', pipeline_id);
+    console.log('[PIPERUN-WEBHOOK] Config stage_id:', stage_id);
+
+    // Validate pipeline/stage with type normalization
+    const dealPipelineId = String(deal.pipeline_id ?? '');
+    const configPipelineId = String(pipeline_id ?? '');
+    const dealStageId = String(deal.stage_id ?? '');
+    const configStageId = String(stage_id ?? '');
+
+    console.log('[PIPERUN-WEBHOOK] Pipeline check:', dealPipelineId, '===', configPipelineId);
+    console.log('[PIPERUN-WEBHOOK] Stage check:', dealStageId, '===', configStageId);
+
+    if (configPipelineId && dealPipelineId && dealPipelineId !== configPipelineId) {
+      const msg = `Pipeline mismatch: deal=${dealPipelineId}, config=${configPipelineId}`;
+      console.log('[PIPERUN-WEBHOOK]', msg);
+      if (webhookLogId) await supabase.from('webhook_logs').update({ error: msg }).eq('id', webhookLogId);
       return jsonResponse({ success: false, message: 'Deal não é do funil configurado' });
     }
-    if (stage_id && deal.stage_id !== undefined && String(deal.stage_id) !== String(stage_id)) {
+    if (configStageId && dealStageId && dealStageId !== configStageId) {
+      const msg = `Stage mismatch: deal=${dealStageId}, config=${configStageId}`;
+      console.log('[PIPERUN-WEBHOOK]', msg);
+      if (webhookLogId) await supabase.from('webhook_logs').update({ error: msg }).eq('id', webhookLogId);
       return jsonResponse({ success: false, message: 'Deal não é da etapa configurada' });
     }
 
@@ -210,13 +308,17 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (existing) {
-      return jsonResponse({ success: false, message: 'Deal já importado', office_id: existing.id });
+      const msg = 'Deal já importado';
+      if (webhookLogId) await supabase.from('webhook_logs').update({ processed: true, error: msg }).eq('id', webhookLogId);
+      return jsonResponse({ success: false, message: msg, office_id: existing.id });
     }
 
     // Fetch related data via API
     const token = Deno.env.get("PIPERUN_API_TOKEN");
     if (!token) {
-      return jsonResponse({ success: false, message: 'PIPERUN_API_TOKEN não configurado' });
+      const msg = 'PIPERUN_API_TOKEN não configurado';
+      if (webhookLogId) await supabase.from('webhook_logs').update({ error: msg }).eq('id', webhookLogId);
+      return jsonResponse({ success: false, message: msg });
     }
 
     let companyData = deal.company;
@@ -268,16 +370,27 @@ Deno.serve(async (req) => {
       signature: signatureData || {},
     };
 
+    console.log('[PIPERUN-WEBHOOK] sourceData keys:', Object.keys(sourceData));
+    console.log('[PIPERUN-WEBHOOK] company name:', sourceData.company?.name);
+    console.log('[PIPERUN-WEBHOOK] person name:', sourceData.person?.name);
+
     // Convert field_mappings_v2 to the format processAndCreateOffice expects
     const mappings = (field_mappings_v2 || [])
       .filter((m: any) => m.crm && m.piperun_key)
       .map((m: any) => ({ piperun: m.piperun_key, local: m.crm }));
+
+    console.log('[PIPERUN-WEBHOOK] Mappings count:', mappings.length);
 
     // Use a system user ID for audit
     const { data: adminUsers } = await supabase.from('user_roles').select('user_id').eq('role', 'admin').limit(1);
     const systemUserId = adminUsers?.[0]?.user_id || '00000000-0000-0000-0000-000000000000';
 
     const result = await processAndCreateOffice(supabase, sourceData, mappings, String(deal.id), systemUserId);
+
+    // Update webhook log as processed
+    if (webhookLogId) {
+      await supabase.from('webhook_logs').update({ processed: true, error: null }).eq('id', webhookLogId);
+    }
 
     // Update last webhook timestamp in settings
     await supabase.from('integration_settings')
@@ -288,7 +401,10 @@ Deno.serve(async (req) => {
     console.log('[PIPERUN-WEBHOOK] Successfully imported deal', deal.id, 'as office', result.office_id);
     return jsonResponse({ success: true, office_id: result.office_id });
   } catch (err: any) {
-    console.error("[PIPERUN-WEBHOOK] Error:", err?.message || err);
+    console.error("[PIPERUN-WEBHOOK] ERROR:", err?.message, err?.stack);
+    if (webhookLogId) {
+      await supabase.from('webhook_logs').update({ error: err?.message || 'Erro interno' }).eq('id', webhookLogId);
+    }
     return jsonResponse({ success: false, message: err?.message || 'Erro interno' }, 500);
   }
 });

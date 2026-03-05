@@ -6,11 +6,12 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, CheckCircle2, XCircle, Download, ArrowRight, Plus, Trash2, RotateCcw, Search, Zap, Copy, Webhook, ExternalLink } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, Download, ArrowRight, Plus, Trash2, RotateCcw, Search, Zap, Copy, Webhook, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { IntegrationSetting } from '@/hooks/useIntegrationSettings';
 import { PiperunFieldPicker } from './PiperunFieldPicker';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface Props {
   setting?: IntegrationSetting;
@@ -99,6 +100,7 @@ const DEFAULT_MAPPINGS: MappingRow[] = [
 
 interface MappingRow { id: string; crm: string; piperun_key: string; piperun_label: string; }
 interface PreviewDeal { id: number; title: string; company_name: string; person_name: string; value: number; won_at: string; }
+interface WebhookLog { id: string; payload: any; processed: boolean; error: string | null; created_at: string; }
 
 export function PiperunConfig({ setting, onSave }: Props) {
   const config = (setting?.config || {}) as any;
@@ -124,9 +126,34 @@ export function PiperunConfig({ setting, onSave }: Props) {
   const [previewDeals, setPreviewDeals] = useState<PreviewDeal[]>([]);
   const [previewAlreadyImported, setPreviewAlreadyImported] = useState(0);
 
+  // Webhook logs state
+  const [webhookLogs, setWebhookLogs] = useState<WebhookLog[]>([]);
+  const [webhookLogsLoading, setWebhookLogsLoading] = useState(false);
+  const [jsonViewOpen, setJsonViewOpen] = useState(false);
+  const [jsonViewData, setJsonViewData] = useState<any>(null);
+
   const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
   const webhookUrl = `https://${projectId}.supabase.co/functions/v1/piperun-webhook`;
   const lastWebhookAt = config.last_webhook_at;
+
+  // Load webhook logs
+  const loadWebhookLogs = async () => {
+    setWebhookLogsLoading(true);
+    try {
+      const { data } = await supabase
+        .from('webhook_logs')
+        .select('*')
+        .eq('provider', 'piperun')
+        .order('created_at', { ascending: false })
+        .limit(10);
+      setWebhookLogs((data as any[]) || []);
+    } catch { /* ignore */ }
+    setWebhookLogsLoading(false);
+  };
+
+  useEffect(() => { loadWebhookLogs(); }, []);
+
+  const latestWebhookDate = lastWebhookAt || (webhookLogs.length > 0 ? webhookLogs[0].created_at : null);
 
   const testConnection = async () => {
     setTesting(true);
@@ -217,6 +244,15 @@ export function PiperunConfig({ setting, onSave }: Props) {
   };
 
   const groupedFields = GROUPS.map(g => ({ group: g, fields: CRM_FIELDS.filter(f => f.group === g) }));
+
+  const getDealTitle = (payload: any): string => {
+    if (!payload) return '—';
+    // Try different formats
+    const deal = payload.data ? (Array.isArray(payload.data) ? payload.data[0] : payload.data)
+      : payload.deal ? (Array.isArray(payload.deal) ? payload.deal[0] : payload.deal)
+      : payload.title ? payload : null;
+    return deal?.title || `Deal ${deal?.id || '?'}`;
+  };
 
   return (
     <div className="space-y-4">
@@ -364,19 +400,76 @@ export function PiperunConfig({ setting, onSave }: Props) {
             <li>Quando: <strong>"Oportunidade for ganha"</strong></li>
             <li>Ação: <strong>"Enviar oportunidade para URL"</strong></li>
             <li>Cole a URL acima</li>
+            <li>Header e Valor: <strong>deixe em branco</strong></li>
+            <li>Tipo de envio: <strong>Padrão</strong></li>
           </ol>
         </div>
         <div className="flex items-center gap-2 text-xs">
-          {lastWebhookAt ? (
+          {latestWebhookDate ? (
             <>
               <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-              <span className="text-muted-foreground">Último webhook: {new Date(lastWebhookAt).toLocaleString('pt-BR')}</span>
+              <span className="text-muted-foreground">Último webhook: {new Date(latestWebhookDate).toLocaleString('pt-BR')}</span>
             </>
           ) : (
             <>
               <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
               <span className="text-muted-foreground">Aguardando primeiro webhook...</span>
             </>
+          )}
+        </div>
+
+        {/* Webhook Logs Table */}
+        <div className="space-y-2 pt-2 border-t border-border">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs font-semibold">📋 Últimos webhooks recebidos</Label>
+            <Button variant="ghost" size="sm" onClick={loadWebhookLogs} disabled={webhookLogsLoading}>
+              {webhookLogsLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
+            </Button>
+          </div>
+          {webhookLogs.length > 0 ? (
+            <div className="max-h-[200px] overflow-y-auto rounded-md border border-border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-xs py-1">Data/Hora</TableHead>
+                    <TableHead className="text-xs py-1">Status</TableHead>
+                    <TableHead className="text-xs py-1">Oportunidade</TableHead>
+                    <TableHead className="text-xs py-1 w-[50px]">JSON</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {webhookLogs.map(log => (
+                    <TableRow key={log.id}>
+                      <TableCell className="text-xs py-1.5">
+                        {new Date(log.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                      </TableCell>
+                      <TableCell className="text-xs py-1.5">
+                        {log.processed ? (
+                          <span className="flex items-center gap-1 text-green-600"><CheckCircle2 className="h-3 w-3" /> Sucesso</span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-destructive" title={log.error || ''}>
+                            <XCircle className="h-3 w-3" /> {log.error ? log.error.substring(0, 30) + (log.error.length > 30 ? '…' : '') : 'Erro'}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs py-1.5">{getDealTitle(log.payload)}</TableCell>
+                      <TableCell className="text-xs py-1.5">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0"
+                          onClick={() => { setJsonViewData(log.payload); setJsonViewOpen(true); }}
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">Nenhum webhook recebido ainda.</p>
           )}
         </div>
       </div>
@@ -446,6 +539,24 @@ export function PiperunConfig({ setting, onSave }: Props) {
               <Download className="mr-2 h-4 w-4" />
               Confirmar importação ({previewDeals.length})
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* JSON Viewer Dialog */}
+      <Dialog open={jsonViewOpen} onOpenChange={setJsonViewOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>Payload do Webhook</DialogTitle>
+            <DialogDescription>JSON completo recebido do Piperun</DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-[60vh]">
+            <pre className="text-xs bg-muted p-4 rounded-md overflow-x-auto whitespace-pre-wrap break-all">
+              {JSON.stringify(jsonViewData, null, 2)}
+            </pre>
+          </ScrollArea>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setJsonViewOpen(false)}>Fechar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
