@@ -8,6 +8,7 @@ interface PiperunField {
   key: string;
   label: string;
   example_value?: string;
+  category?: string;
 }
 
 interface FieldCategory {
@@ -16,91 +17,62 @@ interface FieldCategory {
 }
 
 const FIELD_CATEGORIES: FieldCategory[] = [
-  { label: '📋 Deal (Negócio)', prefix: '' },
+  { label: '📋 Oportunidade (Deal)', prefix: 'deal.' },
+  { label: '🏢 Empresa (Company)', prefix: 'company.' },
   { label: '👤 Contato (Pessoa)', prefix: 'person.' },
-  { label: '🏢 Empresa (Organização)', prefix: 'organization.' },
   { label: '📄 Proposta', prefix: 'proposal.' },
+  { label: '🔏 Assinatura', prefix: 'signature.' },
 ];
 
 const FALLBACK_FIELDS: PiperunField[] = [
   // ── Deal ──
-  { key: 'id', label: 'ID da oportunidade', example_value: '57368530' },
-  { key: 'hash', label: 'Hash', example_value: 'abc123' },
-  { key: 'title', label: 'Título', example_value: 'Escritório ABC' },
-  { key: 'value', label: 'Valor total', example_value: '5000' },
-  { key: 'monthly_value', label: 'Valor mensal', example_value: '500' },
-  { key: 'status', label: 'Status', example_value: 'won' },
-  { key: 'pipeline.name', label: 'Funil', example_value: 'Vendas' },
-  { key: 'pipeline.id', label: 'ID do Funil', example_value: '123' },
-  { key: 'stage.name', label: 'Etapa', example_value: 'Fechamento' },
-  { key: 'stage.id', label: 'ID da Etapa', example_value: '456' },
-  { key: 'moved_at', label: 'Movido em', example_value: '2026-03-04' },
-  { key: 'created_at', label: 'Criado em', example_value: '2026-01-15' },
-  { key: 'updated_at', label: 'Atualizado em', example_value: '2026-03-04' },
-  { key: 'won_at', label: 'Ganho em', example_value: '2026-02-20' },
-  { key: 'lost_at', label: 'Perdido em', example_value: '' },
-  { key: 'close_forecast', label: 'Previsão de fechamento', example_value: '2026-04-01' },
-  { key: 'tags', label: 'Tags', example_value: 'premium, contabil' },
-  { key: 'observation', label: 'Observações', example_value: 'Cliente indicado' },
-  { key: 'origin', label: 'Origem', example_value: 'Indicação' },
-  { key: 'owner.name', label: 'Responsável (nome)', example_value: 'Maria CSM' },
-  { key: 'owner.email', label: 'Responsável (email)', example_value: 'maria@empresa.com' },
-  { key: 'custom_fields', label: 'Campos customizados (JSON)', example_value: '{}' },
+  { key: 'deal.title', label: 'Título da oportunidade', example_value: 'Escritório ABC' },
+  { key: 'deal.value', label: 'Valor da oportunidade', example_value: '5000' },
+  { key: 'deal.monthly_value', label: 'Valor mensal', example_value: '500' },
+  { key: 'deal.status', label: 'Status', example_value: 'won' },
+  { key: 'deal.won_at', label: 'Data de ganho', example_value: '2026-02-20' },
+  { key: 'deal.closed_at', label: 'Data de fechamento', example_value: '2026-02-20' },
+  { key: 'deal.close_forecast', label: 'Previsão de fechamento', example_value: '2026-04-01' },
+  { key: 'deal.observation', label: 'Observação', example_value: 'Cliente indicado' },
+  { key: 'deal.origin', label: 'Origem', example_value: 'Indicação' },
+  { key: 'deal.tags', label: 'Tags', example_value: 'premium, contabil' },
+  { key: 'deal.created_at', label: 'Criado em', example_value: '2026-01-15' },
+  { key: 'deal.updated_at', label: 'Atualizado em', example_value: '2026-03-04' },
+  { key: 'deal.owner.name', label: 'Responsável (vendedor)', example_value: 'Maria CSM' },
+  { key: 'deal.owner.email', label: 'Email do responsável', example_value: 'maria@empresa.com' },
+  { key: 'deal.stage.name', label: 'Etapa do funil', example_value: 'Fechamento' },
+  { key: 'deal.pipeline.name', label: 'Nome do funil', example_value: 'Vendas' },
 
-  // ── Pessoa (Contato) ──
-  { key: 'person.id', label: 'ID do contato', example_value: '99001' },
+  // ── Empresa (Company) ──
+  { key: 'company.name', label: 'Nome da empresa', example_value: 'Empresa XYZ' },
+  { key: 'company.corporate_name', label: 'Razão social', example_value: 'XYZ Ltda' },
+  { key: 'company.cnpj', label: 'CNPJ', example_value: '12.345.678/0001-99' },
+  { key: 'company.phone', label: 'Telefone da empresa', example_value: '1133334444' },
+  { key: 'company.email', label: 'Email da empresa', example_value: 'contato@xyz.com' },
+  { key: 'company.website', label: 'Site', example_value: 'https://xyz.com' },
+  { key: 'company.address', label: 'Endereço', example_value: 'Rua Augusta 500' },
+  { key: 'company.city.name', label: 'Cidade', example_value: 'São Paulo' },
+  { key: 'company.state.abbr', label: 'Estado (UF)', example_value: 'SP' },
+  { key: 'company.zip_code', label: 'CEP', example_value: '01305-000' },
+  { key: 'company.segment.name', label: 'Segmento', example_value: 'Contabilidade' },
+  { key: 'company.number_of_employees', label: 'Qtd funcionários', example_value: '50' },
+  { key: 'company.annual_revenue', label: 'Faturamento anual', example_value: '1200000' },
+  { key: 'company.observation', label: 'Observações', example_value: '' },
+
+  // ── Contato (Person) ──
   { key: 'person.name', label: 'Nome do contato', example_value: 'João Silva' },
   { key: 'person.email', label: 'Email do contato', example_value: 'joao@email.com' },
-  { key: 'person.phone', label: 'Telefone do contato', example_value: '11999998888' },
-  { key: 'person.mobile', label: 'Celular do contato', example_value: '11988887777' },
-  { key: 'person.cpf', label: 'CPF do contato', example_value: '123.456.789-00' },
-  { key: 'person.birthday', label: 'Aniversário', example_value: '1990-05-15' },
-  { key: 'person.city', label: 'Cidade', example_value: 'São Paulo' },
-  { key: 'person.state', label: 'Estado', example_value: 'SP' },
-  { key: 'person.cep', label: 'CEP', example_value: '01310-100' },
-  { key: 'person.address', label: 'Endereço', example_value: 'Av. Paulista 1000' },
-  { key: 'person.neighborhood', label: 'Bairro', example_value: 'Bela Vista' },
-  { key: 'person.country', label: 'País', example_value: 'Brasil' },
-  { key: 'person.facebook', label: 'Facebook', example_value: '' },
-  { key: 'person.linkedin', label: 'LinkedIn', example_value: '' },
-  { key: 'person.instagram', label: 'Instagram', example_value: '@joaosilva' },
-  { key: 'person.twitter', label: 'Twitter/X', example_value: '' },
+  { key: 'person.phone', label: 'Telefone', example_value: '11999998888' },
+  { key: 'person.cell_phone', label: 'Celular', example_value: '11988887777' },
+  { key: 'person.cpf', label: 'CPF', example_value: '123.456.789-00' },
+  { key: 'person.birth_date', label: 'Data de nascimento', example_value: '1990-05-15' },
+  { key: 'person.position', label: 'Cargo', example_value: 'Sócio' },
+  { key: 'person.city.name', label: 'Cidade do contato', example_value: 'São Paulo' },
+  { key: 'person.state.abbr', label: 'Estado do contato', example_value: 'SP' },
   { key: 'person.whatsapp', label: 'WhatsApp', example_value: '5511999998888' },
-  { key: 'person.website', label: 'Website', example_value: '' },
-  { key: 'person.company_name', label: 'Nome da empresa (pessoa)', example_value: '' },
-  { key: 'person.role', label: 'Cargo', example_value: 'Sócio' },
-  { key: 'person.created_at', label: 'Pessoa criada em', example_value: '2025-12-01' },
-  { key: 'person.updated_at', label: 'Pessoa atualizada em', example_value: '2026-02-15' },
-  { key: 'person.observation', label: 'Observações da pessoa', example_value: '' },
-  { key: 'person.custom_fields', label: 'Campos custom (pessoa)', example_value: '{}' },
-
-  // ── Organização (Empresa) ──
-  { key: 'organization.id', label: 'ID da organização', example_value: '55001' },
-  { key: 'organization.name', label: 'Nome da organização', example_value: 'Empresa XYZ' },
-  { key: 'organization.corporate_name', label: 'Razão social', example_value: 'XYZ Ltda' },
-  { key: 'organization.cnpj', label: 'CNPJ', example_value: '12.345.678/0001-99' },
-  { key: 'organization.email', label: 'Email da organização', example_value: 'contato@xyz.com' },
-  { key: 'organization.phone', label: 'Telefone da organização', example_value: '1133334444' },
-  { key: 'organization.mobile', label: 'Celular da organização', example_value: '' },
-  { key: 'organization.website', label: 'Site', example_value: 'https://xyz.com' },
-  { key: 'organization.segment', label: 'Segmento', example_value: 'Contabilidade' },
-  { key: 'organization.size', label: 'Porte', example_value: 'Médio' },
-  { key: 'organization.address', label: 'Endereço', example_value: 'Rua Augusta 500' },
-  { key: 'organization.neighborhood', label: 'Bairro', example_value: 'Consolação' },
-  { key: 'organization.city', label: 'Cidade', example_value: 'São Paulo' },
-  { key: 'organization.state', label: 'Estado', example_value: 'SP' },
-  { key: 'organization.cep', label: 'CEP', example_value: '01305-000' },
-  { key: 'organization.country', label: 'País', example_value: 'Brasil' },
-  { key: 'organization.employee_count', label: 'Qtd funcionários', example_value: '50' },
-  { key: 'organization.annual_revenue', label: 'Faturamento anual', example_value: '1200000' },
-  { key: 'organization.facebook', label: 'Facebook', example_value: '' },
-  { key: 'organization.linkedin', label: 'LinkedIn', example_value: '' },
-  { key: 'organization.instagram', label: 'Instagram', example_value: '@empresaxyz' },
-  { key: 'organization.twitter', label: 'Twitter/X', example_value: '' },
-  { key: 'organization.observation', label: 'Observações da organização', example_value: '' },
-  { key: 'organization.created_at', label: 'Organização criada em', example_value: '2025-10-01' },
-  { key: 'organization.updated_at', label: 'Organização atualizada em', example_value: '2026-01-20' },
-  { key: 'organization.custom_fields', label: 'Campos custom (organização)', example_value: '{}' },
+  { key: 'person.instagram', label: 'Instagram', example_value: '@joaosilva' },
+  { key: 'person.linkedin', label: 'LinkedIn', example_value: '' },
+  { key: 'person.observation', label: 'Observações do contato', example_value: '' },
 
   // ── Proposta ──
   { key: 'proposal.number', label: 'Número da proposta', example_value: 'P-001' },
@@ -108,10 +80,14 @@ const FALLBACK_FIELDS: PiperunField[] = [
   { key: 'proposal.status', label: 'Status da proposta', example_value: 'accepted' },
   { key: 'proposal.sent_at', label: 'Data de envio', example_value: '2026-01-15' },
   { key: 'proposal.accepted_at', label: 'Data de aceite', example_value: '2026-02-01' },
-  { key: 'proposal.payment_conditions', label: 'Condições de pagamento', example_value: '30/60/90' },
-  { key: 'proposal.items', label: 'Itens/Produtos', example_value: '[]' },
-  { key: 'proposal.validity', label: 'Validade da proposta', example_value: '30 dias' },
-  { key: 'proposal.pdf_url', label: 'PDF do contrato/proposta (baixar e salvar no 360)', example_value: '' },
+  { key: 'proposal.payment_terms', label: 'Condições de pagamento', example_value: '30/60/90' },
+  { key: 'proposal.items', label: 'Itens/Produtos da proposta', example_value: '[]' },
+  { key: 'proposal.observation', label: 'Observação da proposta', example_value: '' },
+
+  // ── Assinatura ──
+  { key: 'signature.status', label: 'Status da assinatura', example_value: 'signed' },
+  { key: 'signature.signed_at', label: 'Data da assinatura', example_value: '2026-02-10' },
+  { key: 'signature.document_url', label: 'PDF do contrato assinado (baixar e salvar)', example_value: '' },
 ];
 
 interface Props {
@@ -162,10 +138,11 @@ export function PiperunFieldPicker({ open, onClose, onSelect, isConnected }: Pro
   );
 
   const getCategoryForField = (key: string): FieldCategory => {
+    if (key.startsWith('signature.')) return FIELD_CATEGORIES[4];
     if (key.startsWith('proposal.')) return FIELD_CATEGORIES[3];
-    if (key.startsWith('organization.')) return FIELD_CATEGORIES[2];
-    if (key.startsWith('person.')) return FIELD_CATEGORIES[1];
-    return FIELD_CATEGORIES[0];
+    if (key.startsWith('person.')) return FIELD_CATEGORIES[2];
+    if (key.startsWith('company.')) return FIELD_CATEGORIES[1];
+    return FIELD_CATEGORIES[0]; // deal.*
   };
 
   const groupedFields = FIELD_CATEGORIES.map(cat => ({
