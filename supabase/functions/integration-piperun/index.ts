@@ -297,8 +297,6 @@ Deno.serve(async (req) => {
     // ========== listFields ==========
     if (action === "listFields") {
       try {
-        const result = await piperunGet("/deals?show=1");
-        const sampleDeal = (result.data || [])[0] || {};
         const extractFields = (obj: any, prefix = ""): Array<{key: string; label: string; example_value: string}> => {
           const fields: Array<{key: string; label: string; example_value: string}> = [];
           for (const [key, value] of Object.entries(obj)) {
@@ -311,7 +309,47 @@ Deno.serve(async (req) => {
           }
           return fields;
         };
-        return new Response(JSON.stringify({ fields: extractFields(sampleDeal) }), {
+
+        const allFields: Array<{key: string; label: string; example_value: string}> = [];
+        const seenKeys = new Set<string>();
+
+        const addFields = (list: Array<{key: string; label: string; example_value: string}>) => {
+          for (const f of list) {
+            if (!seenKeys.has(f.key)) {
+              seenKeys.add(f.key);
+              allFields.push(f);
+            }
+          }
+        };
+
+        // 1. Fetch deal with expanded relations
+        try {
+          const dealResult = await piperunGet("/deals?show=1");
+          const sampleDeal = (dealResult.data || [])[0] || {};
+          addFields(extractFields(sampleDeal));
+        } catch (e) {
+          console.warn("[PIPERUN] Failed to fetch deals for listFields:", e);
+        }
+
+        // 2. Fetch person fields separately
+        try {
+          const personResult = await piperunGet("/persons?show=1");
+          const samplePerson = (personResult.data || [])[0] || {};
+          addFields(extractFields(samplePerson, "person"));
+        } catch (e) {
+          console.warn("[PIPERUN] Failed to fetch persons for listFields:", e);
+        }
+
+        // 3. Fetch organization fields separately
+        try {
+          const orgResult = await piperunGet("/organizations?show=1");
+          const sampleOrg = (orgResult.data || [])[0] || {};
+          addFields(extractFields(sampleOrg, "organization"));
+        } catch (e) {
+          console.warn("[PIPERUN] Failed to fetch organizations for listFields:", e);
+        }
+
+        return new Response(JSON.stringify({ fields: allFields }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       } catch (e) {
