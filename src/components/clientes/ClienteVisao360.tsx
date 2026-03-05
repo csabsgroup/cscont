@@ -46,8 +46,13 @@ export function ClienteVisao360({
   const renewalColor = daysToRenewal === null ? 'text-muted-foreground' : daysToRenewal < 30 ? 'text-red-600' : daysToRenewal < 60 ? 'text-yellow-600' : 'text-green-600';
   const healthColor = !health ? 'text-muted-foreground' : health.band === 'green' ? 'text-green-600' : health.band === 'yellow' ? 'text-yellow-600' : 'text-red-600';
 
+  const statusLabels: Record<string, string> = {
+    ativo: 'Ativo', churn: 'Churn', nao_renovado: 'Não Renovado',
+    nao_iniciado: 'Não Iniciado', upsell: 'Upsell', bonus_elite: 'Bônus Elite', pausado: 'Pausado',
+  };
+
   const infoFields = [
-    { label: 'Status', value: office.status === 'ativo' ? 'Ativo' : office.status === 'churn' ? 'Churn' : office.status === 'nao_renovado' ? 'Não Renovado' : office.status === 'nao_iniciado' ? 'Não Iniciado' : office.status },
+    { label: 'Status', value: statusLabels[office.status] || office.status },
     { label: 'CSM', value: csmProfile?.full_name || '—' },
     { label: 'Etapa Jornada', value: stageName || '—' },
     { label: 'Produto', value: office.products?.name || '—' },
@@ -57,12 +62,27 @@ export function ClienteVisao360({
     { label: 'CNPJ', value: office.cnpj || '—' },
   ];
 
+  const tempoDeVida = office.activation_date
+    ? (() => {
+        const end = office.churn_date ? new Date(office.churn_date) : new Date();
+        const months = differenceInMonths(end, new Date(office.activation_date));
+        return `${months} meses`;
+      })()
+    : '—';
+
+  const diasRenovacao = office.cycle_end_date
+    ? differenceInDays(new Date(office.cycle_end_date), new Date())
+    : daysToRenewal;
+
   const extraFields = [
     { label: 'Email', value: office.email || '—' },
     { label: 'Telefone', value: office.phone || '—' },
     { label: 'Instagram', value: office.instagram || '—' },
     { label: 'Onboarding', value: office.onboarding_date ? format(new Date(office.onboarding_date), 'dd/MM/yyyy', { locale: ptBR }) : '—' },
-    { label: 'Tempo como cliente', value: monthsAsClient !== null ? `${monthsAsClient} meses` : '—' },
+    { label: 'Início do Ciclo', value: office.cycle_start_date ? format(new Date(office.cycle_start_date), 'dd/MM/yyyy', { locale: ptBR }) : '—' },
+    { label: 'Fim do Ciclo', value: office.cycle_end_date ? format(new Date(office.cycle_end_date), 'dd/MM/yyyy', { locale: ptBR }) : '—' },
+    { label: 'Data Churn', value: office.churn_date ? format(new Date(office.churn_date), 'dd/MM/yyyy', { locale: ptBR }) : '—' },
+    { label: 'Tempo de Vida', value: tempoDeVida },
     { label: 'Ciclos', value: String(contracts.length) },
     { label: 'LTV', value: `R$ ${ltv.toLocaleString('pt-BR')}` },
     { label: 'MRR', value: activeContract?.monthly_value ? `R$ ${activeContract.monthly_value.toLocaleString('pt-BR')}` : '—' },
@@ -99,7 +119,7 @@ export function ClienteVisao360({
       detail: 'VER DETALHES', onClick: () => onNavigateTab('timeline'), icon: Shield,
     },
     {
-      label: 'DIAS P/ RENOVAÇÃO', value: daysToRenewal !== null ? String(daysToRenewal) : '—',
+      label: 'DIAS P/ RENOVAÇÃO', value: diasRenovacao !== null ? String(diasRenovacao) : '—',
       color: renewalColor, detail: 'VER DETALHES', onClick: () => onNavigateTab('contratos'), icon: Clock,
     },
   ];

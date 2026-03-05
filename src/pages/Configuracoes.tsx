@@ -12,6 +12,7 @@ import { TemplatesAutomacoesTab } from '@/components/configuracoes/TemplatesAuto
 import { PortalSettingsTab } from '@/components/configuracoes/PortalSettingsTab';
 import { Visao360ConfigTab } from '@/components/configuracoes/Visao360ConfigTab';
 import { AutomationRulesTab } from '@/components/configuracoes/AutomationRulesTab';
+import { ChurnReasonsTab } from '@/components/configuracoes/ChurnReasonsTab';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { GoogleCalendarConfig } from '@/components/configuracoes/integrations/GoogleCalendarConfig';
@@ -341,6 +342,7 @@ const SIDEBAR_SECTIONS: SidebarSection[] = [
   // Produtos
   { key: 'produtos', label: 'Produtos', icon: Package, category: 'Produtos' },
   { key: 'jornada', label: 'Jornadas', icon: Route, category: 'Produtos' },
+  { key: 'churn_reasons', label: 'Motivos de Churn', icon: ShieldX, category: 'Produtos', adminOnly: true },
   { key: 'health', label: 'Health Score', icon: Heart, category: 'Produtos', adminOnly: true },
   { key: 'automacoes', label: 'Templates', icon: Zap, category: 'Produtos' },
   // Formulários
@@ -429,6 +431,7 @@ export default function Configuracoes() {
     switch (selectedSection) {
       case 'produtos': return <ProductsTab />;
       case 'jornada': return <JourneyStagesTab />;
+      case 'churn_reasons': return <ChurnReasonsTab />;
       case 'health': return <HealthScoreTab />;
       case 'automacoes': return <TemplatesAutomacoesTab />;
       case 'formularios': return <FormTemplatesTab />;

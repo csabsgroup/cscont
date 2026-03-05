@@ -425,6 +425,30 @@ export type Database = {
           },
         ]
       }
+      churn_reasons: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          sort_order: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          sort_order?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          sort_order?: number | null
+        }
+        Relationships: []
+      }
       client_office_links: {
         Row: {
           created_at: string
@@ -1426,11 +1450,16 @@ export type Database = {
           asaas_customer_id: string | null
           asaas_total_overdue: number | null
           cep: string | null
+          churn_date: string | null
+          churn_observation: string | null
+          churn_reason_id: string | null
           city: string | null
           cnpj: string | null
           cpf: string | null
           created_at: string
           csm_id: string | null
+          cycle_end_date: string | null
+          cycle_start_date: string | null
           email: string | null
           faturamento_anual: number | null
           faturamento_mensal: number | null
@@ -1461,11 +1490,16 @@ export type Database = {
           asaas_customer_id?: string | null
           asaas_total_overdue?: number | null
           cep?: string | null
+          churn_date?: string | null
+          churn_observation?: string | null
+          churn_reason_id?: string | null
           city?: string | null
           cnpj?: string | null
           cpf?: string | null
           created_at?: string
           csm_id?: string | null
+          cycle_end_date?: string | null
+          cycle_start_date?: string | null
           email?: string | null
           faturamento_anual?: number | null
           faturamento_mensal?: number | null
@@ -1496,11 +1530,16 @@ export type Database = {
           asaas_customer_id?: string | null
           asaas_total_overdue?: number | null
           cep?: string | null
+          churn_date?: string | null
+          churn_observation?: string | null
+          churn_reason_id?: string | null
           city?: string | null
           cnpj?: string | null
           cpf?: string | null
           created_at?: string
           csm_id?: string | null
+          cycle_end_date?: string | null
+          cycle_start_date?: string | null
           email?: string | null
           faturamento_anual?: number | null
           faturamento_mensal?: number | null
@@ -1878,6 +1917,7 @@ export type Database = {
         | "nao_iniciado"
         | "upsell"
         | "bonus_elite"
+        | "pausado"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2042,6 +2082,7 @@ export const Constants = {
         "nao_iniciado",
         "upsell",
         "bonus_elite",
+        "pausado",
       ],
     },
   },
