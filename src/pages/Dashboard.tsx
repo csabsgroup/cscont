@@ -84,7 +84,7 @@ export default function Dashboard() {
   const today = new Date();
   const ativos = filteredOffices.filter(o => o.status === 'ativo' || o.status === 'bonus_elite');
   const activeContracts = filteredContracts.filter(c => c.status === 'ativo');
-  const mrr = activeContracts.reduce((s, c) => s + (c.monthly_value || 0), 0);
+  const mrr = ativos.reduce((s, o) => s + (Number(o.mrr) || 0), 0);
 
   const newClientsThisMonth = filteredOffices.filter(o => new Date(o.created_at) >= startOfMonth(today));
   const newClientsPrev = filteredOffices.filter(o => {
@@ -95,15 +95,12 @@ export default function Dashboard() {
 
   const redHealth = filteredHealthScores.filter(h => h.band === 'red');
   const mrrAtRisk = redHealth.reduce((s, h) => {
-    const c = activeContracts.find(c => c.office_id === h.office_id);
-    return s + (c?.monthly_value || 0);
+    const o = filteredOffices.find(o => o.id === h.office_id);
+    return s + (Number(o?.mrr) || 0);
   }, 0);
 
   const upsellOffices = filteredOffices.filter(o => o.status === 'upsell');
-  const mrrExpansion = upsellOffices.reduce((s, o) => {
-    const c = activeContracts.find(c => c.office_id === o.id);
-    return s + (c?.monthly_value || 0);
-  }, 0);
+  const mrrExpansion = upsellOffices.reduce((s, o) => s + (Number(o.mrr) || 0), 0);
 
   const greenCount = filteredHealthScores.filter(h => h.band === 'green').length;
   const yellowCount = filteredHealthScores.filter(h => h.band === 'yellow').length;

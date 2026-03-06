@@ -321,6 +321,8 @@ export default function Cliente360() {
           onNavigateTab={setActiveTab}
           onStatusSelect={(s) => { setSelectedStatusTarget(s); setShowStatusChange(true); }}
           canEditStatus={!isViewer && !isClient}
+          onRefresh={fetchAll}
+          readOnly={isViewer || isClient}
         />
       )}
 
