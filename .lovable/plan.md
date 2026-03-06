@@ -1,63 +1,74 @@
 
 
-# Diagnosis and Fix Plan
+# Plan: Improve Import Column Matching + Add Data Normalization
 
-## Root Causes Found
+## Problem 1: Columns Not Being Identified
 
-### Problem 1 — Webhook mapping not filling fields
-The webhook_logs table confirms the error: `"supabase.from(...).insert(...).catch is not a function"`. The last two webhooks (March 5 and March 6) both crashed with this error BEFORE reaching office creation. The `.catch()` fix was applied in code but the webhooks arrived before deployment completed. The mapping paths are correct, the company data exists at root level with all expected fields. This problem is already fixed in code — just needs a new webhook to test.
+The `autoMapColumns` function only matches on exact `key`, `label`, and `dbColumn` values, plus basic fuzzy matching. It fails when the user's CSV has:
+- Common Portuguese names: "Nome", "Telefone", "Cidade", "Estado", "Endereço"
+- Accented characters: "Código", "Razão Social", "Observações"
+- Common synonyms: "razao_social" for name, "telefone" for phone, "nome_empresa" for name
+- Mixed case: "CNPJ", "CEP", "Nome Do Cliente"
 
-### Problem 2 — Only 3 of 17 create_activity actions succeeded
-**This is the critical finding.** The `activity_type` database enum has these valid values:
-`task, follow_up, onboarding, renewal, other, ligacao, check_in, email, whatsapp, planejamento`
+**Fix:** Add an `aliases` array to each `ImportField` with all common variations. Enhance `autoMapColumns` to strip accents, normalize separators, and match against aliases.
 
-It does NOT include `"meeting"`. The automation rule "[ELT] Delegação automática" has 14 actions with `activity_type: "meeting"` — every one of those fails silently because the INSERT violates the enum constraint. The `handleAction` function doesn't capture the error from `supabase.from("activities").insert(...)`.
+## Problem 2: No Data Normalization
 
-Evidence: automation_logs shows 19 `actions_executed` entries, but only 3 `create_activity` have an `id` (the ones with type "task" or "email"). The other 14 have no `id` — they failed silently.
+Raw data enters the system as-is. Need sanitization masks for:
+- **CPF**: Strip non-digits, format as `XXX.XXX.XXX-XX`
+- **CNPJ**: Strip non-digits, format as `XX.XXX.XXX/XXXX-XX`
+- **Phone/WhatsApp**: Strip non-digits, ensure country code, format consistently
+- **CEP**: Strip non-digits, format as `XXXXX-XXX`
+- **Monetary values**: Handle `R$ 1.500,00` or `1500.00` → numeric
+- **Text names**: Trim whitespace, title case
+- **State**: Uppercase, validate 2-letter code
+- **Email**: Trim, lowercase
+- **Dates**: Handle multiple formats (DD/MM/YYYY, YYYY-MM-DD, DD-MM-YYYY, DD.MM.YYYY)
 
-### Problem 3 — Webhook doesn't trigger automations
-Same root cause as Problem 1 — the webhook crashed before reaching the automation invocation lines (419-430). Once the webhook stops crashing, automations will be invoked via `supabase.functions.invoke()`.
+---
 
-## Fixes
+## Implementation
 
-### Fix A — Add "meeting" to activity_type enum (database migration)
-```sql
-ALTER TYPE activity_type ADD VALUE IF NOT EXISTS 'meeting';
-```
-This is the correct fix because:
-- The automation builder UI offers "meeting" as an option
-- Users have configured rules with this type
-- 14 activities are waiting to be created with this type
+### File 1: `src/lib/import-templates.ts`
 
-### Fix B — Add error handling in handleAction (execute-automations)
-In the `create_activity` case (line 46-47), capture and log the error:
-```javascript
-const { data: act, error: actErr } = await supabase.from("activities").insert(payload).select("id").single();
-if (actErr) {
-  console.error('[AUTOMATIONS] Activity insert error:', actErr.message, 'payload:', JSON.stringify(payload));
-  return { type: "create_activity", error: actErr.message };
+**Add `aliases` to ImportField interface:**
+```typescript
+export interface ImportField {
+  // ... existing fields
+  aliases?: string[]; // additional column name variations for auto-mapping
 }
 ```
-Apply similar error capture to ALL action types that do database inserts (send_notification, add_note, create_action_plan, etc.).
 
-### Fix C — Ensure webhook deployment is current
-The piperun-webhook code already has the `.catch()` fix from the previous iteration. Verify the edge function redeploys by checking logs after saving. No code change needed — just confirmation.
+**Add aliases to every field** in `offices`, `contacts`, `contracts`, `meetings`, `nps_csat` templates. Examples:
+- `name`: aliases `['nome', 'nome_empresa', 'razao_social', 'razão social', 'empresa', 'cliente', 'nome_cliente', 'nome do cliente']`
+- `phone`: aliases `['telefone', 'fone', 'tel', 'phone']`
+- `city`: aliases `['cidade', 'municipio', 'município']`
+- `cnpj`: aliases `['cnpj', 'cnpj_cpf']`
+- `cpf`: aliases `['cpf', 'documento']`
+- etc.
 
-### Fix D — Add company fallback in webhook (safety)
-In `piperun-webhook/index.ts` line 341, add fallback to `person.company`:
-```javascript
-let companyData = deal.company || deal.person?.company;
+**Enhance `autoMapColumns`:** Add accent stripping (`normalizeAccents`), match against `field.aliases`, and use broader fuzzy logic.
+
+**Add `sanitizeValue` function** that normalizes data by field type before insert:
+```typescript
+export function sanitizeValue(val: any, field: ImportField): any
 ```
-This handles edge cases where the Piperun payload structure varies.
+Handles: CPF/CNPJ digit extraction, phone cleanup, CEP formatting, monetary parsing (`R$ 1.500,00` → `1500`), email lowercase, text trimming, state uppercase, enhanced date parsing.
 
-## Files Modified
-- `supabase/functions/execute-automations/index.ts` — error handling in handleAction
-- `supabase/functions/piperun-webhook/index.ts` — company fallback
-- Database migration: add `meeting` to `activity_type` enum
+### File 2: `src/components/import-export/ImportWizard.tsx`
 
-## Expected Result After Fix
-- All 17 `create_activity` actions succeed (activities created with correct types)
-- Webhook creates office with all mapped fields populated
-- Webhook triggers automations that execute all 19 actions
-- automation_logs show complete execution with all action IDs
+**In `getMappedRows`:** Apply `sanitizeValue` to each field value after mapping.
+
+**In preview:** Show sanitized values so user sees the normalized data before confirming.
+
+---
+
+## Changes Summary
+
+| File | Change |
+|------|--------|
+| `src/lib/import-templates.ts` | Add `aliases` to all fields, enhance `autoMapColumns` with accent normalization + alias matching, add `sanitizeValue` function |
+| `src/components/import-export/ImportWizard.tsx` | Call `sanitizeValue` in `getMappedRows` so preview + insert use normalized data |
+
+2 files edited. No database changes needed.
 
