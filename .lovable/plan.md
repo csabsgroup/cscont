@@ -1,63 +1,48 @@
 
 
-# Diagnosis and Fix Plan
+# Diagnosis: Slack and Email Automations Not Firing
 
 ## Root Causes Found
 
-### Problem 1 — Webhook mapping not filling fields
-The webhook_logs table confirms the error: `"supabase.from(...).insert(...).catch is not a function"`. The last two webhooks (March 5 and March 6) both crashed with this error BEFORE reaching office creation. The `.catch()` fix was applied in code but the webhooks arrived before deployment completed. The mapping paths are correct, the company data exists at root level with all expected fields. This problem is already fixed in code — just needs a new webhook to test.
+There are **3 mismatches** in the `execute-automations` edge function when calling the Slack and Email integration functions:
 
-### Problem 2 — Only 3 of 17 create_activity actions succeeded
-**This is the critical finding.** The `activity_type` database enum has these valid values:
-`task, follow_up, onboarding, renewal, other, ligacao, check_in, email, whatsapp, planejamento`
+### Bug 1 — Slack: Wrong action name + missing required params
+In `execute-automations/index.ts` line 119-124, the Slack call uses:
+- `action: 'sendMessage'` -- but `integration-slack` only handles `sendNotification`
+- Missing `channel` param (required by `sendNotification`)
+- Missing `data` param with the message content
 
-It does NOT include `"meeting"`. The automation rule "[ELT] Delegação automática" has 14 actions with `activity_type: "meeting"` — every one of those fails silently because the INSERT violates the enum constraint. The `handleAction` function doesn't capture the error from `supabase.from("activities").insert(...)`.
+The Slack function expects: `{ action: 'sendNotification', channel: 'C0AJJK8FSN6', data: { type: 'generic', message: '...' } }`
 
-Evidence: automation_logs shows 19 `actions_executed` entries, but only 3 `create_activity` have an `id` (the ones with type "task" or "email"). The other 14 have no `id` — they failed silently.
+### Bug 2 — Email: Wrong action name
+In `execute-automations/index.ts` line 99-106, the Email call uses:
+- `action: 'send'` -- but `integration-email` only handles `sendEmail`
 
-### Problem 3 — Webhook doesn't trigger automations
-Same root cause as Problem 1 — the webhook crashed before reaching the automation invocation lines (419-430). Once the webhook stops crashing, automations will be invoked via `supabase.functions.invoke()`.
+### Bug 3 — Auth context lost in function-to-function calls
+Both `integration-slack` and `integration-email` validate JWT and check user roles. When `execute-automations` calls them via `supabase.functions.invoke()` using the service-role client, the inner functions can't validate the JWT properly (service role key != user JWT). This causes 401/403 errors silently.
 
-## Fixes
+## Fix Plan
 
-### Fix A — Add "meeting" to activity_type enum (database migration)
-```sql
-ALTER TYPE activity_type ADD VALUE IF NOT EXISTS 'meeting';
-```
-This is the correct fix because:
-- The automation builder UI offers "meeting" as an option
-- Users have configured rules with this type
-- 14 activities are waiting to be created with this type
+### File: `supabase/functions/execute-automations/index.ts`
 
-### Fix B — Add error handling in handleAction (execute-automations)
-In the `create_activity` case (line 46-47), capture and log the error:
-```javascript
-const { data: act, error: actErr } = await supabase.from("activities").insert(payload).select("id").single();
-if (actErr) {
-  console.error('[AUTOMATIONS] Activity insert error:', actErr.message, 'payload:', JSON.stringify(payload));
-  return { type: "create_activity", error: actErr.message };
-}
-```
-Apply similar error capture to ALL action types that do database inserts (send_notification, add_note, create_action_plan, etc.).
+**Slack fix (lines 116-131):** Instead of calling the edge function (which has auth issues), call Slack API directly from the automation handler:
+1. Fetch `integration_settings` for `provider='slack'` to get channel_id
+2. Call `integration-slack` with correct params: `action: 'sendNotification'`, `channel: config.channel_id`, `data: { type: 'generic', message: resolvedMessage }`
+3. OR better: bypass the edge function entirely and call the Slack gateway directly (avoids auth issues)
 
-### Fix C — Ensure webhook deployment is current
-The piperun-webhook code already has the `.catch()` fix from the previous iteration. Verify the edge function redeploys by checking logs after saving. No code change needed — just confirmation.
+Best approach: **Modify `send_slack` handler** to:
+- Read Slack config from `integration_settings` table
+- Use the Slack gateway directly (same as `integration-slack` does) with `LOVABLE_API_KEY` and `SLACK_API_KEY` env vars
+- Post message to the configured channel
 
-### Fix D — Add company fallback in webhook (safety)
-In `piperun-webhook/index.ts` line 341, add fallback to `person.company`:
-```javascript
-let companyData = deal.company || deal.person?.company;
-```
-This handles edge cases where the Piperun payload structure varies.
+**Email fix (lines 96-114):** 
+- Change `action: 'send'` to `action: 'sendEmail'`
+- Since email is a stub anyway, alternatively just inline the stub logic
 
-## Files Modified
-- `supabase/functions/execute-automations/index.ts` — error handling in handleAction
-- `supabase/functions/piperun-webhook/index.ts` — company fallback
-- Database migration: add `meeting` to `activity_type` enum
+### Simpler alternative for both:
+Since calling edge functions from edge functions has auth issues, **inline the Slack API call and Email stub** directly in `execute-automations`:
+- For Slack: read channel from `integration_settings`, call Slack gateway directly
+- For Email: just log it (it's a stub already)
 
-## Expected Result After Fix
-- All 17 `create_activity` actions succeed (activities created with correct types)
-- Webhook creates office with all mapped fields populated
-- Webhook triggers automations that execute all 19 actions
-- automation_logs show complete execution with all action IDs
+This avoids the auth chain problem entirely and is more reliable.
 
