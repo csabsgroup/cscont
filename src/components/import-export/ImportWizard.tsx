@@ -245,10 +245,10 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
                       </span>
                     </div>
                     <span className="text-muted-foreground">→</span>
-                    <Select value={mapping[field.key] || ''} onValueChange={(v) => setMapping(prev => ({ ...prev, [field.key]: v }))}>
+                    <Select value={mapping[field.key] || '__none__'} onValueChange={(v) => setMapping(prev => ({ ...prev, [field.key]: v === '__none__' ? '' : v }))}>
                       <SelectTrigger className="flex-1"><SelectValue placeholder="Selecionar coluna..." /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">— Não mapear —</SelectItem>
+                        <SelectItem value="__none__">— Não mapear —</SelectItem>
                         {fileHeaders.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
                       </SelectContent>
                     </Select>
