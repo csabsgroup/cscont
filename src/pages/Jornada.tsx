@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Loader2, Building2, List, LayoutGrid, Table2 } from 'lucide-react';
+import { Loader2, Building2, List, LayoutGrid, Table2, Phone } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { StatusBadge } from '@/components/clientes/StatusBadge';
@@ -24,7 +24,7 @@ interface Product { id: string; name: string; }
 interface Stage { id: string; name: string; position: number; description: string | null; sla_days: number | null; }
 interface OfficeInStage {
   id: string; office_id: string; journey_stage_id: string; entered_at: string;
-  offices: { id: string; name: string; status: string; city: string | null; state: string | null; csm_id: string | null; activation_date?: string | null };
+  offices: { id: string; name: string; status: string; city: string | null; state: string | null; csm_id: string | null; activation_date?: string | null; whatsapp: string | null; active_product_id: string | null };
 }
 interface CsmProfile { id: string; full_name: string | null; }
 
@@ -80,7 +80,7 @@ export default function Jornada() {
     const [stagesRes, journeysRes, healthRes, contractsRes] = await Promise.all([
       supabase.from('journey_stages').select('*').eq('product_id', selectedProduct).order('position'),
       stageIds.length > 0
-        ? supabase.from('office_journey').select('*, offices!office_journey_office_id_fkey(id, name, status, city, state, csm_id, activation_date)').in('journey_stage_id', stageIds)
+        ? supabase.from('office_journey').select('*, offices!office_journey_office_id_fkey(id, name, status, city, state, csm_id, activation_date, whatsapp, active_product_id)').in('journey_stage_id', stageIds)
         : Promise.resolve({ data: [] }),
       supabase.from('health_scores').select('office_id, score, band'),
       supabase.from('contracts').select('office_id, renewal_date, installments_overdue, monthly_value').eq('status', 'ativo'),
@@ -352,12 +352,9 @@ export default function Jornada() {
                             <p className="text-xs text-muted-foreground/60 text-center py-8">Nenhum cliente</p>
                           ) : offices.map((oj, index) => {
                             const health = healthScores[oj.office_id];
-                            const act = activitiesMap[oj.office_id] || { total: 0, completed: 0 };
-                            const csm = oj.offices.csm_id ? csmProfiles[oj.offices.csm_id] : null;
                             const contract = contracts[oj.office_id];
-                            const taskPct = act.total > 0 ? Math.round((act.completed / act.total) * 100) : 0;
-                            const renewalDays = contract?.renewal_date ? differenceInDays(new Date(contract.renewal_date), new Date()) : null;
-                            const overdueInstallments = contract?.installments_overdue || 0;
+                            const productName = oj.offices.active_product_id ? products.find(p => p.id === oj.offices.active_product_id)?.name : null;
+                            const monthlyValue = contract?.monthly_value;
 
                             return (
                               <Draggable key={oj.id} draggableId={oj.id} index={index} isDragDisabled={isViewer}>
@@ -367,50 +364,47 @@ export default function Jornada() {
                                     {...provided.draggableProps}
                                     {...provided.dragHandleProps}
                                     className={cn(
-                                      'rounded-lg bg-white border border-border/50 cursor-pointer hover:shadow-sm transition-shadow',
+                                      'rounded-lg bg-card border border-border/50 cursor-pointer hover:shadow-sm transition-shadow',
                                       healthColor(health?.band ?? null),
                                       snapshot.isDragging && 'shadow-lg ring-2 ring-primary/30'
                                     )}
                                     onClick={() => navigate(`/clientes/${oj.offices.id}`)}
                                   >
                                     <div className="p-2.5 space-y-1.5">
-                                      {/* Line 1: Health + Name */}
+                                      {/* Line 1: Name + Health dot */}
                                       <div className="flex items-center gap-1.5">
+                                        <span className="text-xs font-medium truncate flex-1">{oj.offices.name}</span>
                                         {health && (
-                                          <span className={cn('text-xs font-bold', healthTextColor(health.band))}>
+                                          <span className={cn('text-[10px] font-bold', healthTextColor(health.band))}>
                                             {Math.round(health.score)}
                                           </span>
                                         )}
-                                        <span className="text-xs font-medium truncate flex-1">{oj.offices.name}</span>
                                       </div>
-                                      {/* Line 2: CSM avatar + Tasks + Progress */}
-                                      <div className="flex items-center gap-1.5">
-                                        {csm && (
-                                          <div
-                                            className="h-5 w-5 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[9px] font-medium flex-shrink-0"
-                                            title={csm.full_name || ''}
-                                          >
-                                            {getInitials(csm.full_name)}
+                                      {/* Line 2: Status + Product */}
+                                      <div className="flex items-center gap-1 flex-wrap">
+                                        <StatusBadge status={oj.offices.status} />
+                                        {productName && (
+                                          <Badge variant="secondary" className="text-[9px] h-4 px-1 truncate max-w-[100px]">
+                                            {productName}
+                                          </Badge>
+                                        )}
+                                      </div>
+                                      {/* Line 3: Value + WhatsApp */}
+                                      <div className="flex items-center justify-between gap-1">
+                                        {monthlyValue ? (
+                                          <span className="text-[10px] font-semibold text-foreground">
+                                            R$ {Number(monthlyValue).toLocaleString('pt-BR', { minimumFractionDigits: 0 })}
+                                          </span>
+                                        ) : (
+                                          <span className="text-[10px] text-muted-foreground">—</span>
+                                        )}
+                                        {oj.offices.whatsapp && (
+                                          <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                                            <Phone className="h-2.5 w-2.5" />
+                                            <span className="truncate max-w-[80px]">{oj.offices.whatsapp}</span>
                                           </div>
                                         )}
-                                        <span className="text-[10px] text-muted-foreground whitespace-nowrap">{act.completed}/{act.total}</span>
-                                        <Progress value={taskPct} className="h-1 flex-1" />
                                       </div>
-                                      {/* Line 3: Optional badges */}
-                                      {(renewalDays !== null && renewalDays <= 30 || overdueInstallments > 0) && (
-                                        <div className="flex gap-1 flex-wrap">
-                                          {renewalDays !== null && renewalDays <= 30 && (
-                                            <Badge variant="outline" className="text-[9px] h-4 px-1 border-amber-300 text-amber-700">
-                                              {renewalDays}d renov
-                                            </Badge>
-                                          )}
-                                          {overdueInstallments > 0 && (
-                                            <Badge variant="outline" className="text-[9px] h-4 px-1 border-destructive/50 text-destructive">
-                                              {overdueInstallments} vencida{overdueInstallments > 1 ? 's' : ''}
-                                            </Badge>
-                                          )}
-                                        </div>
-                                      )}
                                     </div>
                                   </div>
                                 )}

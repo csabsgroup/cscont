@@ -104,6 +104,16 @@ async function handleAction(supabase: any, action: any, office_id: string, offic
             const { data: mainContact } = await supabase.from('contacts')
               .select('email').eq('office_id', office_id).eq('is_main_contact', true).limit(1).maybeSingle();
             toEmail = mainContact?.email || null;
+          } else if (c.recipient === 'csm' || !c.recipient) {
+            // Default: resolve CSM email from profiles
+            if (office?.csm_id) {
+              const { data: csmProfile } = await supabase.from('profiles')
+                .select('id').eq('id', office.csm_id).maybeSingle();
+              // profiles doesn't have email, get from auth via user metadata
+              const { data: { users } } = await supabase.auth.admin.listUsers();
+              const csmUser = users?.find((u: any) => u.id === office.csm_id);
+              toEmail = csmUser?.email || null;
+            }
           }
           const subject = resolveText(c.subject || '');
           const body = resolveText(c.body || '');
