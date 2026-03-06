@@ -527,11 +527,23 @@ async function executeV2Rules(supabase: any, triggerType: string, office_id: str
   const startTime = Date.now();
   console.log(`[AUTOMATIONS] Trigger received: ${triggerType} for office: ${office_id}${dryRun ? ' (DRY RUN)' : ''}`);
 
-  const { data: v2Rules } = await supabase
-    .from("automation_rules_v2")
-    .select("*")
-    .eq("trigger_type", triggerType)
-    .eq("is_active", true);
+  // If force_rule_id is provided (from runNowAll), only load that specific rule
+  let v2Rules: any[];
+  if (extraContext?.force_rule_id) {
+    const { data } = await supabase
+      .from("automation_rules_v2")
+      .select("*")
+      .eq("id", extraContext.force_rule_id)
+      .eq("is_active", true);
+    v2Rules = data || [];
+  } else {
+    const { data } = await supabase
+      .from("automation_rules_v2")
+      .select("*")
+      .eq("trigger_type", triggerType)
+      .eq("is_active", true);
+    v2Rules = data || [];
+  }
 
   if (!v2Rules || v2Rules.length === 0) {
     console.log(`[AUTOMATIONS] No active rules for trigger: ${triggerType}`);
