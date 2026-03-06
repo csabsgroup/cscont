@@ -145,14 +145,14 @@ export function ClienteVisao360({
       <div className="mt-0.5">
         {f.isStatus && onStatusSelect ? (
           <StatusDropdown status={office.status} onStatusSelect={onStatusSelect} readonly={!canEditStatus} />
-        ) : f.editable && f.column ? (
+        ) : f.editable && (f.column || f.customSave) ? (
           <InlineEditField
             value={f.value}
             fieldType={f.fieldType || 'text'}
             label={f.label}
-            readOnly={!!readOnly}
+            readOnly={!!readOnly && !f.customSave}
             options={f.options}
-            onSave={(v) => saveField(f.column!, v)}
+            onSave={f.customSave || ((v) => saveField(f.column!, v))}
           />
         ) : (
           <div className="text-sm font-semibold text-foreground truncate">{f.value != null ? String(f.value) : '—'}</div>
