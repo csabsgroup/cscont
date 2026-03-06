@@ -117,8 +117,38 @@ async function handleAction(supabase: any, action: any, office_id: string, offic
           }
           const subject = resolveText(c.subject || '');
           const body = resolveText(c.body || '');
-          // Email is a stub — log and return success
-          console.log(`[AUTOMATIONS] Email stub: to=${toEmail}, subject=${subject}, office=${office_id}`);
+
+          if (!toEmail) {
+            console.warn('[AUTOMATIONS] Email skipped: no recipient resolved');
+            return { type: "send_email", error: "No recipient email resolved" };
+          }
+
+          const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+          if (!RESEND_API_KEY) {
+            console.error('[AUTOMATIONS] RESEND_API_KEY not configured');
+            return { type: "send_email", error: "Email provider not configured" };
+          }
+
+          const emailRes = await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${RESEND_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              from: "Contador CEO <onboarding@resend.dev>",
+              to: [toEmail],
+              subject,
+              html: body.replace(/\n/g, '<br/>'),
+            }),
+          });
+
+          const emailData = await emailRes.json();
+          if (!emailRes.ok) {
+            console.error('[AUTOMATIONS] Resend API error:', JSON.stringify(emailData));
+            return { type: "send_email", error: `Email API error: ${emailRes.status}` };
+          }
+          console.log(`[AUTOMATIONS] Email sent to ${toEmail}, id=${emailData.id}`);
         } catch (e) {
           console.error('[AUTOMATIONS] Email failed:', e);
           return { type: "send_email", error: String(e) };
