@@ -216,7 +216,7 @@ export function ClienteTimeline({ officeId, readOnly = false }: Props) {
         const d = item.data;
         const title = d.title;
         return (
-          <Card key={`${item.type}-${d.id}`} className="p-4 flex items-start gap-3 cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => setDetailItem(item)}>
+          <Card key={`${item.type}-${d.id}`} className="p-4 flex items-start gap-3 cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => item.type === 'activity' ? setEditActivityId(d.id) : setDetailItem(item)}>
             {item.done ? <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" /> : <Circle className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
