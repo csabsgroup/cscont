@@ -19,14 +19,14 @@ async function fetchProfile(userId: string): Promise<CachedProfile> {
       .select('full_name, avatar_url')
       .eq('id', userId)
       .single();
-      const result: CachedProfile = {
-        name: data?.full_name || 'Usuário',
-        avatarUrl: data?.avatar_url || null,
-      };
-      profileCache.set(userId, result);
-      pendingFetches.delete(userId);
-      return result;
-    });
+    const result: CachedProfile = {
+      name: data?.full_name || 'Usuário',
+      avatarUrl: data?.avatar_url || null,
+    };
+    profileCache.set(userId, result);
+    pendingFetches.delete(userId);
+    return result;
+  })();
 
   pendingFetches.set(userId, promise);
   return promise;
