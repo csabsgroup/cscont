@@ -221,9 +221,9 @@ async function processAndCreateOffice(
     }
   }
 
-  // Download PDF if signature.document_url is mapped
-  const pdfMapping = mappings.find(m => m.piperun === 'signature.document_url');
-  const pdfUrl = sourceData.signature?.document_url;
+  // Download PDF if action.document_url is mapped
+  const pdfMapping = mappings.find(m => m.piperun === 'action.document_url');
+  const pdfUrl = sourceData.action?.document_url;
   if (pdfMapping && pdfUrl) {
     try {
       const pdfResponse = await fetch(pdfUrl, { signal: AbortSignal.timeout(30000) });
@@ -294,16 +294,6 @@ async function fetchFullSourceData(dealId: number | string, token: string): Prom
   }
   const proposalData = proposalsArray[0] || null;
 
-  // Signature
-  let signatureData = null;
-  if (proposalData) {
-    try {
-      const sigRes = await piperunGet(`/signatures?proposal_id=${proposalData.id}`, token);
-      const sigs = sigRes.data || [];
-      signatureData = sigs.find((s: any) => s.status === 'signed' || s.status === 'assinado') || sigs[0] || null;
-    } catch (e) { /* no signature, ok */ }
-  }
-
   // Build unified sourceData — flat structure matching real Piperun JSON
   return {
     // Deal root fields spread at top level
@@ -313,7 +303,7 @@ async function fetchFullSourceData(dealId: number | string, token: string): Prom
     person: personData || {},
     proposals: proposalsArray,
     fields: dealData.fields || [],
-    signature: signatureData || {},
+    action: dealData.action || {},
     // Backward compat
     deal: {
       ...dealData,
@@ -598,16 +588,15 @@ Deno.serve(async (req) => {
         { key: 'proposals[0].user.name', label: 'Vendedor da proposta', category: 'Proposta' },
       ];
 
-      const signatureFields = [
-        { key: 'signature.status', label: 'Status da assinatura', category: 'Assinatura' },
-        { key: 'signature.signed_at', label: 'Data da assinatura', category: 'Assinatura' },
-        { key: 'signature.document_url', label: 'PDF do contrato assinado', category: 'Assinatura' },
-        { key: 'action.trigger_type', label: 'Tipo do trigger', category: 'Assinatura' },
-        { key: 'action.create', label: 'Data da ação/assinatura', category: 'Assinatura' },
+      const actionFields = [
+        { key: 'action.create', label: 'Data da assinatura/ação', category: 'Ação' },
+        { key: 'action.trigger_type', label: 'Tipo do trigger', category: 'Ação' },
+        { key: 'action.stage', label: 'Etapa no momento da ação', category: 'Ação' },
+        { key: 'action.pipeline', label: 'Funil no momento da ação', category: 'Ação' },
       ];
 
       // Merge static fields
-      const staticFields = [...dealFields, ...companyFields, ...personFields, ...proposalFields, ...signatureFields];
+      const staticFields = [...dealFields, ...companyFields, ...personFields, ...proposalFields, ...actionFields];
       for (const f of staticFields) {
         fields.push({ ...f, example_value: '' });
       }

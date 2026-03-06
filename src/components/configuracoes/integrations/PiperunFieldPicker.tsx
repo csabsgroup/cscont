@@ -21,7 +21,7 @@ const FIELD_CATEGORIES: FieldCategory[] = [
   { label: '🏢 Empresa (Company)', prefix: 'company.' },
   { label: '👤 Contato (Pessoa)', prefix: 'person.' },
   { label: '📄 Proposta', prefix: 'proposals[' },
-  { label: '🔏 Assinatura / Ação', prefix: 'signature.' },
+  { label: '🔏 Ação / Trigger', prefix: 'action.' },
   { label: '🔧 Campos Customizados', prefix: 'fields.find.' },
 ];
 
@@ -84,12 +84,11 @@ const FALLBACK_FIELDS: PiperunField[] = [
   { key: 'proposals[0].created_at', label: 'Data de criação da proposta', example_value: '2026-03-05' },
   { key: 'proposals[0].user.name', label: 'Vendedor da proposta', example_value: 'Matheus Leme' },
 
-  // ── Assinatura / Ação ──
-  { key: 'signature.status', label: 'Status da assinatura', example_value: 'signed' },
-  { key: 'signature.signed_at', label: 'Data da assinatura', example_value: '2026-02-10' },
-  { key: 'signature.document_url', label: 'PDF do contrato assinado', example_value: '' },
+  // ── Ação / Trigger ──
+  { key: 'action.create', label: 'Data da assinatura/ação', example_value: '2026-03-05 20:30:53' },
   { key: 'action.trigger_type', label: 'Tipo do trigger', example_value: 'A assinatura eletrônica...' },
-  { key: 'action.create', label: 'Data da ação/assinatura', example_value: '2026-03-05 20:30:53' },
+  { key: 'action.stage', label: 'Etapa no momento da ação', example_value: 'Venda Realizada (Ganho)' },
+  { key: 'action.pipeline', label: 'Funil no momento da ação', example_value: 'Contador CEO | CLOSER' },
 ];
 
 interface Props {
@@ -141,7 +140,7 @@ export function PiperunFieldPicker({ open, onClose, onSelect, isConnected }: Pro
 
   const getCategoryForField = (key: string): FieldCategory => {
     if (key.startsWith('fields.find.')) return FIELD_CATEGORIES[5];
-    if (key.startsWith('signature.') || key.startsWith('action.')) return FIELD_CATEGORIES[4];
+    if (key.startsWith('action.')) return FIELD_CATEGORIES[4];
     if (key.startsWith('proposals[') || key.startsWith('proposals.')) return FIELD_CATEGORIES[3];
     if (key.startsWith('person.')) return FIELD_CATEGORIES[2];
     if (key.startsWith('company.')) return FIELD_CATEGORIES[1];
