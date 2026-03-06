@@ -94,20 +94,33 @@ export function ClienteVisao360({
       })()
     : '—';
 
+  // CSM field type config
+  const csmEditable = (isAdmin || isManager) && !readOnly;
+  const csmOptionNames = csmOptions.map(c => c.full_name || '');
+
+  const saveCsm = async (newName: string | number | null) => {
+    const match = csmOptions.find(c => c.full_name === newName);
+    if (!match) throw new Error('CSM não encontrado');
+    const { error } = await supabase.from('offices').update({ csm_id: match.id }).eq('id', office.id);
+    if (error) throw error;
+    toast.success('CSM atualizado!');
+    onRefresh?.();
+  };
+
   // Static info fields (top row)
-  const infoFields: Array<{ label: string; value: string | number | null; isStatus?: boolean; editable?: boolean; column?: string; fieldType?: any; options?: string[] }> = [
+  const infoFields: Array<{ label: string; value: string | number | null; isStatus?: boolean; editable?: boolean; column?: string; fieldType?: any; options?: string[]; customSave?: (v: any) => Promise<void> }> = [
     { label: 'Status', value: null, isStatus: true },
-    { label: 'CSM', value: csmProfile?.full_name || '—' },
+    { label: 'CSM', value: csmProfile?.full_name || '—', editable: csmEditable, fieldType: 'dropdown', options: csmOptionNames, customSave: saveCsm },
     { label: 'Etapa Jornada', value: stageName || '—' },
     { label: 'Produto', value: office.products?.name || '—' },
     { label: 'Cidade', value: office.city || '—', editable: true, column: 'city', fieldType: 'text' },
     { label: 'Estado', value: office.state || '—', editable: true, column: 'state', fieldType: 'text' },
     { label: 'Contato Principal', value: mainContact?.name || '—' },
-    { label: 'Data Ativação', value: office.activation_date ? format(new Date(office.activation_date), 'dd/MM/yyyy', { locale: ptBR }) : '—' },
+    { label: 'Data Ativação', value: office.activation_date || null, editable: true, column: 'activation_date', fieldType: 'date' },
   ];
 
   // Extra fields (expandable)
-  const extraFields: Array<{ label: string; value: string | number | null; editable?: boolean; column?: string; fieldType?: any; options?: string[] }> = [
+  const extraFields: Array<{ label: string; value: string | number | null; editable?: boolean; column?: string; fieldType?: any; options?: string[]; customSave?: (v: any) => Promise<void> }> = [
     { label: 'Email', value: office.email, editable: true, column: 'email', fieldType: 'email' },
     { label: 'WhatsApp', value: office.whatsapp, editable: true, column: 'whatsapp', fieldType: 'phone' },
     { label: 'CNPJ', value: office.cnpj, editable: true, column: 'cnpj', fieldType: 'text' },
@@ -118,8 +131,8 @@ export function ClienteVisao360({
     { label: 'CS Feeling', value: office.cs_feeling, editable: true, column: 'cs_feeling', fieldType: 'dropdown', options: ['Muito bom', 'Bom', 'Regular', 'Ruim', 'Muito ruim'] },
     { label: 'Segmento', value: office.segment, editable: true, column: 'segment', fieldType: 'text' },
     { label: 'Início do Ciclo', value: office.cycle_start_date, editable: true, column: 'cycle_start_date', fieldType: 'date' },
-    { label: 'Fim do Ciclo', value: office.cycle_end_date ? format(new Date(office.cycle_end_date), 'dd/MM/yyyy', { locale: ptBR }) : '—' },
-    { label: 'Data Churn', value: office.churn_date ? format(new Date(office.churn_date), 'dd/MM/yyyy', { locale: ptBR }) : '—' },
+    { label: 'Fim do Ciclo', value: office.cycle_end_date, editable: true, column: 'cycle_end_date', fieldType: 'date' },
+    { label: 'Data Churn', value: office.churn_date, editable: true, column: 'churn_date', fieldType: 'date' },
     { label: 'Tempo de Vida', value: tempoDeVida },
     { label: 'Ciclos', value: String(contracts.length) },
     { label: 'LTV', value: `R$ ${ltv.toLocaleString('pt-BR')}` },
