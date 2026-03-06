@@ -701,6 +701,90 @@ async function executeV2Rules(supabase: any, triggerType: string, office_id: str
   return { executed, skipped, errors, results, total_time_ms: Date.now() - startTime };
 }
 
+// ─── Periodic Trigger Helpers ─────────────────────────────────
+function checkShouldRun(triggerParams: any): boolean {
+  if (!triggerParams) return true;
+  const lastRun = triggerParams.last_run_at;
+  if (!lastRun) return true; // never ran, run now
+  const frequency = triggerParams.frequency || 'daily';
+  const hoursSinceLast = (Date.now() - new Date(lastRun).getTime()) / 3600000;
+  switch (frequency) {
+    case 'hourly': return hoursSinceLast >= 1;
+    case 'every_6h': return hoursSinceLast >= 6;
+    case 'every_12h': return hoursSinceLast >= 12;
+    case 'daily': return hoursSinceLast >= 23;
+    case 'weekly': return hoursSinceLast >= 167;
+    default: return hoursSinceLast >= 23;
+  }
+}
+
+async function checkRepeatMode(rule: any, officeId: string, supabase: any): Promise<boolean> {
+  const mode = rule.trigger_params?.repeat_mode || 'once';
+  if (mode === 'always') return true;
+
+  const { data: lastExec } = await supabase
+    .from('automation_executions')
+    .select('executed_at')
+    .eq('rule_id', rule.id)
+    .eq('office_id', officeId)
+    .order('executed_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!lastExec) return true; // never executed
+
+  if (mode === 'once') return false; // already executed
+
+  if (mode === 'interval') {
+    const intervalDays = rule.trigger_params?.repeat_interval_days || 7;
+    const daysSinceLast = (Date.now() - new Date(lastExec.executed_at).getTime()) / 86400000;
+    return daysSinceLast >= intervalDays;
+  }
+
+  return true;
+}
+
+async function enrichOfficeData(office: any, supabase: any): Promise<any> {
+  const now = new Date();
+
+  // Active contract
+  const activeContract = office.contracts?.find((c: any) => c.status === 'ativo') || office.contracts?.[0];
+
+  // Journey stage
+  const { data: journeyData } = await supabase
+    .from('office_journey')
+    .select('journey_stage_id')
+    .eq('office_id', office.id)
+    .maybeSingle();
+
+  // Health score
+  const { data: healthData } = await supabase
+    .from('health_scores')
+    .select('score, band')
+    .eq('office_id', office.id)
+    .maybeSingle();
+
+  return {
+    ...office,
+    // Calculated fields
+    days_to_renewal: office.cycle_end_date
+      ? Math.ceil((new Date(office.cycle_end_date).getTime() - now.getTime()) / 86400000)
+      : null,
+    days_without_meeting: office.last_meeting_date
+      ? Math.ceil((now.getTime() - new Date(office.last_meeting_date).getTime()) / 86400000)
+      : null,
+    days_since_creation: Math.ceil((now.getTime() - new Date(office.created_at).getTime()) / 86400000),
+    // Contract data
+    contract_value: activeContract?.value || null,
+    installments_overdue: activeContract?.installments_overdue || office.asaas_total_overdue || 0,
+    // Journey
+    journey_stage_id: journeyData?.journey_stage_id || null,
+    // Health
+    health_score: healthData?.score ?? null,
+    health_band: healthData?.band || null,
+  };
+}
+
 // ─── Main Handler ────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
