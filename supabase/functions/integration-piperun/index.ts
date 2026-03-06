@@ -699,15 +699,21 @@ Deno.serve(async (req) => {
 
     // ========== importDeals ==========
     if (action === "importDeals") {
-      const { pipeline_id, stage_id, field_mappings } = body;
+      const { pipeline_id, stage_id, field_mappings, deal_ids } = body;
       if (!pipeline_id || !stage_id) throw new Error("pipeline_id and stage_id are required");
 
       let path = `/deals?pipeline_id=${pipeline_id}&stage_id=${stage_id}&show=100`;
       const result = await piperunGet(path, token);
-      const deals = result.data || [];
+      let deals = result.data || [];
 
       const { data: existing } = await supabase.from("offices").select("piperun_deal_id").not("piperun_deal_id", "is", null);
       const existingIds = new Set((existing || []).map((o: any) => o.piperun_deal_id));
+
+      // Filter to selected deals if deal_ids provided
+      if (deal_ids && Array.isArray(deal_ids) && deal_ids.length > 0) {
+        deals = deals.filter((d: any) => deal_ids.includes(String(d.id)));
+        console.log(`[PIPERUN] Filtered to ${deals.length} selected deals out of deal_ids:`, deal_ids);
+      }
 
       let imported = 0;
       let skipped = 0;
