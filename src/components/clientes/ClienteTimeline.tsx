@@ -437,6 +437,9 @@ export function ClienteTimeline({ officeId, readOnly = false }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Activity Edit Drawer */}
+      <ActivityEditDrawer activityId={editActivityId} isOpen={!!editActivityId} onClose={() => setEditActivityId(null)} onSave={fetchData} readOnly={readOnly} />
     </div>
   );
 }
