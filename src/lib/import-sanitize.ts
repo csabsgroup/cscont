@@ -28,9 +28,15 @@ export function formatCNPJ(val: string): string {
 
 // ── Phone ───────────────────────────────────────────────────
 export function sanitizePhone(val: string): string {
-  const d = onlyDigits(val);
-  if (d.length === 13 && d.startsWith('55')) return d; // already +55
-  if (d.length === 11 || d.length === 10) return d; // DDD + number
+  let d = onlyDigits(val);
+  // Remove leading 0 (e.g. 011...)
+  if (d.startsWith('0') && d.length > 10) {
+    d = d.substring(1);
+  }
+  // Already has country code 55
+  if (d.length === 13 && d.startsWith('55')) return d;
+  // Add country code if 10-11 digits (DDD + number)
+  if (d.length === 10 || d.length === 11) return '55' + d;
   return d;
 }
 
@@ -83,7 +89,7 @@ export function parseFlexDate(val: string): string | null {
     return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
   }
 
-  // MM/DD/YYYY fallback (if month > 12 it was caught above)
+  // DD/MM/YY (short year)
   const m2 = s.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2})$/);
   if (m2) {
     const [, d, mo, y2] = m2;
@@ -91,7 +97,13 @@ export function parseFlexDate(val: string): string | null {
     return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
   }
 
-  return val; // return as-is if no match
+  // Try Date.parse as last resort
+  const parsed = new Date(s);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toISOString().split('T')[0];
+  }
+
+  return null;
 }
 
 // ── State ───────────────────────────────────────────────────
@@ -99,7 +111,6 @@ const VALID_STATES = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS
 export function sanitizeState(val: string): string {
   const up = val.trim().toUpperCase();
   if (VALID_STATES.includes(up)) return up;
-  // Try stripping accents for full name matching
   const nameMap: Record<string, string> = {
     'saopaulo': 'SP', 'riodejaneiro': 'RJ', 'minasgerais': 'MG', 'bahia': 'BA',
     'parana': 'PR', 'riograndedosul': 'RS', 'santacatarina': 'SC', 'goias': 'GO',
@@ -113,6 +124,21 @@ export function sanitizeState(val: string): string {
   return nameMap[norm] || up;
 }
 
+// ── Status normalization ────────────────────────────────────
+export function normalizeStatus(val: string): string {
+  const statusMap: Record<string, string> = {
+    'ativo': 'ativo', 'active': 'ativo', 'sim': 'ativo', 'yes': 'ativo',
+    'churn': 'churn', 'cancelado': 'churn', 'cancelled': 'churn', 'canceled': 'churn',
+    'naorenovado': 'nao_renovado', 'naorenovou': 'nao_renovado', 'notrenewed': 'nao_renovado',
+    'naoiniciado': 'nao_iniciado', 'novo': 'nao_iniciado', 'new': 'nao_iniciado',
+    'upsell': 'upsell', 'expansao': 'upsell', 'upgrade': 'upsell',
+    'bonuselite': 'bonus_elite', 'elite': 'bonus_elite',
+    'pausado': 'pausado', 'paused': 'pausado', 'suspenso': 'pausado',
+  };
+  const norm = normalize(val);
+  return statusMap[norm] || val.toLowerCase().trim();
+}
+
 // ── Main sanitizer ──────────────────────────────────────────
 export function sanitizeValue(val: any, field: ImportField): any {
   if (val === null || val === undefined) return val;
@@ -121,8 +147,10 @@ export function sanitizeValue(val: any, field: ImportField): any {
 
   const key = field.key;
 
+  // Status field — normalize before anything else
+  if (key === 'status') return normalizeStatus(str);
   // CPF fields
-  if (key === 'cpf') return formatCPF(str);
+  if (key === 'cpf' || key === 'contact_cpf') return formatCPF(str);
   // CNPJ fields
   if (key === 'cnpj') return formatCNPJ(str);
   // CEP
@@ -130,7 +158,7 @@ export function sanitizeValue(val: any, field: ImportField): any {
   // State
   if (key === 'state') return sanitizeState(str);
   // Phone / WhatsApp
-  if (key === 'phone' || key === 'whatsapp') return sanitizePhone(str);
+  if (key === 'phone' || key === 'whatsapp' || key === 'contact_phone') return sanitizePhone(str);
   // Instagram - ensure @ prefix
   if (key === 'instagram') return str.startsWith('@') ? str : `@${str}`;
 
@@ -139,16 +167,17 @@ export function sanitizeValue(val: any, field: ImportField): any {
     case 'email':
       return str.toLowerCase().trim();
     case 'date':
-      return parseFlexDate(str);
-    case 'number':
-      return parseMoney(str) ?? str;
+      return parseFlexDate(str) || str;
+    case 'number': {
+      const num = parseMoney(str);
+      return num !== null ? num : str;
+    }
     case 'boolean':
-      return str; // parseBoolean handles this downstream
+      return str;
     case 'enum':
       return str.toLowerCase().trim();
     case 'text':
-      // Title case for name fields
-      if (['name', 'office_name', 'title'].includes(key)) return titleCase(str);
+      if (['name', 'office_name', 'title', 'contact_name'].includes(key)) return titleCase(str);
       return str.trim();
     default:
       return str.trim();
