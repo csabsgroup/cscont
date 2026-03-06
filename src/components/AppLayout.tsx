@@ -60,14 +60,14 @@ export function AppLayout({ children }: AppLayoutProps) {
       <div className="flex min-h-screen w-full">
         <AppSidebar />
         <div className="flex flex-1 flex-col">
-          <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border/60 bg-card px-4 shadow-sm">
+          <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b border-border/60 bg-card px-4 shadow-sm">
             <div className="flex items-center gap-3">
               <SidebarTrigger className="text-muted-foreground hover:text-foreground" />
-              <nav className="hidden sm:flex items-center gap-1.5 text-sm text-muted-foreground">
+              <nav className="hidden sm:flex items-center gap-1.5">
                 {breadcrumb.map((crumb, i) => (
                   <span key={i} className="flex items-center gap-1.5">
                     {i > 0 && <span className="text-border">/</span>}
-                    <span className={i === breadcrumb.length - 1 ? 'font-medium text-foreground' : ''}>
+                    <span className={i === breadcrumb.length - 1 ? 'text-page-title text-foreground' : 'text-sm text-muted-foreground'}>
                       {crumb}
                     </span>
                   </span>
@@ -85,7 +85,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               <NotificationPanel />
               <button
                 onClick={toggleTheme}
-                className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                className="rounded-[10px] h-[38px] w-[38px] flex items-center justify-center border border-border text-muted-foreground transition-all duration-150 hover:bg-accent hover:text-foreground"
                 title={theme === 'light' ? 'Modo escuro' : 'Modo claro'}
               >
                 {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4 text-yellow-500" />}

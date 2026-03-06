@@ -147,15 +147,15 @@ export default function Dashboard() {
   }, [csmProfiles]);
 
   const healthColor = (band: string) => {
-    if (band === 'green') return 'text-green-600';
-    if (band === 'yellow') return 'text-yellow-500';
-    return 'text-red-600';
+    if (band === 'green') return 'text-health-green';
+    if (band === 'yellow') return 'text-health-yellow';
+    return 'text-health-red';
   };
 
   if (loading) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Minha Carteira</h1>
+        <h1 className="text-page-title text-foreground">Minha Carteira</h1>
         <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
           {[...Array(8)].map((_, i) => (
             <Card key={i} className="p-6 space-y-3"><Skeleton className="h-4 w-24" /><Skeleton className="h-8 w-16" /></Card>
@@ -170,7 +170,7 @@ export default function Dashboard() {
       {/* Header + CSM Filter */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Minha Carteira</h1>
+          <h1 className="text-page-title text-foreground">Minha Carteira</h1>
           <p className="text-sm text-muted-foreground">Visão geral da sua carteira</p>
         </div>
         {(isAdmin || isManager) && csmProfiles.length > 0 && (
@@ -188,17 +188,17 @@ export default function Dashboard() {
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Health Score grande */}
         <Card className="flex flex-col items-center justify-center p-6">
-          <p className="text-xs uppercase text-gray-400 font-medium tracking-wide">Health Score Médio</p>
-          <div className={`text-6xl font-bold mt-2 ${healthColor(healthBand)}`}>{avgHealth}</div>
+          <p className="text-label-micro text-muted-foreground">Health Score Médio</p>
+          <div className={`font-display text-6xl font-black mt-2 ${healthColor(healthBand)}`}>{avgHealth}</div>
           <p className="text-xs text-muted-foreground mt-1">Últimos 10 dias</p>
           <div className="flex gap-2 mt-4 w-full">
             {[
-              { label: 'Vermelho', count: redCount, color: 'bg-red-500' },
-              { label: 'Amarelo', count: yellowCount, color: 'bg-yellow-400' },
-              { label: 'Verde', count: greenCount, color: 'bg-green-500' },
+              { label: 'Vermelho', count: redCount, color: 'bg-health-red' },
+              { label: 'Amarelo', count: yellowCount, color: 'bg-health-yellow' },
+              { label: 'Verde', count: greenCount, color: 'bg-health-green' },
             ].map(b => (
               <div key={b.label} className="flex-1">
-                <div className={`${b.color} h-6 rounded flex items-center justify-center text-white text-xs font-bold`}>
+                <div className={`${b.color} h-6 rounded-button flex items-center justify-center text-white text-xs font-bold`}>
                   {b.count}
                 </div>
                 <p className="text-[10px] text-center text-muted-foreground mt-1">{b.label}</p>
@@ -212,23 +212,23 @@ export default function Dashboard() {
         <div className="lg:col-span-2 grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
             { label: 'MRR', value: `R$ ${mrr.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`, icon: DollarSign, tip: 'Receita mensal recorrente total' },
-            { label: 'Variação MRR', value: `${mrrDelta >= 0 ? '+' : ''}${mrrDelta}`, icon: mrrDelta >= 0 ? ArrowUpRight : ArrowDownRight, tip: 'Novos clientes mês vs anterior', color: mrrDelta >= 0 ? 'text-green-600' : 'text-red-600' },
-            { label: 'MRR em Risco', value: `R$ ${mrrAtRisk.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`, icon: ShieldAlert, tip: 'MRR dos clientes com health vermelho', color: 'text-red-600' },
-            { label: 'MRR Expansão', value: `R$ ${mrrExpansion.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`, icon: TrendingUp, tip: 'MRR dos clientes em upsell', color: 'text-green-600' },
+            { label: 'Variação MRR', value: `${mrrDelta >= 0 ? '+' : ''}${mrrDelta}`, icon: mrrDelta >= 0 ? ArrowUpRight : ArrowDownRight, tip: 'Novos clientes mês vs anterior', color: mrrDelta >= 0 ? 'text-health-green' : 'text-health-red' },
+            { label: 'MRR em Risco', value: `R$ ${mrrAtRisk.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`, icon: ShieldAlert, tip: 'MRR dos clientes com health vermelho', color: 'text-health-red' },
+            { label: 'MRR Expansão', value: `R$ ${mrrExpansion.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`, icon: TrendingUp, tip: 'MRR dos clientes em upsell', color: 'text-health-green' },
             { label: 'Clientes Ativos', value: String(ativos.length), icon: Building2, tip: 'Clientes com status ativo ou bonus elite' },
             { label: 'Novos Clientes', value: String(newClientsThisMonth.length), icon: Users, tip: 'Clientes criados este mês' },
-            { label: 'Em Risco', value: String(redHealth.length), icon: ShieldAlert, tip: 'Clientes com health vermelho', color: 'text-red-600' },
-            { label: 'Expansão', value: String(upsellOffices.length), icon: TrendingUp, tip: 'Clientes marcados como upsell', color: 'text-green-600' },
+            { label: 'Em Risco', value: String(redHealth.length), icon: ShieldAlert, tip: 'Clientes com health vermelho', color: 'text-health-red' },
+            { label: 'Expansão', value: String(upsellOffices.length), icon: TrendingUp, tip: 'Clientes marcados como upsell', color: 'text-health-green' },
           ].map((kpi, i) => (
             <Card key={i} className="p-3">
               <div className="flex items-start justify-between">
-                <p className="text-xs uppercase text-gray-400 font-medium">{kpi.label}</p>
+                <p className="text-label-micro text-muted-foreground">{kpi.label}</p>
                 <Tooltip>
-                  <TooltipTrigger><Info className="h-3 w-3 text-gray-300" /></TooltipTrigger>
+                  <TooltipTrigger><Info className="h-3 w-3 text-muted-foreground/50" /></TooltipTrigger>
                   <TooltipContent><p className="text-xs">{kpi.tip}</p></TooltipContent>
                 </Tooltip>
               </div>
-              <p className={`text-lg font-bold mt-1 ${kpi.color || ''}`}>{kpi.value}</p>
+              <p className={`font-display text-xl font-bold mt-1 ${kpi.color || 'text-foreground'}`}>{kpi.value}</p>
             </Card>
           ))}
         </div>
@@ -245,7 +245,7 @@ export default function Dashboard() {
       <div className="space-y-3">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex gap-2">
-            <Button variant="outline" className="border-red-600 text-red-600 hover:bg-red-50" onClick={() => navigate('/atividades')}>
+            <Button variant="outline" className="border-primary text-primary hover:bg-primary/5" onClick={() => navigate('/atividades')}>
               <Plus className="mr-1 h-4 w-4" />ADICIONAR ATIVIDADE
             </Button>
           </div>
@@ -283,7 +283,7 @@ export default function Dashboard() {
                 const csm = profileMap.get(a.user_id);
                 const initials = csm?.full_name?.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase() || '?';
                 return (
-                  <TableRow key={a.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => a.office_id && navigate(`/clientes/${a.office_id}`)}>
+                  <TableRow key={a.id} className="cursor-pointer" onClick={() => a.office_id && navigate(`/clientes/${a.office_id}`)}>
                     <TableCell><Checkbox checked={!!a.completed_at} disabled /></TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -299,7 +299,7 @@ export default function Dashboard() {
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{a.offices?.name || '—'}</TableCell>
                     <TableCell><Badge variant="secondary" className="text-[10px]">{typeLabel(a.type)}</Badge></TableCell>
-                    <TableCell className={`text-sm ${isOverdue ? 'text-red-600 font-medium' : 'text-muted-foreground'}`}>
+                    <TableCell className={`text-sm ${isOverdue ? 'text-health-red font-medium' : 'text-muted-foreground'}`}>
                       {a.due_date ? format(new Date(a.due_date), 'dd/MM/yyyy', { locale: ptBR }) : '—'}
                       {isOverdue && ' ⚠'}
                     </TableCell>
