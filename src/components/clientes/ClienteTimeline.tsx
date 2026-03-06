@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { ActivityEditDrawer } from '@/components/atividades/ActivityEditDrawer';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/ui/card';
@@ -42,6 +43,7 @@ export function ClienteTimeline({ officeId, readOnly = false }: Props) {
 
   // Detail dialog
   const [detailItem, setDetailItem] = useState<{ type: 'activity' | 'meeting'; data: any } | null>(null);
+  const [editActivityId, setEditActivityId] = useState<string | null>(null);
 
   // Complete dialog (requires observations)
   const [completeItem, setCompleteItem] = useState<any>(null);
