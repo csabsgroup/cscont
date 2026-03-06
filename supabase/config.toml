@@ -41,3 +41,6 @@ verify_jwt = false
 
 [functions.piperun-webhook]
 verify_jwt = false
+
+[functions.submit-public-form]
+verify_jwt = false

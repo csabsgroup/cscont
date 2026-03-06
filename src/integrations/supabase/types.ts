@@ -951,7 +951,7 @@ export type Database = {
           office_id: string
           submitted_at: string
           template_id: string
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           data?: Json
@@ -960,7 +960,7 @@ export type Database = {
           office_id: string
           submitted_at?: string
           template_id: string
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           data?: Json
@@ -969,7 +969,7 @@ export type Database = {
           office_id?: string
           submitted_at?: string
           template_id?: string
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -999,33 +999,48 @@ export type Database = {
         Row: {
           created_at: string
           created_by: string
+          description: string | null
           fields: Json
+          form_hash: string | null
+          form_type: string
           id: string
+          is_active: boolean | null
           name: string
           post_actions: Json
           product_id: string | null
+          sections: Json | null
           type: Database["public"]["Enums"]["form_template_type"]
           updated_at: string
         }
         Insert: {
           created_at?: string
           created_by: string
+          description?: string | null
           fields?: Json
+          form_hash?: string | null
+          form_type?: string
           id?: string
+          is_active?: boolean | null
           name: string
           post_actions?: Json
           product_id?: string | null
+          sections?: Json | null
           type?: Database["public"]["Enums"]["form_template_type"]
           updated_at?: string
         }
         Update: {
           created_at?: string
           created_by?: string
+          description?: string | null
           fields?: Json
+          form_hash?: string | null
+          form_type?: string
           id?: string
+          is_active?: boolean | null
           name?: string
           post_actions?: Json
           product_id?: string | null
+          sections?: Json | null
           type?: Database["public"]["Enums"]["form_template_type"]
           updated_at?: string
         }
@@ -1628,6 +1643,60 @@ export type Database = {
           },
         ]
       }
+      office_metrics_history: {
+        Row: {
+          created_at: string | null
+          cs_feeling: string | null
+          csat_score: number | null
+          custom_data: Json | null
+          faturamento_anual: number | null
+          faturamento_mensal: number | null
+          form_submission_id: string | null
+          health_score: number | null
+          id: string
+          nps_score: number | null
+          office_id: string
+          period_month: number
+          period_year: number
+          qtd_clientes: number | null
+          qtd_colaboradores: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          cs_feeling?: string | null
+          csat_score?: number | null
+          custom_data?: Json | null
+          faturamento_anual?: number | null
+          faturamento_mensal?: number | null
+          form_submission_id?: string | null
+          health_score?: number | null
+          id?: string
+          nps_score?: number | null
+          office_id: string
+          period_month: number
+          period_year: number
+          qtd_clientes?: number | null
+          qtd_colaboradores?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          cs_feeling?: string | null
+          csat_score?: number | null
+          custom_data?: Json | null
+          faturamento_anual?: number | null
+          faturamento_mensal?: number | null
+          form_submission_id?: string | null
+          health_score?: number | null
+          id?: string
+          nps_score?: number | null
+          office_id?: string
+          period_month?: number
+          period_year?: number
+          qtd_clientes?: number | null
+          qtd_colaboradores?: number | null
+        }
+        Relationships: []
+      }
       office_notes: {
         Row: {
           content: string
@@ -1733,6 +1802,7 @@ export type Database = {
           cnpj: string | null
           cpf: string | null
           created_at: string
+          cs_feeling: string | null
           csm_id: string | null
           cycle_end_date: string | null
           cycle_start_date: string | null
@@ -1742,6 +1812,10 @@ export type Database = {
           first_signature_date: string | null
           id: string
           instagram: string | null
+          last_csat: number | null
+          last_meeting_date: string | null
+          last_meeting_type: string | null
+          last_nps: number | null
           logo_url: string | null
           name: string
           notes: string | null
@@ -1774,6 +1848,7 @@ export type Database = {
           cnpj?: string | null
           cpf?: string | null
           created_at?: string
+          cs_feeling?: string | null
           csm_id?: string | null
           cycle_end_date?: string | null
           cycle_start_date?: string | null
@@ -1783,6 +1858,10 @@ export type Database = {
           first_signature_date?: string | null
           id?: string
           instagram?: string | null
+          last_csat?: number | null
+          last_meeting_date?: string | null
+          last_meeting_type?: string | null
+          last_nps?: number | null
           logo_url?: string | null
           name: string
           notes?: string | null
@@ -1815,6 +1894,7 @@ export type Database = {
           cnpj?: string | null
           cpf?: string | null
           created_at?: string
+          cs_feeling?: string | null
           csm_id?: string | null
           cycle_end_date?: string | null
           cycle_start_date?: string | null
@@ -1824,6 +1904,10 @@ export type Database = {
           first_signature_date?: string | null
           id?: string
           instagram?: string | null
+          last_csat?: number | null
+          last_meeting_date?: string | null
+          last_meeting_type?: string | null
+          last_nps?: number | null
           logo_url?: string | null
           name?: string
           notes?: string | null
