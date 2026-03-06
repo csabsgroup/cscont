@@ -6,7 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Upload, Download, CheckCircle2, AlertCircle, Loader2, Undo2, Eye } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Upload, Download, CheckCircle2, AlertCircle, AlertTriangle, Loader2, Undo2, Eye, ChevronDown, FileDown, RotateCcw, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -16,6 +17,78 @@ import {
 } from '@/lib/import-templates';
 import { sanitizeValue, normalizeStatus, isNullValue } from '@/lib/import-sanitize';
 import { parseUploadedFile, downloadCSV } from '@/lib/export-helpers';
+
+// ── Types for structured import results ─────────────────────
+interface ImportRowResult {
+  lineNumber: number;
+  officeName: string;
+  status: 'success' | 'error' | 'warning';
+  errors: string[];
+  warnings: string[];
+}
+
+// ── Translate Supabase errors to friendly Portuguese ────────
+function translateSupabaseError(error: any): string {
+  const msg = error?.message || '';
+  const detail = error?.details || '';
+
+  if (msg.includes('duplicate key') || msg.includes('unique')) {
+    if (msg.includes('cnpj') || detail.includes('cnpj')) {
+      const match = detail.match(/\(cnpj\)=\(([^)]+)\)/);
+      return `CNPJ duplicado: ${match?.[1] || 'valor'} já existe no sistema`;
+    }
+    if (msg.includes('email') || detail.includes('email')) return 'Email duplicado: já existe um registro com este email';
+    if (msg.includes('name') || detail.includes('name')) return 'Nome duplicado: já existe um registro com este nome';
+    return `Registro duplicado: ${detail || msg}`;
+  }
+  if (msg.includes('not-null') || msg.includes('null value')) {
+    const colMatch = msg.match(/column "(\w+)"/);
+    return `Campo obrigatório "${colMatch?.[1] || 'desconhecido'}" está vazio`;
+  }
+  if (msg.includes('foreign key') || msg.includes('violates foreign key')) return `Referência inválida: ${detail || msg}`;
+  if (msg.includes('RLS') || msg.includes('policy') || msg.includes('permission') || msg.includes('row-level security')) return 'Sem permissão para inserir. Verifique suas permissões.';
+  if (msg.includes('invalid input syntax')) {
+    const typeMatch = msg.match(/type (\w+)/);
+    return `Formato de dado inválido para o tipo ${typeMatch?.[1] || 'desconhecido'}`;
+  }
+  return `Erro no banco: ${msg}${detail ? ' — ' + detail : ''}`;
+}
+
+// ── Group errors by type for summary ────────────────────────
+function groupErrorsByType(results: ImportRowResult[]): Record<string, number> {
+  const groups: Record<string, number> = {};
+  for (const r of results.filter(r => r.status === 'error')) {
+    for (const err of r.errors) {
+      let type = 'Outro';
+      if (err.includes('duplicado') || err.includes('duplicate')) type = 'Registro duplicado';
+      else if (err.includes('obrigatório') || err.includes('vazio') || err.includes('required')) type = 'Campo obrigatório vazio';
+      else if (err.includes('inválido') || err.includes('formato') || err.includes('syntax')) type = 'Formato de dado inválido';
+      else if (err.includes('permissão') || err.includes('RLS') || err.includes('security')) type = 'Sem permissão';
+      else if (err.includes('CNPJ')) type = 'CNPJ inválido/duplicado';
+      else if (err.includes('não encontrad')) type = 'Referência não encontrada';
+      groups[type] = (groups[type] || 0) + 1;
+    }
+  }
+  return groups;
+}
+
+// ── Export errors as CSV ────────────────────────────────────
+function exportErrorsCSV(results: ImportRowResult[]) {
+  const problemRows = results.filter(r => r.status === 'error' || r.status === 'warning');
+  if (problemRows.length === 0) return;
+  const csvLines = ['Linha,Escritório,Status,Detalhes'];
+  for (const r of problemRows) {
+    const status = r.status === 'error' ? 'Erro' : 'Aviso';
+    const details = [...r.errors, ...r.warnings].join(' | ');
+    csvLines.push(`${r.lineNumber},"${r.officeName.replace(/"/g, '""')}",${status},"${details.replace(/"/g, '""')}"`);
+  }
+  const blob = new Blob(['\uFEFF' + csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'erros_importacao.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 interface ImportWizardProps {
   open: boolean;
