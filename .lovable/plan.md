@@ -1,63 +1,48 @@
 
 
-# Diagnosis and Fix Plan
+# Plan: Detailed Import Error Feedback
 
-## Root Causes Found
+## Current State
 
-### Problem 1 — Webhook mapping not filling fields
-The webhook_logs table confirms the error: `"supabase.from(...).insert(...).catch is not a function"`. The last two webhooks (March 5 and March 6) both crashed with this error BEFORE reaching office creation. The `.catch()` fix was applied in code but the webhooks arrived before deployment completed. The mapping paths are correct, the company data exists at root level with all expected fields. This problem is already fixed in code — just needs a new webhook to test.
+The result screen (lines 410-438) shows only basic counters and a flat list of warning strings. Errors from `insertRow` are caught as plain strings and merged into `warnings`. There's no per-row breakdown, no error grouping, no error export, and no friendly translation of database errors.
 
-### Problem 2 — Only 3 of 17 create_activity actions succeeded
-**This is the critical finding.** The `activity_type` database enum has these valid values:
-`task, follow_up, onboarding, renewal, other, ligacao, check_in, email, whatsapp, planejamento`
+## Changes (1 file)
 
-It does NOT include `"meeting"`. The automation rule "[ELT] Delegação automática" has 14 actions with `activity_type: "meeting"` — every one of those fails silently because the INSERT violates the enum constraint. The `handleAction` function doesn't capture the error from `supabase.from("activities").insert(...)`.
+### `src/components/import-export/ImportWizard.tsx`
 
-Evidence: automation_logs shows 19 `actions_executed` entries, but only 3 `create_activity` have an `id` (the ones with type "task" or "email"). The other 14 have no `id` — they failed silently.
+**1. Add types and helper functions:**
+- `ImportRowResult` interface with `lineNumber`, `officeName`, `status`, `errors[]`, `warnings[]`
+- `translateSupabaseError()` function to convert raw DB errors into Portuguese messages
+- `groupErrorsByType()` to create a summary count by error category
+- `exportErrorsCSV()` to download failed rows as CSV
 
-### Problem 3 — Webhook doesn't trigger automations
-Same root cause as Problem 1 — the webhook crashed before reaching the automation invocation lines (419-430). Once the webhook stops crashing, automations will be invoked via `supabase.functions.invoke()`.
+**2. Refactor `handleImport` (lines 134-236):**
+- Replace flat `errorDetails: string[]` with structured `ImportRowResult[]` array
+- For each row, collect per-row errors and warnings into the result object
+- Add pre-insert validations (missing name) that produce friendly error messages
+- Catch `insertRow` errors and pass through `translateSupabaseError()`
+- Store the full `ImportRowResult[]` in the result state
 
-## Fixes
+**3. Update result state type:**
+- Change from `{ success, errors, skipped, batchId, warnings }` to include `rowResults: ImportRowResult[]`
 
-### Fix A — Add "meeting" to activity_type enum (database migration)
-```sql
-ALTER TYPE activity_type ADD VALUE IF NOT EXISTS 'meeting';
-```
-This is the correct fix because:
-- The automation builder UI offers "meeting" as an option
-- Users have configured rules with this type
-- 14 activities are waiting to be created with this type
+**4. Redesign the result screen (lines 410-438):**
+- Show counters with color-coded icons (success/error/warning)
+- Show error icon instead of green checkmark when there are errors
+- Collapsible "Error Details" section showing per-row errors with line number and office name
+- Collapsible "Warnings" section
+- "Summary by Error Type" section with grouped counts
+- "Export errors as CSV" button
+- "Try again" button that resets to upload step
 
-### Fix B — Add error handling in handleAction (execute-automations)
-In the `create_activity` case (line 46-47), capture and log the error:
-```javascript
-const { data: act, error: actErr } = await supabase.from("activities").insert(payload).select("id").single();
-if (actErr) {
-  console.error('[AUTOMATIONS] Activity insert error:', actErr.message, 'payload:', JSON.stringify(payload));
-  return { type: "create_activity", error: actErr.message };
-}
-```
-Apply similar error capture to ALL action types that do database inserts (send_notification, add_note, create_action_plan, etc.).
+## Summary
 
-### Fix C — Ensure webhook deployment is current
-The piperun-webhook code already has the `.catch()` fix from the previous iteration. Verify the edge function redeploys by checking logs after saving. No code change needed — just confirmation.
+| Area | Change |
+|------|--------|
+| Types | Add `ImportRowResult` interface |
+| Helpers | Add `translateSupabaseError`, `groupErrorsByType`, `exportErrorsCSV` |
+| `handleImport` | Collect structured per-row results instead of flat strings |
+| Result UI | Rich result screen with per-row details, grouping, and CSV export |
 
-### Fix D — Add company fallback in webhook (safety)
-In `piperun-webhook/index.ts` line 341, add fallback to `person.company`:
-```javascript
-let companyData = deal.company || deal.person?.company;
-```
-This handles edge cases where the Piperun payload structure varies.
-
-## Files Modified
-- `supabase/functions/execute-automations/index.ts` — error handling in handleAction
-- `supabase/functions/piperun-webhook/index.ts` — company fallback
-- Database migration: add `meeting` to `activity_type` enum
-
-## Expected Result After Fix
-- All 17 `create_activity` actions succeed (activities created with correct types)
-- Webhook creates office with all mapped fields populated
-- Webhook triggers automations that execute all 19 actions
-- automation_logs show complete execution with all action IDs
+1 file modified. No database changes.
 
