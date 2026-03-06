@@ -1,5 +1,21 @@
 import type { ImportField } from './import-templates';
 
+// ── Null value detection (Python/Pandas exports) ────────────
+const NULL_STRINGS = new Set(['none', 'null', 'n/a', 'na', 'nan', '-', '', 'undefined']);
+
+export function isNullValue(value: any): boolean {
+  if (value === null || value === undefined) return true;
+  const str = String(value).trim().toLowerCase();
+  return NULL_STRINGS.has(str);
+}
+
+// ── Clean Excel float ".0" suffix ───────────────────────────
+export function cleanExcelFloat(value: string): string {
+  const str = value.trim();
+  if (/^\d+\.0$/.test(str)) return str.replace('.0', '');
+  return str;
+}
+
 // ── Accent & normalization helpers ──────────────────────────
 export function stripAccents(str: string): string {
   return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -21,14 +37,16 @@ export function formatCPF(val: string): string {
 }
 
 export function formatCNPJ(val: string): string {
-  const d = onlyDigits(val);
+  const d = onlyDigits(val).padStart(14, '0');
   if (d.length !== 14) return d;
   return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12)}`;
 }
 
 // ── Phone ───────────────────────────────────────────────────
 export function sanitizePhone(val: string): string {
-  let d = onlyDigits(val);
+  // Clean Excel float first (e.g. "11982215029.0" → "11982215029")
+  let cleaned = cleanExcelFloat(val);
+  let d = onlyDigits(cleaned);
   // Remove leading 0 (e.g. 011...)
   if (d.startsWith('0') && d.length > 10) {
     d = d.substring(1);
@@ -60,6 +78,8 @@ export function parseMoney(val: string): number | null {
   else if (/^\d+(,\d{1,2})$/.test(s)) {
     s = s.replace(',', '.');
   }
+  // Remove any remaining non-numeric chars (except dot and minus)
+  s = s.replace(/[^\d.\-]/g, '');
   const n = parseFloat(s);
   return isNaN(n) ? null : n;
 }
@@ -79,8 +99,11 @@ export function parseFlexDate(val: string): string | null {
   if (!val || !val.trim()) return null;
   const s = val.trim();
 
-  // ISO: 2024-01-15 or 2024-01-15T...
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  // ISO with time: "2025-01-01 00:00:00" or "2025-01-01T00:00:00"
+  if (/^\d{4}-\d{2}-\d{2}[\sT]/.test(s)) return s.slice(0, 10);
+
+  // ISO date only: 2024-01-15
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
 
   // DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
   const m = s.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/);
@@ -151,9 +174,11 @@ export function normalizeStatus(val: string): string {
 
 // ── Main sanitizer ──────────────────────────────────────────
 export function sanitizeValue(val: any, field: ImportField): any {
-  if (val === null || val === undefined) return val;
-  const str = String(val).trim();
-  if (!str) return str;
+  // Treat Python/Pandas null exports as null
+  if (isNullValue(val)) return null;
+
+  let str = String(val).trim();
+  if (!str) return null;
 
   const key = field.key;
 
@@ -167,7 +192,7 @@ export function sanitizeValue(val: any, field: ImportField): any {
   if (key === 'cep') return formatCEP(str);
   // State
   if (key === 'state') return sanitizeState(str);
-  // Phone / WhatsApp
+  // Phone / WhatsApp — clean .0 first
   if (key === 'phone' || key === 'whatsapp' || key === 'contact_phone') return sanitizePhone(str);
   // Instagram - ensure @ prefix
   if (key === 'instagram') return str.startsWith('@') ? str : `@${str}`;
@@ -177,10 +202,12 @@ export function sanitizeValue(val: any, field: ImportField): any {
     case 'email':
       return str.toLowerCase().trim();
     case 'date':
-      return parseFlexDate(str) || str;
+      return parseFlexDate(str) || null;
     case 'number': {
+      // Clean Excel float first
+      str = cleanExcelFloat(str);
       const num = parseMoney(str);
-      return num !== null ? num : str;
+      return num !== null ? num : null;
     }
     case 'boolean':
       return str;
