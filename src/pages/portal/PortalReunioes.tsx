@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { usePortal } from '@/contexts/PortalContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Video } from 'lucide-react';
@@ -8,21 +8,18 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 export default function PortalReunioes() {
-  const { user } = useAuth();
+  const { officeId } = usePortal();
   const [meetings, setMeetings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) return;
+    if (!officeId) { setLoading(false); return; }
     (async () => {
-      const { data: links } = await supabase.from('client_office_links').select('office_id').eq('user_id', user.id);
-      const oid = links?.[0]?.office_id;
-      if (!oid) { setLoading(false); return; }
-      const { data } = await supabase.from('meetings').select('*').eq('office_id', oid).eq('share_with_client', true).order('scheduled_at', { ascending: false });
+      const { data } = await supabase.from('meetings').select('*').eq('office_id', officeId).eq('share_with_client', true).order('scheduled_at', { ascending: false });
       setMeetings(data || []);
       setLoading(false);
     })();
-  }, [user]);
+  }, [officeId]);
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
 

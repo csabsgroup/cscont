@@ -1,25 +1,21 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { usePortal } from '@/contexts/PortalContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Loader2, Users, MapPin, Phone, Mail, Instagram, Search } from 'lucide-react';
+import { UserAvatar } from '@/components/shared/UserAvatar';
 
 export default function PortalMembros() {
-  const { user } = useAuth();
+  const { officeId } = usePortal();
   const [members, setMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    if (!user) return;
+    if (!officeId) { setLoading(false); return; }
     (async () => {
-      const { data: links } = await supabase.from('client_office_links').select('office_id').eq('user_id', user.id);
-      const oid = links?.[0]?.office_id;
-      if (!oid) { setLoading(false); return; }
-
-      const { data: office } = await supabase.from('offices').select('active_product_id').eq('id', oid).single();
+      const { data: office } = await supabase.from('offices').select('active_product_id').eq('id', officeId).single();
       if (!office?.active_product_id) { setLoading(false); return; }
 
       const { data } = await supabase.from('offices')
@@ -27,12 +23,12 @@ export default function PortalMembros() {
         .eq('active_product_id', office.active_product_id)
         .eq('visible_in_directory', true)
         .in('status', ['ativo', 'upsell', 'bonus_elite'])
-        .neq('id', oid)
+        .neq('id', officeId)
         .order('name');
       setMembers(data || []);
       setLoading(false);
     })();
-  }, [user]);
+  }, [officeId]);
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
 
@@ -50,12 +46,7 @@ export default function PortalMembros() {
 
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Buscar por nome ou cidade..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="pl-9"
-        />
+        <Input placeholder="Buscar por nome ou cidade..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
       </div>
 
       {filtered.length === 0 ? (
@@ -66,10 +57,7 @@ export default function PortalMembros() {
             <Card key={m.id}>
               <CardContent className="p-4">
                 <div className="flex items-center gap-3 mb-3">
-                  <Avatar className="h-10 w-10">
-                    <AvatarImage src={m.photo_url} />
-                    <AvatarFallback>{m.name[0]?.toUpperCase()}</AvatarFallback>
-                  </Avatar>
+                  <UserAvatar name={m.name} avatarUrl={m.photo_url} size="md" />
                   <div>
                     <p className="font-medium text-sm">{m.name}</p>
                     {(m.city || m.state) && (

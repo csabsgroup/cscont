@@ -1,18 +1,17 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { usePortal } from '@/contexts/PortalContext';
 import { usePortalSettings } from '@/hooks/usePortalSettings';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, FileText, Target, Calendar, Heart, Gift, Video } from 'lucide-react';
-import { format, isFuture } from 'date-fns';
+import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 export default function PortalHome() {
-  const { user } = useAuth();
+  const { officeId, officeName } = usePortal();
   const { settings } = usePortalSettings();
   const [loading, setLoading] = useState(true);
-  const [officeName, setOfficeName] = useState('');
   const [officeStatus, setOfficeStatus] = useState<string | null>(null);
   const [stats, setStats] = useState({
     contractStatus: '—',
@@ -27,24 +26,20 @@ export default function PortalHome() {
   });
 
   useEffect(() => {
-    if (!user) return;
+    if (!officeId) { setLoading(false); return; }
     (async () => {
-      const { data: links } = await supabase.from('client_office_links').select('office_id').eq('user_id', user.id);
-      const oid = links?.[0]?.office_id;
-      if (!oid) { setLoading(false); return; }
-
-      const { data: office } = await supabase.from('offices').select('name, active_product_id, status').eq('id', oid).single();
-      setOfficeName(office?.name || '');
+      console.log('[PORTAL] Home loading for office:', officeId);
+      const { data: office } = await supabase.from('offices').select('name, active_product_id, status').eq('id', officeId).single();
       setOfficeStatus(office?.status || null);
 
       if (office?.status === 'pausado') { setLoading(false); return; }
 
       const [contractRes, okrRes, healthRes, bonusRes, meetingRes] = await Promise.all([
-        supabase.from('contracts').select('status, end_date, product_id').eq('office_id', oid).eq('status', 'ativo').maybeSingle(),
-        supabase.from('action_plans').select('status').eq('office_id', oid),
-        supabase.from('health_scores').select('score, band').eq('office_id', oid).order('calculated_at', { ascending: false }).limit(1).maybeSingle(),
-        supabase.from('bonus_grants').select('available').eq('office_id', oid),
-        supabase.from('meetings').select('title, scheduled_at').eq('office_id', oid).eq('share_with_client', true).gte('scheduled_at', new Date().toISOString()).order('scheduled_at', { ascending: true }).limit(1).maybeSingle(),
+        supabase.from('contracts').select('status, end_date, product_id').eq('office_id', officeId).eq('status', 'ativo').maybeSingle(),
+        supabase.from('action_plans').select('status').eq('office_id', officeId),
+        supabase.from('health_scores').select('score, band').eq('office_id', officeId).order('calculated_at', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('bonus_grants').select('available').eq('office_id', officeId),
+        supabase.from('meetings').select('title, scheduled_at').eq('office_id', officeId).eq('share_with_client', true).gte('scheduled_at', new Date().toISOString()).order('scheduled_at', { ascending: true }).limit(1).maybeSingle(),
       ]);
 
       let productName = '';
@@ -82,9 +77,20 @@ export default function PortalHome() {
       });
       setLoading(false);
     })();
-  }, [user]);
+  }, [officeId]);
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
+
+  if (!officeId) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold">Portal</h1>
+        <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">
+          Seu escritório não está vinculado à sua conta. Entre em contato com seu consultor.
+        </CardContent></Card>
+      </div>
+    );
+  }
 
   if (officeStatus === 'pausado') {
     return (
@@ -105,7 +111,6 @@ export default function PortalHome() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Bem-vindo, {officeName || 'Portal'}</h1>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {/* Contract */}
         {settings.portal_show_contract && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -120,7 +125,6 @@ export default function PortalHome() {
           </Card>
         )}
 
-        {/* Health Score */}
         {settings.portal_show_health && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -142,7 +146,6 @@ export default function PortalHome() {
           </Card>
         )}
 
-        {/* OKR Progress */}
         {settings.portal_show_okr && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -158,7 +161,6 @@ export default function PortalHome() {
           </Card>
         )}
 
-        {/* Bonus */}
         {settings.portal_show_bonus_balance && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -171,7 +173,6 @@ export default function PortalHome() {
           </Card>
         )}
 
-        {/* Next Event */}
         {settings.portal_show_next_event && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -191,7 +192,6 @@ export default function PortalHome() {
           </Card>
         )}
 
-        {/* Next Meeting */}
         {settings.portal_show_next_meeting && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">

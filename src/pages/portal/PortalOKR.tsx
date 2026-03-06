@@ -1,11 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { usePortal } from '@/contexts/PortalContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -14,21 +13,16 @@ import { recalculateHealth } from '@/lib/health-engine';
 const statusLabels: Record<string, string> = { pending: 'Pendente', in_progress: 'Em andamento', done: 'Concluído', cancelled: 'Cancelado' };
 
 export default function PortalOKR() {
-  const { user } = useAuth();
+  const { officeId } = usePortal();
   const [plans, setPlans] = useState<any[]>([]);
-  const [officeId, setOfficeId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetch = useCallback(async () => {
-    if (!user) return;
-    const { data: links } = await supabase.from('client_office_links').select('office_id').eq('user_id', user.id);
-    const oid = links?.[0]?.office_id;
-    setOfficeId(oid || null);
-    if (!oid) { setLoading(false); return; }
-    const { data } = await supabase.from('action_plans').select('*').eq('office_id', oid).order('created_at');
+    if (!officeId) { setLoading(false); return; }
+    const { data } = await supabase.from('action_plans').select('*').eq('office_id', officeId).order('created_at');
     setPlans(data || []);
     setLoading(false);
-  }, [user]);
+  }, [officeId]);
 
   useEffect(() => { fetch(); }, [fetch]);
 
