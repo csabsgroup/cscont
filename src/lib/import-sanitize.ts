@@ -97,6 +97,16 @@ export function parseFlexDate(val: string): string | null {
     return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
   }
 
+  // Excel serial date (number like 45658)
+  const num = Number(s);
+  if (!isNaN(num) && num > 1 && num < 200000) {
+    const excelEpoch = new Date(1899, 11, 30);
+    const date = new Date(excelEpoch.getTime() + num * 86400000);
+    if (!isNaN(date.getTime())) {
+      return date.toISOString().split('T')[0];
+    }
+  }
+
   // Try Date.parse as last resort
   const parsed = new Date(s);
   if (!isNaN(parsed.getTime())) {

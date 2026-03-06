@@ -119,7 +119,8 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
           const id = await insertRow(template, row);
           if (id) insertedIds.push(id);
           success++;
-        } catch {
+        } catch (err: any) {
+          console.error('Import row failed:', err?.message || err);
           errorCount++;
         }
       }

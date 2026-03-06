@@ -118,7 +118,7 @@ export function parseUploadedFile(file: File): Promise<{ headers: string[]; rows
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const wb = XLSX.read(data, { type: 'array' });
         const ws = wb.Sheets[wb.SheetNames[0]];
-        const json = XLSX.utils.sheet_to_json<Record<string, any>>(ws);
+        const json = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { raw: false, defval: '' });
         const headers = json.length > 0 ? Object.keys(json[0]) : [];
         resolve({ headers, rows: json });
       };
