@@ -14,6 +14,7 @@ import {
   EntityTemplate, autoMapColumns, validateRow, generateTemplateCSV,
   parseBoolean, parseDateBR, getMappingStatus,
 } from '@/lib/import-templates';
+import { sanitizeValue } from '@/lib/import-sanitize';
 import { parseUploadedFile, downloadCSV } from '@/lib/export-helpers';
 
 interface ImportWizardProps {
