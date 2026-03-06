@@ -896,8 +896,86 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ========== previewMatchedOffices ==========
+    if (action === "previewMatchedOffices") {
+      const { conditions, condition_logic } = body;
+      let officeQuery = supabase.from("offices").select("id, name, csm_id, status, active_product_id")
+        .in("status", ["ativo", "upsell", "bonus_elite"]).limit(500);
+      if (body.product_id) officeQuery = officeQuery.eq("active_product_id", body.product_id);
+      const { data: allOffices } = await officeQuery;
+
+      const matchedOffices: any[] = [];
+      const groups = conditions?.groups || [];
+      const groupLogic = conditions?.logic || condition_logic || "and";
+
+      for (const office of (allOffices || [])) {
+        let officeMatches = true;
+        if (groups.length > 0) {
+          const groupResults: boolean[] = [];
+          for (const group of groups) {
+            const condResults: boolean[] = [];
+            for (const cond of (group.conditions || [])) {
+              try {
+                const actual = await resolveConditionValue(supabase, cond, office, office.id);
+                const result = evaluateCondition(cond, actual);
+                condResults.push(result);
+              } catch { condResults.push(false); }
+            }
+            const gLogic = group.logic || "and";
+            const gResult = condResults.length === 0 ? true : gLogic === "and" ? condResults.every(Boolean) : condResults.some(Boolean);
+            groupResults.push(gResult);
+          }
+          officeMatches = groupLogic === "and" ? groupResults.every(Boolean) : groupResults.some(Boolean);
+        }
+        if (officeMatches) {
+          // Resolve CSM name
+          let csm_name: string | null = null;
+          if (office.csm_id) {
+            const { data: csmP } = await supabase.from("profiles").select("full_name").eq("id", office.csm_id).maybeSingle();
+            csm_name = csmP?.full_name || null;
+          }
+          matchedOffices.push({ id: office.id, name: office.name, csm_name });
+          if (matchedOffices.length >= 100) break;
+        }
+      }
+
+      return new Response(JSON.stringify({ success: true, offices: matchedOffices, total: matchedOffices.length }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ========== runNowAll ==========
+    if (action === "runNowAll") {
+      const { rule_id } = body;
+      if (!rule_id) throw new Error("rule_id required");
+
+      const { data: rule } = await supabase.from("automation_rules_v2").select("*").eq("id", rule_id).single();
+      if (!rule) throw new Error("Rule not found");
+
+      let officeQuery = supabase.from("offices").select("id, csm_id, status, active_product_id")
+        .in("status", ["ativo", "upsell", "bonus_elite"]);
+      if (rule.product_id) officeQuery = officeQuery.eq("active_product_id", rule.product_id);
+      const { data: offices } = await officeQuery;
+
+      let executed = 0;
+      let errors = 0;
+      for (const office of (offices || [])) {
+        try {
+          await executeV2Rules(supabase, rule.trigger_type, office.id, office.csm_id, userId, { force_rule_id: rule_id });
+          executed++;
+        } catch (e) {
+          console.error(`[AUTOMATIONS] runNowAll error for office ${office.id}:`, e);
+          errors++;
+        }
+      }
+
+      return new Response(JSON.stringify({ success: true, executed, errors, total: (offices || []).length }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     return new Response(
-      JSON.stringify({ error: "Unknown action. Supported: triggerV2, dryRun, reachCount, onNewOffice, onStageChange" }),
+      JSON.stringify({ error: "Unknown action" }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {

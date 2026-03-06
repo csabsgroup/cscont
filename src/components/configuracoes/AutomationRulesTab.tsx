@@ -340,6 +340,14 @@ export function AutomationRulesTab() {
   const [dryRunResults, setDryRunResults] = useState<any[] | null>(null);
   const [dryRunLoading, setDryRunLoading] = useState(false);
 
+  // Run now
+  const [runNow, setRunNow] = useState(false);
+  const [runNowLoading, setRunNowLoading] = useState(false);
+
+  // Preview matched offices
+  const [previewOffices, setPreviewOffices] = useState<any[] | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
   // Reference data
   const [products, setProducts] = useState<any[]>([]);
   const [stages, setStages] = useState<any[]>([]);
@@ -394,7 +402,33 @@ export function AutomationRulesTab() {
     setEditingId(null);
     setForm({ ...EMPTY_FORM, condition_groups: [{ id: genId(), logic: 'and', conditions: [] }] });
     setActiveStep(1);
+    setRunNow(false);
+    setPreviewOffices(null);
     setEditorOpen(true);
+  };
+
+  const fetchPreviewOffices = async () => {
+    setPreviewLoading(true);
+    try {
+      const conditionsPayload = {
+        logic: form.group_logic,
+        groups: form.condition_groups.map(g => ({
+          id: g.id, logic: g.logic, conditions: g.conditions,
+        })),
+      };
+      const { data } = await supabase.functions.invoke('execute-automations', {
+        body: {
+          action: 'previewMatchedOffices',
+          conditions: conditionsPayload,
+          condition_logic: form.group_logic,
+          product_id: form.product_id || null,
+        },
+      });
+      setPreviewOffices(data?.offices || []);
+    } catch {
+      setPreviewOffices([]);
+    }
+    setPreviewLoading(false);
   };
 
   const openEdit = (rule: any) => {
@@ -460,15 +494,33 @@ export function AutomationRulesTab() {
       created_by: user?.id,
     };
 
+    let savedRuleId = editingId;
     if (editingId) {
       const { error } = await (supabase.from('automation_rules_v2' as any) as any).update(payload).eq('id', editingId);
-      if (error) toast.error('Erro: ' + error.message);
+      if (error) { toast.error('Erro: ' + error.message); setSaving(false); return; }
       else toast.success('Regra atualizada!');
     } else {
-      const { error } = await (supabase.from('automation_rules_v2' as any) as any).insert(payload);
-      if (error) toast.error('Erro: ' + error.message);
-      else toast.success('Regra criada!');
+      const { data: inserted, error } = await (supabase.from('automation_rules_v2' as any) as any).insert(payload).select('id').single();
+      if (error) { toast.error('Erro: ' + error.message); setSaving(false); return; }
+      else { toast.success('Regra criada!'); savedRuleId = inserted?.id; }
     }
+
+    // Run now if toggled
+    if (runNow && savedRuleId) {
+      setRunNowLoading(true);
+      toast.info('Executando regra para todos os clientes...');
+      try {
+        const { data: runResult } = await supabase.functions.invoke('execute-automations', {
+          body: { action: 'runNowAll', rule_id: savedRuleId },
+        });
+        toast.success(`Regra executada! ${runResult?.executed || 0} clientes processados.`);
+      } catch (e) {
+        toast.error('Erro ao executar regra imediatamente.');
+      }
+      setRunNowLoading(false);
+    }
+
+    setRunNow(false);
     setSaving(false);
     setEditorOpen(false);
     fetchRules();
@@ -1408,6 +1460,36 @@ export function AutomationRulesTab() {
             <Button variant="outline" size="sm" onClick={addGroup}>
               <Plus className="mr-1 h-3.5 w-3.5" />Adicionar Grupo
             </Button>
+
+            <Separator className="my-4" />
+
+            {/* Preview affected clients */}
+            <div className="space-y-3">
+              <Button variant="outline" size="sm" onClick={fetchPreviewOffices} disabled={previewLoading}>
+                {previewLoading ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Users className="mr-1 h-3.5 w-3.5" />}
+                Ver clientes atingidos
+              </Button>
+
+              {previewOffices !== null && (
+                <div className="rounded-md border border-border p-3 bg-muted/30 space-y-2">
+                  <p className="text-sm font-medium">
+                    {previewOffices.length} cliente{previewOffices.length !== 1 ? 's' : ''} atingido{previewOffices.length !== 1 ? 's' : ''}
+                  </p>
+                  {previewOffices.length > 0 && (
+                    <ScrollArea className="max-h-48">
+                      <div className="space-y-1">
+                        {previewOffices.map((o: any) => (
+                          <div key={o.id} className="text-xs flex items-center justify-between py-1 border-b border-border/40 last:border-0">
+                            <span className="font-medium">{o.name}</span>
+                            {o.csm_name && <span className="text-muted-foreground">CSM: {o.csm_name}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  )}
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}
@@ -1508,6 +1590,29 @@ export function AutomationRulesTab() {
                 <div className="flex items-center gap-2">
                   <Input type="number" className="w-24" value={form.schedule_config.retrigger_days || ''} onChange={e => setForm(f => ({ ...f, schedule_config: { ...f.schedule_config, retrigger_days: Number(e.target.value) } }))} placeholder="Dias" />
                   <span className="text-sm text-muted-foreground">dias</span>
+                </div>
+              )}
+            </div>
+
+            <Separator className="my-4" />
+
+            {/* Run Now Toggle */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-sm font-medium">Execução imediata</Label>
+                  <p className="text-xs text-muted-foreground">
+                    A regra será executada imediatamente para todos os clientes que atendem as condições.
+                  </p>
+                </div>
+                <Switch checked={runNow} onCheckedChange={setRunNow} />
+              </div>
+              {runNow && (
+                <div className="rounded-md border border-yellow-500/30 bg-yellow-500/5 p-2">
+                  <p className="text-xs text-yellow-600 dark:text-yellow-400 flex items-center gap-1">
+                    <Play className="h-3 w-3" />
+                    Ao salvar, a regra será disparada imediatamente para todos os clientes elegíveis.
+                  </p>
                 </div>
               )}
             </div>
