@@ -1,0 +1,1 @@
+ALTER TABLE public.offices ADD COLUMN IF NOT EXISTS mrr numeric DEFAULT 0;

@@ -1817,6 +1817,7 @@ export type Database = {
           last_meeting_type: string | null
           last_nps: number | null
           logo_url: string | null
+          mrr: number | null
           name: string
           notes: string | null
           office_code: string | null
@@ -1863,6 +1864,7 @@ export type Database = {
           last_meeting_type?: string | null
           last_nps?: number | null
           logo_url?: string | null
+          mrr?: number | null
           name: string
           notes?: string | null
           office_code?: string | null
@@ -1909,6 +1911,7 @@ export type Database = {
           last_meeting_type?: string | null
           last_nps?: number | null
           logo_url?: string | null
+          mrr?: number | null
           name?: string
           notes?: string | null
           office_code?: string | null
