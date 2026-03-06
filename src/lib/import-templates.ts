@@ -28,13 +28,13 @@ export const importTemplates: EntityTemplate[] = [
     fields: [
       // ── Office core ──
       { key: 'name', label: 'nome_escritorio', required: true, type: 'text', example: 'Escritório ABC', dbColumn: 'name',
-        aliases: ['escritorio', 'escritório', 'razao social', 'razão social', 'razao_social', 'nome_empresa', 'nome da empresa', 'empresa', 'nome fantasia', 'nome_fantasia', 'company', 'name', 'cliente', 'nome_cliente', 'nome do cliente', 'nome do escritorio', 'nome do escritório'] },
+        aliases: ['escritorio', 'escritório', 'razao social', 'razão social', 'razao_social', 'nome_empresa', 'nome da empresa', 'empresa', 'nome fantasia', 'nome_fantasia', 'company', 'cliente', 'nome_cliente', 'nome do cliente', 'nome do escritorio', 'nome do escritório'] },
       { key: 'email', label: 'email', required: false, type: 'email', example: 'contato@abc.com', dbColumn: 'email',
         aliases: ['email', 'e-mail', 'e_mail', 'email_contato', 'email_empresa', 'email do escritório', 'email do escritorio', 'email principal', 'e-mail principal', 'correio', 'mail'] },
       { key: 'phone', label: 'telefone', required: false, type: 'text', example: '11999999999', dbColumn: 'phone',
-        aliases: ['telefone', 'fone', 'tel', 'phone', 'celular', 'numero', 'telefone fixo', 'tel fixo', 'fone fixo', 'telefone comercial'] },
+        aliases: ['telefone', 'fone', 'tel', 'phone', 'numero', 'telefone fixo', 'tel fixo', 'fone fixo', 'telefone comercial'] },
       { key: 'whatsapp', label: 'whatsapp', required: false, type: 'text', example: '11999999999', dbColumn: 'whatsapp',
-        aliases: ['whatsapp', 'wpp', 'zap', 'whats', 'whatszap', 'numero_whatsapp', 'telefone celular', 'tel celular', 'mobile', 'cell'] },
+        aliases: ['whatsapp', 'wpp', 'zap', 'whats', 'whatszap', 'numero_whatsapp', 'telefone celular', 'tel celular', 'mobile', 'cell', 'celular'] },
       { key: 'city', label: 'cidade', required: false, type: 'text', example: 'São Paulo', dbColumn: 'city',
         aliases: ['cidade', 'city', 'municipio', 'município'] },
       { key: 'state', label: 'estado', required: false, type: 'text', example: 'SP', dbColumn: 'state',
@@ -58,41 +58,47 @@ export const importTemplates: EntityTemplate[] = [
       { key: 'csm_email', label: 'csm_email', required: false, type: 'email', example: 'csm@empresa.com',
         aliases: ['csm_email', 'email_responsavel', 'email_responsável', 'email do responsavel', 'email do responsável', 'gestor_email'] },
       { key: 'csm_name', label: 'csm_nome', required: false, type: 'text', example: 'Maria Silva',
-        aliases: ['cs', 'csm', 'csm_nome', 'nome_csm', 'nome_responsavel', 'nome_responsável', 'consultor', 'customer_success', 'csm nome', 'responsavel_nome', 'responsavel', 'responsável', 'gestor'] },
+        aliases: ['cs', 'csm', 'csm_nome', 'nome_csm', 'nome_responsavel', 'nome_responsável', 'consultor', 'customer_success', 'csm nome', 'responsavel_nome', 'responsavel', 'responsável', 'gestor', 'customer success'] },
 
       // ── Status ──
-      { key: 'status', label: 'status', required: true, type: 'enum',
+      { key: 'status', label: 'status', required: false, type: 'enum',
         enumValues: ['ativo', 'churn', 'nao_renovado', 'nao_iniciado', 'upsell', 'bonus_elite', 'pausado'],
         example: 'ativo', dbColumn: 'status',
         aliases: ['status', 'situacao', 'situação', 'estado_conta', 'status do cliente', 'status do escritório'] },
 
       // ── Dates ──
       { key: 'activation_date', label: 'data_ativacao', required: false, type: 'date', example: '01/01/2024', dbColumn: 'activation_date',
-        aliases: ['data_ativacao', 'data_ativação', 'ativacao', 'data_primeira_assinatura', 'activation_date', 'data ativação', 'data ativacao', 'data de ativação'] },
+        aliases: ['data_ativacao', 'data_ativação', 'ativacao', 'data_primeira_assinatura', 'activation_date', 'data ativação', 'data ativacao', 'data de ativação', 'data de ativacao'] },
       { key: 'first_signature_date', label: 'primeira_assinatura', required: false, type: 'date', example: '01/01/2024', dbColumn: 'first_signature_date',
         aliases: ['primeira_assinatura', 'data_assinatura', 'assinatura_original', 'data da assinatura', 'data assinatura'] },
       { key: 'onboarding_date', label: 'data_onboarding', required: false, type: 'date', example: '15/01/2024', dbColumn: 'onboarding_date',
         aliases: ['onboarding', 'data_onboarding', 'inicio_onboarding', 'data_implantacao', 'implantacao', 'data implantação', 'data de implantação'] },
       { key: 'cycle_start_date', label: 'inicio_ciclo', required: false, type: 'date', example: '01/01/2024', dbColumn: 'cycle_start_date',
-        aliases: ['inicio_ciclo', 'início_ciclo', 'ciclo_inicio', 'cycle_start', 'início do ciclo', 'inicio do ciclo'] },
+        aliases: ['inicio_ciclo', 'início_ciclo', 'ciclo_inicio', 'cycle_start', 'início do ciclo', 'inicio do ciclo', 'data inicio do ciclo', 'data início do ciclo'] },
       { key: 'cycle_end_date', label: 'fim_ciclo', required: false, type: 'date', example: '31/12/2024', dbColumn: 'cycle_end_date',
-        aliases: ['fim_ciclo', 'ciclo_fim', 'cycle_end', 'vencimento_ciclo', 'fim do ciclo'] },
+        aliases: ['fim_ciclo', 'ciclo_fim', 'cycle_end', 'vencimento_ciclo', 'fim do ciclo', 'data final ciclo', 'data final do ciclo', 'data fim ciclo', 'data fim do ciclo'] },
       { key: 'churn_date', label: 'data_churn', required: false, type: 'date', example: '15/06/2024', dbColumn: 'churn_date',
         aliases: ['data_churn', 'data churn', 'data_cancelamento', 'data cancelamento', 'data do churn', 'data do cancelamento'] },
       { key: 'churn_observation', label: 'motivo_churn', required: false, type: 'text', example: 'Insatisfação com o serviço', dbColumn: 'churn_observation',
-        aliases: ['motivo_churn', 'motivo churn', 'motivo_cancelamento', 'motivo cancelamento', 'razao_churn', 'razão churn', 'observacao_churn', 'observação churn', 'churn_reason', 'churn_observation', 'razao cancelamento', 'razão cancelamento'] },
+        aliases: ['motivo_churn', 'motivo churn', 'motivo_cancelamento', 'motivo cancelamento', 'razao_churn', 'razão churn', 'observacao_churn', 'observação churn', 'churn_reason', 'churn_observation', 'razao cancelamento', 'razão cancelamento', 'motivo do churn'] },
       { key: 'last_meeting_date', label: 'data_ultima_reuniao', required: false, type: 'date', example: '15/03/2024', dbColumn: 'last_meeting_date',
-        aliases: ['data_ultima_reuniao', 'data_última_reunião', 'data da ultima reuniao', 'data da última reunião', 'ultima_reuniao', 'última_reunião', 'last_meeting', 'last_meeting_date'] },
+        aliases: ['data_ultima_reuniao', 'data_última_reunião', 'data da ultima reuniao', 'data da última reunião', 'ultima_reuniao', 'última_reunião', 'last_meeting', 'last_meeting_date', 'data da ultima reunião'] },
 
       // ── Numbers ──
       { key: 'qtd_clientes', label: 'qtd_clientes', required: false, type: 'number', example: '150', dbColumn: 'qtd_clientes',
         aliases: ['qtd_clientes', 'quantidade_clientes', 'num_clientes', 'clientes', 'total_clientes', 'clientes_ativos', 'clientes ativos', 'numero de clientes', 'quantidade de clientes', 'nº de clientes'] },
       { key: 'qtd_colaboradores', label: 'qtd_colaboradores', required: false, type: 'number', example: '20', dbColumn: 'qtd_colaboradores',
-        aliases: ['qtd_colaboradores', 'quantidade_colaboradores', 'num_colaboradores', 'colaboradores', 'funcionarios', 'funcionários', 'numero de funcionarios', 'número de funcionários', 'quantidade de colaboradores', 'qtd funcionários', 'qtd funcionarios', 'total funcionários'] },
+        aliases: ['qtd_colaboradores', 'quantidade_colaboradores', 'num_colaboradores', 'colaboradores', 'funcionarios', 'funcionários', 'numero de funcionarios', 'número de funcionários', 'quantidade de colaboradores', 'qtd funcionários', 'qtd funcionarios', 'total funcionários', 'numero de funcionários'] },
       { key: 'faturamento_mensal', label: 'faturamento_mensal', required: false, type: 'number', example: '50000', dbColumn: 'faturamento_mensal',
-        aliases: ['faturamento_mensal', 'receita_mensal', 'mrr', 'faturamento_mes', 'fat_mensal', 'faturamento do ultimo mes', 'faturamento do último mês', 'faturamento ultimo mes', 'faturamento mensal', 'faturamento mês', 'faturamento mes', 'faturamento do mês', 'faturamento do mes', 'monthly revenue'] },
+        aliases: ['faturamento_mensal', 'receita_mensal', 'faturamento_mes', 'fat_mensal', 'faturamento do ultimo mes', 'faturamento do último mês', 'faturamento ultimo mes', 'faturamento mensal', 'faturamento mês', 'faturamento mes', 'faturamento do mês', 'faturamento do mes', 'monthly revenue', 'faturamento do ultimo mês'] },
       { key: 'faturamento_anual', label: 'faturamento_anual', required: false, type: 'number', example: '600000', dbColumn: 'faturamento_anual',
         aliases: ['faturamento_anual', 'receita_anual', 'arr', 'faturamento_ano', 'fat_anual', 'faturamento do ultimo ano', 'faturamento do último ano', 'faturamento ultimo ano', 'receita_ultimo_ano', 'faturamento anual', 'faturamento ano', 'faturamento do ano', 'annual revenue'] },
+
+      // ── Extra fields: cs_feeling, last_nps ──
+      { key: 'cs_feeling', label: 'cs_feeling', required: false, type: 'text', example: 'Satisfeito', dbColumn: 'cs_feeling',
+        aliases: ['cs feeling', 'cs_feeling', 'sentimento cs', 'feeling', 'sentimento'] },
+      { key: 'last_nps', label: 'nps', required: false, type: 'number', example: '9', dbColumn: 'last_nps',
+        aliases: ['nps', 'last_nps', 'nota nps', 'nps score'] },
 
       // ── Notes / Code ──
       { key: 'notes', label: 'observacoes', required: false, type: 'text', example: 'Cliente VIP', dbColumn: 'notes',
@@ -116,11 +122,15 @@ export const importTemplates: EntityTemplate[] = [
       { key: 'contract_value', label: 'valor_contrato', required: false, type: 'number', example: '12000',
         aliases: ['valor contrato atual', 'valor do contrato', 'valor contrato', 'valor total', 'valor total do contrato', 'contract value'] },
       { key: 'monthly_value', label: 'valor_mensalidade', required: false, type: 'number', example: '1000',
-        aliases: ['valor mensalidade', 'mensalidade', 'valor mensal', 'valor da parcela', 'valor parcela', 'parcela', 'installment'] },
+        aliases: ['valor mensalidade', 'mensalidade', 'valor mensal', 'valor da parcela', 'valor parcela', 'parcela', 'installment', 'valor da mensalidade'] },
 
       // ── Extra metadata ──
       { key: 'origem', label: 'origem', required: false, type: 'text', example: 'Indicação',
         aliases: ['origem', 'origin', 'fonte', 'source', 'canal'] },
+
+      // ── Number of partners (informational, saved to notes) ──
+      { key: 'num_socios', label: 'numero_socios', required: false, type: 'number', example: '2',
+        aliases: ['número de sócios', 'numero de socios', 'qtd sócios', 'qtd socios', 'socios', 'sócios', 'num socios'] },
     ],
   },
   {

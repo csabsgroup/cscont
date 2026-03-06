@@ -14,7 +14,7 @@ import {
   EntityTemplate, autoMapColumns, validateRow, generateTemplateCSV,
   parseBoolean, parseDateBR, getMappingStatus,
 } from '@/lib/import-templates';
-import { sanitizeValue, normalizeStatus } from '@/lib/import-sanitize';
+import { sanitizeValue, normalizeStatus, isNullValue } from '@/lib/import-sanitize';
 import { parseUploadedFile, downloadCSV } from '@/lib/export-helpers';
 
 interface ImportWizardProps {
@@ -24,6 +24,15 @@ interface ImportWizardProps {
 }
 
 type Step = 'upload' | 'map' | 'preview' | 'validate' | 'execute';
+
+// ── Check if a row is entirely empty / null-like ────────────
+function isEmptyRow(row: Record<string, any>): boolean {
+  return Object.values(row).every(val => {
+    if (val === null || val === undefined) return true;
+    const str = String(val).trim().toLowerCase();
+    return ['', 'none', 'null', 'n/a', 'na', 'nan', 'undefined', '-'].includes(str);
+  });
+}
 
 export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps) {
   const { user } = useAuth();
@@ -37,11 +46,13 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
   const [validCount, setValidCount] = useState(0);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [result, setResult] = useState<{ success: number; errors: number; skipped: number; batchId?: string } | null>(null);
+  const [result, setResult] = useState<{ success: number; errors: number; skipped: number; batchId?: string; warnings?: string[] } | null>(null);
+  const [filteredEmptyCount, setFilteredEmptyCount] = useState(0);
 
   const reset = () => {
     setStep('upload'); setFileHeaders([]); setRows([]); setMapping({});
     setAutoMapping({}); setErrors([]); setValidCount(0); setImporting(false); setProgress(0); setResult(null);
+    setFilteredEmptyCount(0);
   };
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -50,12 +61,26 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
     if (file.size > 5 * 1024 * 1024) { toast.error('Arquivo muito grande. Máximo 5MB.'); return; }
     try {
       const parsed = await parseUploadedFile(file);
-      if (parsed.rows.length > 5000) { toast.error('Máximo 5000 linhas.'); return; }
+      // Filter out empty rows (Python/Pandas exports often have hundreds of empty rows)
+      const dataRows = parsed.rows.filter(row => !isEmptyRow(row));
+      const emptyCount = parsed.rows.length - dataRows.length;
+      setFilteredEmptyCount(emptyCount);
+
+      if (dataRows.length > 5000) { toast.error('Máximo 5000 linhas.'); return; }
+      if (dataRows.length === 0) { toast.error('Nenhuma linha com dados encontrada no arquivo.'); return; }
+
+      console.log(`Import: ${parsed.rows.length} linhas lidas, ${dataRows.length} com dados, ${emptyCount} vazias ignoradas`);
+
       setFileHeaders(parsed.headers);
-      setRows(parsed.rows);
+      setRows(dataRows);
       const autoMap = autoMapColumns(parsed.headers, template.fields);
       setMapping(autoMap);
       setAutoMapping(autoMap);
+
+      if (emptyCount > 0) {
+        toast.info(`${dataRows.length} linhas com dados encontradas (${emptyCount} linhas vazias ignoradas)`);
+      }
+
       setStep('map');
     } catch { toast.error('Erro ao ler o arquivo.'); }
   };
@@ -70,14 +95,19 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
     URL.revokeObjectURL(url);
   };
 
-  // Get mapped preview rows
+  // Get mapped preview rows — cleans "None" before sanitizing
   const getMappedRows = () => {
     return rows.map(row => {
       const mapped: Record<string, any> = {};
       for (const field of template.fields) {
         const fileCol = mapping[field.key];
         const rawVal = fileCol ? row[fileCol] : '';
-        mapped[field.key] = rawVal ? sanitizeValue(rawVal, field) : '';
+        // Treat Python null exports as null BEFORE sanitizing
+        if (isNullValue(rawVal)) {
+          mapped[field.key] = null;
+        } else {
+          mapped[field.key] = sanitizeValue(rawVal, field);
+        }
       }
       return mapped;
     });
@@ -110,14 +140,15 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
 
     let success = 0, errorCount = 0, skipped = 0;
     const insertedIds: string[] = [];
+    const warnings: string[] = [];
     const chunkSize = 50;
 
     for (let i = 0; i < mappedRows.length; i += chunkSize) {
       const chunk = mappedRows.slice(i, i + chunkSize);
       for (const row of chunk) {
         try {
-          const id = await insertRow(template, row);
-          if (id) insertedIds.push(id);
+          const result = await insertRow(template, row, warnings);
+          if (result) insertedIds.push(result);
           success++;
         } catch (err: any) {
           console.error('Import row failed:', err?.message || err);
@@ -146,25 +177,11 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
         action: 'bulk_import',
         details: { entity: template.key, success, errors: errorCount, skipped },
       });
-
-      // Fire onNewOffice automations for imported offices
-      if (template.key === 'offices' && insertedIds.length > 0) {
-        for (const officeId of insertedIds) {
-          try {
-            const { data: office } = await supabase.from('offices').select('active_product_id').eq('id', officeId).single();
-            if (office?.active_product_id) {
-              await supabase.functions.invoke('execute-automations', {
-                body: { action: 'onNewOffice', office_id: officeId, product_id: office.active_product_id },
-              });
-            }
-          } catch (e) {
-            console.warn('Automation trigger failed for imported office', officeId, e);
-          }
-        }
-      }
+      // NOTE: Automations are NOT triggered during bulk import for performance.
+      // They can be triggered manually after import if needed.
     }
 
-    setResult({ success, errors: errorCount, skipped, batchId });
+    setResult({ success, errors: errorCount, skipped, batchId, warnings: warnings.length > 0 ? warnings : undefined });
     setStep('execute');
     setImporting(false);
   };
@@ -228,7 +245,12 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
         {step === 'map' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">{rows.length} linhas encontradas. Mapeie as colunas:</p>
+              <div className="text-sm text-muted-foreground">
+                <span>{rows.length} linhas com dados encontradas.</span>
+                {filteredEmptyCount > 0 && (
+                  <span className="ml-1 text-warning">({filteredEmptyCount} linhas vazias ignoradas)</span>
+                )}
+              </div>
               <div className="flex items-center gap-2">
                 <Badge variant="secondary" className="text-xs">{mappedCount}/{template.fields.length} mapeados</Badge>
                 {autoMappedCount > 0 && (
@@ -345,6 +367,15 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
               {result.errors > 0 && <span className="text-destructive">{result.errors} erros</span>}
               {result.skipped > 0 && <span className="text-muted-foreground">{result.skipped} ignorados</span>}
             </div>
+            {result.warnings && result.warnings.length > 0 && (
+              <ScrollArea className="h-32 border rounded-lg p-3 text-left">
+                <div className="space-y-1">
+                  {result.warnings.map((w, i) => (
+                    <p key={i} className="text-xs text-warning">⚠️ {w}</p>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
             <div className="flex justify-center gap-3">
               {result.batchId && (
                 <Button variant="outline" onClick={handleUndoImport} disabled={importing} className="gap-1.5">
@@ -389,7 +420,7 @@ async function fuzzyMatchProduct(value: string): Promise<string | null> {
   return null;
 }
 
-async function insertRow(template: EntityTemplate, row: Record<string, any>): Promise<string | null> {
+async function insertRow(template: EntityTemplate, row: Record<string, any>, warnings: string[]): Promise<string | null> {
   const t = template.key;
 
   if (t === 'offices') {
@@ -397,6 +428,9 @@ async function insertRow(template: EntityTemplate, row: Record<string, any>): Pr
     let productId: string | null = null;
     if (row.product_name) {
       productId = await fuzzyMatchProduct(row.product_name);
+      if (!productId) {
+        warnings.push(`Produto "${row.product_name}" não encontrado para "${row.name}"`);
+      }
     }
 
     // CSM lookup by email
@@ -409,12 +443,25 @@ async function insertRow(template: EntityTemplate, row: Record<string, any>): Pr
     if (!csmId && row.csm_name) {
       const { data } = await supabase.from('profiles').select('id').ilike('full_name', `%${row.csm_name.trim()}%`).maybeSingle();
       csmId = data?.id || null;
+      if (!csmId) {
+        warnings.push(`CSM "${row.csm_name}" não encontrado para "${row.name}"`);
+      }
     }
 
     // Ensure status is valid — default to 'ativo'
     const validStatuses = ['ativo', 'churn', 'nao_renovado', 'nao_iniciado', 'upsell', 'bonus_elite', 'pausado'];
     let status = row.status ? normalizeStatus(String(row.status)) : 'ativo';
     if (!validStatuses.includes(status)) status = 'ativo';
+
+    // Build notes: combine notes + origem
+    let notes = row.notes || null;
+    if (row.origem) {
+      notes = notes ? `${notes}\nOrigem: ${row.origem}` : `Origem: ${row.origem}`;
+    }
+    if (row.num_socios) {
+      const sociosInfo = `Nº sócios: ${row.num_socios}`;
+      notes = notes ? `${notes}\n${sociosInfo}` : sociosInfo;
+    }
 
     const insertData: Record<string, any> = {
       name: row.name,
@@ -432,30 +479,34 @@ async function insertRow(template: EntityTemplate, row: Record<string, any>): Pr
       active_product_id: productId,
       csm_id: csmId,
       status: status as any,
-      activation_date: parseDateBR(row.activation_date),
-      first_signature_date: parseDateBR(row.first_signature_date),
-      onboarding_date: parseDateBR(row.onboarding_date),
-      cycle_start_date: parseDateBR(row.cycle_start_date),
-      cycle_end_date: parseDateBR(row.cycle_end_date),
-      churn_date: parseDateBR(row.churn_date),
+      activation_date: row.activation_date || null,
+      first_signature_date: row.first_signature_date || null,
+      onboarding_date: row.onboarding_date || null,
+      cycle_start_date: row.cycle_start_date || null,
+      cycle_end_date: row.cycle_end_date || null,
+      churn_date: row.churn_date || null,
       churn_observation: row.churn_observation || null,
-      last_meeting_date: parseDateBR(row.last_meeting_date),
-      notes: row.notes || null,
+      last_meeting_date: row.last_meeting_date || null,
+      cs_feeling: row.cs_feeling || null,
+      last_nps: row.last_nps != null ? (typeof row.last_nps === 'number' ? row.last_nps : Number(row.last_nps) || null) : null,
+      notes: notes,
       office_code: row.office_code || null,
     };
 
     // Add numeric fields if present
-    if (row.qtd_clientes) insertData.qtd_clientes = typeof row.qtd_clientes === 'number' ? row.qtd_clientes : (Number(row.qtd_clientes) || null);
-    if (row.qtd_colaboradores) insertData.qtd_colaboradores = typeof row.qtd_colaboradores === 'number' ? row.qtd_colaboradores : (Number(row.qtd_colaboradores) || null);
-    if (row.faturamento_mensal) insertData.faturamento_mensal = typeof row.faturamento_mensal === 'number' ? row.faturamento_mensal : (Number(row.faturamento_mensal) || null);
-    if (row.faturamento_anual) insertData.faturamento_anual = typeof row.faturamento_anual === 'number' ? row.faturamento_anual : (Number(row.faturamento_anual) || null);
+    if (row.qtd_clientes != null) insertData.qtd_clientes = typeof row.qtd_clientes === 'number' ? row.qtd_clientes : (Number(row.qtd_clientes) || null);
+    if (row.qtd_colaboradores != null) insertData.qtd_colaboradores = typeof row.qtd_colaboradores === 'number' ? row.qtd_colaboradores : (Number(row.qtd_colaboradores) || null);
+    if (row.faturamento_mensal != null) insertData.faturamento_mensal = typeof row.faturamento_mensal === 'number' ? row.faturamento_mensal : (Number(row.faturamento_mensal) || null);
+    if (row.faturamento_anual != null) insertData.faturamento_anual = typeof row.faturamento_anual === 'number' ? row.faturamento_anual : (Number(row.faturamento_anual) || null);
     // MRR from monthly_value if provided
-    if (row.monthly_value && !insertData.faturamento_mensal) {
+    if (row.monthly_value != null) {
       insertData.mrr = typeof row.monthly_value === 'number' ? row.monthly_value : (Number(row.monthly_value) || null);
     }
 
-    // Clean nulls
+    // Clean nulls — remove keys with null/undefined/empty to let DB use defaults
     Object.keys(insertData).forEach(k => { if (insertData[k] === null || insertData[k] === undefined || insertData[k] === '') delete insertData[k]; });
+    // But always keep status
+    insertData.status = status;
     if (!insertData.name) throw new Error('Name required');
 
     const { data, error } = await supabase.from('offices').insert(insertData as any).select('id').single();
@@ -468,10 +519,10 @@ async function insertRow(template: EntityTemplate, row: Record<string, any>): Pr
         await supabase.from('contacts').insert({
           office_id: officeId,
           name: row.contact_name,
-          email: row.contact_email || null,
-          phone: row.contact_phone || null,
+          email: row.contact_email || row.email || null,
+          phone: row.contact_phone || row.whatsapp || null,
           cpf: row.contact_cpf || null,
-          birthday: parseDateBR(row.contact_birthday),
+          birthday: row.contact_birthday || null,
           is_main_contact: true,
         });
       } catch (e) {
@@ -479,7 +530,7 @@ async function insertRow(template: EntityTemplate, row: Record<string, any>): Pr
       }
     }
 
-    // Auto-create linked contract if contract_value or monthly_value is present
+    // Auto-create linked contract if contract_value or monthly_value is present AND product exists
     if (officeId && productId && (row.contract_value || row.monthly_value)) {
       try {
         await supabase.from('contracts').insert({
@@ -488,11 +539,14 @@ async function insertRow(template: EntityTemplate, row: Record<string, any>): Pr
           value: typeof row.contract_value === 'number' ? row.contract_value : (Number(row.contract_value) || 0),
           monthly_value: typeof row.monthly_value === 'number' ? row.monthly_value : (Number(row.monthly_value) || 0),
           status: 'ativo' as any,
-          start_date: parseDateBR(row.activation_date) || new Date().toISOString().split('T')[0],
+          start_date: row.cycle_start_date || row.activation_date || new Date().toISOString().split('T')[0],
+          end_date: row.cycle_end_date || null,
         });
       } catch (e) {
         console.warn('Failed to create linked contract for office', officeId, e);
       }
+    } else if (officeId && !productId && (row.contract_value || row.monthly_value)) {
+      warnings.push(`Contrato não criado para "${row.name}" — produto não encontrado`);
     }
 
     return officeId || null;
