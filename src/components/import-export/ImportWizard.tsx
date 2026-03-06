@@ -76,7 +76,8 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
       const mapped: Record<string, any> = {};
       for (const field of template.fields) {
         const fileCol = mapping[field.key];
-        mapped[field.key] = fileCol ? row[fileCol] : '';
+        const rawVal = fileCol ? row[fileCol] : '';
+        mapped[field.key] = rawVal ? sanitizeValue(rawVal, field) : '';
       }
       return mapped;
     });
