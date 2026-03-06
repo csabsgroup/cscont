@@ -929,7 +929,7 @@ Deno.serve(async (req) => {
             for (const cond of (group.conditions || [])) {
               try {
                 const actual = await resolveConditionValue(supabase, cond, office, office.id);
-                const result = evaluateCondition(cond, actual);
+                const result = evaluateCondition(actual, cond.operator, cond.value, cond.value2);
                 condResults.push(result);
               } catch { condResults.push(false); }
             }
