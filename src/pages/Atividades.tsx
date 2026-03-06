@@ -16,6 +16,7 @@ import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { ActivityPopup } from '@/components/atividades/ActivityPopup';
+import { ActivityEditDrawer } from '@/components/atividades/ActivityEditDrawer';
 
 interface Activity {
   id: string;
@@ -61,6 +62,7 @@ export default function Atividades() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [editActivityId, setEditActivityId] = useState<string | null>(null);
 
   // Form state
   const [title, setTitle] = useState('');
@@ -305,22 +307,25 @@ export default function Atividades() {
                     </CardContent>
                   </Card>
                 ) : (
-                  list.map(a => <ActivityCard key={a.id} activity={a} onRefresh={fetchActivities} isViewer={isViewer} navigate={navigate} />)
+                  list.map(a => <ActivityCard key={a.id} activity={a} onRefresh={fetchActivities} isViewer={isViewer} navigate={navigate} onEdit={setEditActivityId} />)
                 )}
               </TabsContent>
             );
           })}
         </Tabs>
       )}
+
+      {/* Activity Edit Drawer */}
+      <ActivityEditDrawer activityId={editActivityId} isOpen={!!editActivityId} onClose={() => setEditActivityId(null)} onSave={fetchActivities} readOnly={isViewer} />
     </div>
   );
 }
 
-function ActivityCard({ activity, onRefresh, isViewer, navigate }: { activity: Activity; onRefresh: () => void; isViewer?: boolean; navigate: (path: string) => void }) {
+function ActivityCard({ activity, onRefresh, isViewer, navigate, onEdit }: { activity: Activity; onRefresh: () => void; isViewer?: boolean; navigate: (path: string) => void; onEdit: (id: string) => void }) {
   const isOverdue = activity.due_date && isPast(new Date(activity.due_date)) && !isToday(new Date(activity.due_date)) && !activity.completed_at;
 
   return (
-    <Card className={`transition-opacity ${activity.completed_at ? 'opacity-60' : ''}`}>
+    <Card className={`transition-opacity cursor-pointer hover:bg-muted/30 ${activity.completed_at ? 'opacity-60' : ''}`} onClick={() => onEdit(activity.id)}>
       <CardContent className="flex items-start gap-3 py-3 px-4">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
