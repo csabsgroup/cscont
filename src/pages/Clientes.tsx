@@ -583,12 +583,11 @@ export default function Clientes() {
       case 'csm': return (
         <TableCell key={col}>
           {office.csmName ? (
-            <div className="flex items-center gap-2">
-              <div className="h-7 w-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-medium shrink-0">
-                {office.csmName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-              </div>
-              <span className="text-sm truncate max-w-[120px]">{office.csmName}</span>
-            </div>
+            <UserAvatar
+              name={office.csmName}
+              avatarUrl={(office as any).csmAvatarUrl}
+              size="xs"
+            />
           ) : <span className="text-muted-foreground">—</span>}
         </TableCell>
       );

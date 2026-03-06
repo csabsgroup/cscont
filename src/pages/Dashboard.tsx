@@ -292,10 +292,11 @@ export default function Dashboard() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Avatar className="h-6 w-6">
-                        <AvatarImage src={csm?.avatar_url} />
-                        <AvatarFallback className="text-[10px]">{initials}</AvatarFallback>
-                      </Avatar>
+                      <UserAvatar
+                        name={csm?.full_name || '?'}
+                        avatarUrl={csm?.avatar_url}
+                        size="xs"
+                      />
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{a.offices?.name || '—'}</TableCell>
                     <TableCell><Badge variant="secondary" className="text-[10px]">{typeLabel(a.type)}</Badge></TableCell>
