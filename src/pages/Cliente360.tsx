@@ -104,7 +104,7 @@ export default function Cliente360() {
     // Fetch counts for badges
     const [activitiesRes, filesRes] = await Promise.all([
       supabase.from('activities').select('id, completed_at, due_date').eq('office_id', id!),
-      supabase.from('shared_files').select('id', { count: 'exact', head: true }).eq('office_id', id!),
+      supabase.from('office_files' as any).select('id', { count: 'exact', head: true }).eq('office_id', id!).is('note_id', null),
     ]);
     const acts = activitiesRes.data || [];
     setActivitiesCount(acts.length);
