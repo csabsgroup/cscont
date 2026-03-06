@@ -120,6 +120,15 @@ export function EditOfficeDialog({ office, open, onOpenChange, onSaved }: Props)
       await supabase.from('office_journey').delete().eq('office_id', office.id);
     }
 
+    // Trigger automations for stage change
+    if (currentStageId) {
+      try {
+        await supabase.functions.invoke('execute-automations', {
+          body: { action: 'triggerV2', trigger_type: 'office.stage_changed', office_id: office.id, context: { stage_id: currentStageId } },
+        });
+      } catch (e) { console.error('Stage automation trigger failed:', e); }
+    }
+
     toast.success('Escritório atualizado!');
     onOpenChange(false);
     onSaved();

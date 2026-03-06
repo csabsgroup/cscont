@@ -128,7 +128,11 @@ async function processAndCreateOffice(
 
   for (const mapping of mappings) {
     const value = resolveNestedValue(sourceData, mapping.piperun);
-    if (value === undefined || value === null || value === '') continue;
+    console.log(`[PIPERUN-WEBHOOK] Mapping: ${mapping.piperun} → ${mapping.local} = ${JSON.stringify(value)?.substring(0, 100)}`);
+    if (value === undefined || value === null || value === '') {
+      console.log(`[PIPERUN-WEBHOOK] SKIP: ${mapping.piperun} is empty`);
+      continue;
+    }
     const [table, ...colParts] = mapping.local.split('.');
     const col = colParts.join('.');
     if (table === 'offices') officeFields[col] = value;
@@ -155,6 +159,10 @@ async function processAndCreateOffice(
 
   if (!officeFields.name) officeFields.name = sourceData.title || sourceData.deal?.title || `Deal ${dealId}`;
 
+  console.log('[PIPERUN-WEBHOOK] Final officeFields:', JSON.stringify(officeFields).substring(0, 500));
+  console.log('[PIPERUN-WEBHOOK] Final contractFields:', JSON.stringify(contractFields).substring(0, 300));
+  console.log('[PIPERUN-WEBHOOK] Final contactBuckets:', JSON.stringify(contactBuckets).substring(0, 300));
+
   console.log('[PIPERUN-WEBHOOK] Inserting office with fields:', JSON.stringify(officeFields).substring(0, 500));
 
   const { data: newOffice, error: officeErr } = await supabase.from("offices").insert(officeFields).select("id").single();
@@ -169,7 +177,9 @@ async function processAndCreateOffice(
     contractFields.product_id = resolvedProductId || officeFields.active_product_id;
     if (contractFields.product_id) {
       contractFields.status = contractFields.status || 'pendente';
-      await supabase.from("contracts").insert(contractFields).catch(() => {});
+      const { error: contractErr } = await supabase.from("contracts").insert(contractFields);
+      if (contractErr) console.error('[PIPERUN-WEBHOOK] Contract insert error:', contractErr.message);
+      else console.log('[PIPERUN-WEBHOOK] Contract created');
     }
   }
 
@@ -180,7 +190,9 @@ async function processAndCreateOffice(
     if (cFields && Object.keys(cFields).length > 0 && cFields.name) {
       cFields.office_id = officeId;
       cFields.is_main_contact = i === 0;
-      await supabase.from("contacts").insert(cFields).catch(() => {});
+      const { error: contactErr } = await supabase.from("contacts").insert(cFields);
+      if (contactErr) console.error('[PIPERUN-WEBHOOK] Contact insert error:', contactErr.message);
+      else console.log('[PIPERUN-WEBHOOK] Contact created:', cFields.name);
     }
   }
 
@@ -198,26 +210,31 @@ async function processAndCreateOffice(
     } catch (e: any) { console.log('[PIPERUN-WEBHOOK] PDF download failed:', e.message); }
   }
 
-  // Automations
+  // Journey + Health
   if (resolvedProductId) {
     try {
       const { data: firstStage } = await supabase.from("journey_stages").select("id")
         .eq("product_id", resolvedProductId).order("position", { ascending: true }).limit(1).maybeSingle();
       if (firstStage) {
-        await supabase.from("office_journey").insert({ office_id: officeId, journey_stage_id: firstStage.id }).catch(() => {});
+        const { error: journeyErr } = await supabase.from("office_journey").insert({ office_id: officeId, journey_stage_id: firstStage.id });
+        if (journeyErr) console.error('[PIPERUN-WEBHOOK] Journey insert error:', journeyErr.message);
+        else console.log('[PIPERUN-WEBHOOK] Journey stage set');
       }
-      await supabase.functions.invoke('calculate-health-score', { body: { office_id: officeId } }).catch(() => {});
+      try {
+        await supabase.functions.invoke('calculate-health-score', { body: { office_id: officeId } });
+      } catch (e: any) { console.log('[PIPERUN-WEBHOOK] Health score calc failed:', e.message); }
     } catch (e) { console.error('[PIPERUN-WEBHOOK] Automation error:', e); }
   }
 
   // Audit log
-  await supabase.from("audit_logs").insert({
+  const { error: auditErr } = await supabase.from("audit_logs").insert({
     user_id: userId,
     entity_type: "office",
     entity_id: officeId,
     action: "piperun_contract_signed_import",
     details: { deal_id: dealId, product_id: resolvedProductId },
-  }).catch(() => {});
+  });
+  if (auditErr) console.error('[PIPERUN-WEBHOOK] Audit log error:', auditErr.message);
 
   return { office_id: officeId };
 }
@@ -395,14 +412,28 @@ Deno.serve(async (req) => {
 
     // Update webhook log as processed
     if (webhookLogId) {
-      await supabase.from('webhook_logs').update({ processed: true, error: null }).eq('id', webhookLogId);
+      const { error: logUpErr } = await supabase.from('webhook_logs').update({ processed: true, error: null }).eq('id', webhookLogId);
+      if (logUpErr) console.error('[PIPERUN-WEBHOOK] webhook_logs update error:', logUpErr.message);
+    }
+
+    // Trigger automations (non-blocking)
+    try {
+      await supabase.functions.invoke('execute-automations', {
+        body: { action: 'triggerV2', trigger_type: 'office.registered', office_id: result.office_id },
+      });
+      await supabase.functions.invoke('execute-automations', {
+        body: { action: 'triggerV2', trigger_type: 'office.imported_piperun', office_id: result.office_id },
+      });
+      console.log('[PIPERUN-WEBHOOK] Automations triggered for office:', result.office_id);
+    } catch (autoErr: any) {
+      console.error('[PIPERUN-WEBHOOK] Automation trigger failed:', autoErr?.message);
     }
 
     // Update last webhook timestamp in settings
-    await supabase.from('integration_settings')
+    const { error: settingsErr } = await supabase.from('integration_settings')
       .update({ config: { ...config, last_webhook_at: new Date().toISOString() } })
-      .eq('provider', 'piperun')
-      .catch(() => {});
+      .eq('provider', 'piperun');
+    if (settingsErr) console.error('[PIPERUN-WEBHOOK] Settings update error:', settingsErr.message);
 
     console.log('[PIPERUN-WEBHOOK] Contrato assinado — escritório criado:', result.office_id);
     return jsonResponse({ success: true, office_id: result.office_id });

@@ -204,9 +204,8 @@ async function processAndCreateOffice(
     contractFields.product_id = resolvedProductId || officeFields.active_product_id;
     if (contractFields.product_id) {
       contractFields.status = contractFields.status || 'pendente';
-      await supabase.from("contracts").insert(contractFields).catch((e: any) => {
-        console.error(`[PIPERUN] Contract insert failed for deal ${dealId}:`, e);
-      });
+      const { error: contractErr } = await supabase.from("contracts").insert(contractFields);
+      if (contractErr) console.error(`[PIPERUN] Contract insert failed for deal ${dealId}:`, contractErr.message);
     }
   }
 
@@ -217,9 +216,8 @@ async function processAndCreateOffice(
     if (cFields && Object.keys(cFields).length > 0 && cFields.name) {
       cFields.office_id = officeId;
       cFields.is_main_contact = i === 0;
-      await supabase.from("contacts").insert(cFields).catch((e: any) => {
-        console.error(`[PIPERUN] Contact insert failed for deal ${dealId}:`, e);
-      });
+      const { error: contactErr } = await supabase.from("contacts").insert(cFields);
+      if (contactErr) console.error(`[PIPERUN] Contact insert failed for deal ${dealId}:`, contactErr.message);
     }
   }
 
@@ -250,13 +248,14 @@ async function processAndCreateOffice(
   }
 
   // Audit log
-  await supabase.from("audit_logs").insert({
+  const { error: auditErr } = await supabase.from("audit_logs").insert({
     user_id: userId,
     entity_type: "office",
     entity_id: officeId,
     action: "piperun_contract_signed_import",
     details: { deal_id: dealId, product_id: resolvedProductId },
-  }).catch(() => {});
+  });
+  if (auditErr) console.error(`[PIPERUN] Audit log error:`, auditErr.message);
 
   return { office_id: officeId, warnings };
 }
