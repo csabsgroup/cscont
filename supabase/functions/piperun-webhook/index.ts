@@ -341,7 +341,7 @@ Deno.serve(async (req) => {
     let companyData = deal.company || deal.person?.company;
     if (!companyData && deal.company_id) {
       try {
-        const res = await piperunGet(`/companies/${deal.company_id}`, token);
+        const res = await piperunGet(`/companies/${deal.company_id}?with=city,address,contact_phones,contact_emails,segment`, token);
         companyData = res.data || res;
       } catch (e) { /* ok */ }
     }
@@ -349,7 +349,7 @@ Deno.serve(async (req) => {
     let personData = deal.person;
     if (!personData && deal.person_id) {
       try {
-        const res = await piperunGet(`/persons/${deal.person_id}`, token);
+        const res = await piperunGet(`/persons/${deal.person_id}?with=city,address,contact_phones,contact_emails`, token);
         personData = res.data || res;
       } catch (e) { /* ok */ }
     }

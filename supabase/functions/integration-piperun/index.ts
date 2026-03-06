@@ -299,7 +299,7 @@ async function fetchFullSourceData(dealId: number | string, token: string): Prom
   const companyId = dealData.company_id || dealData.company?.id;
   if (companyId) {
     try {
-      const companyRes = await piperunGet(`/companies/${companyId}`, token);
+      const companyRes = await piperunGet(`/companies/${companyId}?with=city,address,contact_phones,contact_emails,segment`, token);
       companyData = companyRes.data || companyRes;
       console.log('[PIPERUN] Full company fetched:', companyData?.name, 'city:', companyData?.city?.name);
     } catch (e) {
@@ -315,7 +315,7 @@ async function fetchFullSourceData(dealId: number | string, token: string): Prom
   const personId = dealData.person_id || dealData.person?.id;
   if (personId) {
     try {
-      const personRes = await piperunGet(`/persons/${personId}`, token);
+      const personRes = await piperunGet(`/persons/${personId}?with=city,address,contact_phones,contact_emails`, token);
       personData = personRes.data || personRes;
       console.log('[PIPERUN] Full person fetched:', personData?.name, 'emails:', personData?.contact_emails?.length);
     } catch (e) {
