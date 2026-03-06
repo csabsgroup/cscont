@@ -5,6 +5,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Pencil, Check, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { format, parseISO } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 interface InlineEditFieldProps {
   value: string | number | null;
@@ -24,6 +26,11 @@ function formatCurrency(v: number | null): string {
 function formatDisplay(value: string | number | null, fieldType: string): string {
   if (value === null || value === undefined || value === '') return '—';
   if (fieldType === 'currency') return formatCurrency(Number(value));
+  if (fieldType === 'date' && typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+    try {
+      return format(parseISO(value.slice(0, 10)), 'dd/MM/yyyy', { locale: ptBR });
+    } catch { return String(value); }
+  }
   return String(value);
 }
 
