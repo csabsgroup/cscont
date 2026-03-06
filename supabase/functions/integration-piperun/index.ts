@@ -204,8 +204,36 @@ async function processAndCreateOffice(
     contractFields.product_id = resolvedProductId || officeFields.active_product_id;
     if (contractFields.product_id) {
       contractFields.status = contractFields.status || 'pendente';
+      // Auto-calculate end_date if missing
+      if (!contractFields.end_date && contractFields.start_date) {
+        const sd = new Date(contractFields.start_date);
+        sd.setMonth(sd.getMonth() + 12);
+        contractFields.end_date = sd.toISOString().split('T')[0];
+      }
       const { error: contractErr } = await supabase.from("contracts").insert(contractFields);
       if (contractErr) console.error(`[PIPERUN] Contract insert failed for deal ${dealId}:`, contractErr.message);
+      
+      // Process cycle dates and MRR on the office
+      const cycleUpdate: Record<string, any> = {};
+      if (contractFields.start_date) {
+        cycleUpdate.cycle_start_date = contractFields.start_date;
+        const cycleEnd = new Date(contractFields.start_date);
+        cycleEnd.setMonth(cycleEnd.getMonth() + 12);
+        cycleUpdate.cycle_end_date = cycleEnd.toISOString().split('T')[0];
+      }
+      // Set activation_date only if not set
+      if (!officeFields.activation_date && contractFields.start_date) {
+        cycleUpdate.activation_date = contractFields.start_date;
+      }
+      // Calculate MRR
+      const mrr = contractFields.monthly_value && contractFields.monthly_value > 0
+        ? contractFields.monthly_value
+        : (contractFields.value ? contractFields.value / 12 : 0);
+      cycleUpdate.mrr = mrr;
+      
+      if (Object.keys(cycleUpdate).length > 0) {
+        await supabase.from("offices").update(cycleUpdate).eq("id", officeId);
+      }
     }
   }
 
