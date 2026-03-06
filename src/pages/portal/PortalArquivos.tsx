@@ -2,8 +2,16 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { usePortal } from '@/contexts/PortalContext';
 import { Card, CardContent } from '@/components/ui/card';
-import { Loader2, FileText, ExternalLink } from 'lucide-react';
+import { Loader2, FileText, ExternalLink, File, Image, FileSpreadsheet } from 'lucide-react';
 import { format } from 'date-fns';
+
+function getFileIcon(type: string | null) {
+  if (!type) return <File className="h-5 w-5 text-muted-foreground" />;
+  if (type.startsWith('image/')) return <Image className="h-5 w-5 text-blue-500" />;
+  if (type.includes('spreadsheet') || type.includes('excel')) return <FileSpreadsheet className="h-5 w-5 text-green-500" />;
+  if (type.includes('pdf')) return <FileText className="h-5 w-5 text-red-500" />;
+  return <File className="h-5 w-5 text-muted-foreground" />;
+}
 
 export default function PortalArquivos() {
   const { officeId } = usePortal();
@@ -13,7 +21,12 @@ export default function PortalArquivos() {
   useEffect(() => {
     if (!officeId) { setLoading(false); return; }
     (async () => {
-      const { data } = await supabase.from('shared_files' as any).select('*').eq('office_id', officeId).eq('shared_with_client', true).order('created_at', { ascending: false });
+      const { data } = await supabase
+        .from('office_files' as any)
+        .select('*')
+        .eq('office_id', officeId)
+        .eq('share_with_client', true)
+        .order('created_at', { ascending: false });
       setFiles(data || []);
       setLoading(false);
     })();
@@ -32,10 +45,10 @@ export default function PortalArquivos() {
       ) : (
         <div className="space-y-2">
           {files.map((f: any) => (
-            <Card key={f.id} className="cursor-pointer hover:shadow-sm transition-shadow" onClick={() => window.open(f.url, '_blank')}>
+            <Card key={f.id} className="cursor-pointer hover:shadow-sm transition-shadow" onClick={() => window.open(f.file_url, '_blank')}>
               <CardContent className="flex items-center justify-between p-4">
                 <div className="flex items-center gap-3">
-                  <FileText className="h-5 w-5 text-muted-foreground" />
+                  {getFileIcon(f.file_type)}
                   <div>
                     <p className="text-sm font-medium">{f.name}</p>
                     <p className="text-xs text-muted-foreground">{format(new Date(f.created_at), 'dd/MM/yyyy')}</p>
