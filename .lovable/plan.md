@@ -1,142 +1,63 @@
 
-Diagnóstico completo (estado atual)
 
-1) Engine de automações
-- Função existente: `supabase/functions/execute-automations/index.ts`.
-- Suporta `action: "triggerV2"` com `{ trigger_type, office_id, context }` (linhas 597-606).
-- Busca `automation_rules_v2` (linhas 422-426), avalia condições (475-496), executa ações (515-523), tenta logar em `automation_logs` (533-537).
-- Problema crítico encontrado: uso inválido de `.catch()` em builders do Supabase (linhas 454, 505, 537, 551). Isso gera:
-  - `TypeError: supabase.from(...).insert(...).catch is not a function`
-  - Abortando execução e impedindo logs/fluxo completo (confirmado nos logs da função).
+# Diagnosis and Fix Plan
 
-2) Chamadas da engine nos fluxos
-- Criação manual (`src/pages/Clientes.tsx`)
-  - INSERT office: linha 528
-  - invoke existente: linha 540
-  - Falta: usa `action: "onNewOffice"` (linha 542) e depende de `product_id`; se nulo, cai em erro de validação no backend.
-- Webhook Piperun (`supabase/functions/piperun-webhook/index.ts`)
-  - INSERT office: linha 160
-  - Falta: não chama `execute-automations triggerV2` após criação.
-  - Além disso, quebra antes por `.catch()` inválido no insert de contrato/contato (linhas 172, 183).
-- Mudança de status (`src/components/clientes/StatusChangeModal.tsx`)
-  - UPDATE status: linha 91
-  - invoke `triggerV2 office.status_changed`: linha 111 (ok).
-- Mudança de etapa
-  - `src/components/clientes/EditOfficeDialog.tsx`: update/insert etapa linhas 114-117, sem invoke de automação.
-  - `src/pages/Jornada.tsx`: update etapa linha 143 + histórico linha 151, sem invoke de automação.
+## Root Causes Found
 
-3) Execução de ações
-- Handler existe e cobre tipos relevantes atuais: `change_csm`, `set_product`, `create_activity`, `send_notification`, `send_email`.
-- Ações configuradas ativas no banco são compatíveis.
-- Problema adicional: condições de regra usam `field: "product_id"` e `field: "days_since_creation"`, mas o resolver não mapeia esses campos corretamente; regra tende a não casar.
+### Problem 1 — Webhook mapping not filling fields
+The webhook_logs table confirms the error: `"supabase.from(...).insert(...).catch is not a function"`. The last two webhooks (March 5 and March 6) both crashed with this error BEFORE reaching office creation. The `.catch()` fix was applied in code but the webhooks arrived before deployment completed. The mapping paths are correct, the company data exists at root level with all expected fields. This problem is already fixed in code — just needs a new webhook to test.
 
-4) Logs
-- Tabela `automation_logs` já existe (não precisa criar).
-- Está vazia porque a engine falha antes/depois de tentar inserir logs (erro `.catch()`).
-- Aba de logs na UI já existe e consulta `automation_logs`; sem dados por falha de execução.
+### Problem 2 — Only 3 of 17 create_activity actions succeeded
+**This is the critical finding.** The `activity_type` database enum has these valid values:
+`task, follow_up, onboarding, renewal, other, ligacao, check_in, email, whatsapp, planejamento`
 
-5) Mapeamento Piperun (Passo 9)
-- `field_mappings_v2` está salvo com campos técnicos corretos (`crm` + `piperun_key`), não labels.
-- `resolveNestedValue` já suporta arrays, `.length` e `fields.find.{id}`.
-- `sourceData` está em formato correto (deal root + company/person/proposals/fields/action).
-- Motivo de “dados faltando” hoje: webhook quebra após criar office por `.catch()` inválido em contrato/contato; por isso `contracts` e `contacts` ficam vazios.
-- Evidência real: office criado com campos principais preenchidos; contratos/contatos inexistentes; `webhook_logs.error` com mesmo TypeError.
+It does NOT include `"meeting"`. The automation rule "[ELT] Delegação automática" has 14 actions with `activity_type: "meeting"` — every one of those fails silently because the INSERT violates the enum constraint. The `handleAction` function doesn't capture the error from `supabase.from("activities").insert(...)`.
 
-Plano de correção (implementação imediata)
+Evidence: automation_logs shows 19 `actions_executed` entries, but only 3 `create_activity` have an `id` (the ones with type "task" or "email"). The other 14 have no `id` — they failed silently.
 
-Passo A — Corrigir crash estrutural (`.catch` inválido)
-- Arquivos:
-  - `supabase/functions/execute-automations/index.ts`
-  - `supabase/functions/piperun-webhook/index.ts`
-  - `supabase/functions/integration-piperun/index.ts`
-- Trocar todos os padrões `await ...insert(...).catch(...)` por tratamento correto:
-  - `const { error } = await ...; if (error) { ... }`
-- Isso sozinho destrava:
-  - execução de regra
-  - gravação de `automation_logs`
-  - criação de `contracts/contacts` no webhook
-  - atualização de `webhook_logs.processed`
+### Problem 3 — Webhook doesn't trigger automations
+Same root cause as Problem 1 — the webhook crashed before reaching the automation invocation lines (419-430). Once the webhook stops crashing, automations will be invoked via `supabase.functions.invoke()`.
 
-Passo B — Fortalecer engine v2 (condições + logs detalhados)
-- Em `execute-automations/index.ts`:
-  - Adicionar logs detalhados por trigger/regra/condição/ação (modelo que você pediu).
-  - Corrigir `resolveConditionValue` para campos que já existem no builder de regras:
-    - `product_id` => `office.active_product_id`
-    - `days_since_creation` => dias desde `office.created_at`
-    - `journey_stage_id` => buscar em `office_journey`
-    - `health_score` / `health_band` => `health_scores`
-  - Garantir que cada regra gera 1 registro em `automation_logs` (sucesso, skip ou erro).
+## Fixes
 
-Passo C — Garantir gatilhos nos fluxos obrigatórios
-- Manual (`Clientes.tsx`):
-  - Após insert (linha 528), disparar `triggerV2` explícito:
-    - `office.registered`
-    - `office.created`
-  - Manter fallback legado (`onNewOffice`) só quando `active_product_id` existir.
-- Webhook (`piperun-webhook/index.ts`):
-  - Após office criado e inserts complementares, disparar:
-    - `office.registered`
-    - `office.imported_piperun`
-  - Não bloquear fluxo principal se automação falhar (try/catch isolado).
-- Status (`StatusChangeModal.tsx`):
-  - Já correto; manter.
-- Etapa:
-  - `EditOfficeDialog.tsx`: após update/insert de etapa, chamar `triggerV2 office.stage_changed`.
-  - `Jornada.tsx`: após mover etapa com sucesso, chamar `triggerV2 office.stage_changed`.
+### Fix A — Add "meeting" to activity_type enum (database migration)
+```sql
+ALTER TYPE activity_type ADD VALUE IF NOT EXISTS 'meeting';
+```
+This is the correct fix because:
+- The automation builder UI offers "meeting" as an option
+- Users have configured rules with this type
+- 14 activities are waiting to be created with this type
 
-Passo D — Ajustes de autenticação para chamada interna (webhook/import)
-- Hoje `execute-automations` exige usuário autenticado.
-- Para chamadas internas (webhook/import backend), permitir execução interna segura:
-  - aceitar token de serviço apenas para ações internas de trigger, sem expor via frontend.
-  - manter validação rígida para chamadas do cliente.
-- Objetivo: webhook conseguir disparar engine v2 sem quebrar segurança.
+### Fix B — Add error handling in handleAction (execute-automations)
+In the `create_activity` case (line 46-47), capture and log the error:
+```javascript
+const { data: act, error: actErr } = await supabase.from("activities").insert(payload).select("id").single();
+if (actErr) {
+  console.error('[AUTOMATIONS] Activity insert error:', actErr.message, 'payload:', JSON.stringify(payload));
+  return { type: "create_activity", error: actErr.message };
+}
+```
+Apply similar error capture to ALL action types that do database inserts (send_notification, add_note, create_action_plan, etc.).
 
-Passo E — Passo 9 (mapeamento + debug operacional)
-- `piperun-webhook/index.ts`:
-  - Logar cada mapeamento aplicado:
-    - `from -> to -> valor`
-    - skips por vazio
-  - Logar `officeData`, `contractData`, `contactData` finais.
-- Corrigir persistência derivada:
-  - garantir insert de contrato/contato após office.
-  - manter match de produto por contains.
-  - manter cálculo de mensalidade quando necessário.
-- Resultado esperado:
-  - office + contract + main contact completos no mesmo processamento.
+### Fix C — Ensure webhook deployment is current
+The piperun-webhook code already has the `.catch()` fix from the previous iteration. Verify the edge function redeploys by checking logs after saving. No code change needed — just confirmation.
 
-Passo F — Logs/UI
-- `automation_logs`: sem migração (já existe).
-- `AutomationRulesTab`:
-  - manter leitura atual e ajustar mensagem vazia para orientação operacional:
-    - “Nenhuma automação foi executada. Verifique se as regras estão ativas e os triggers conectados.”
+### Fix D — Add company fallback in webhook (safety)
+In `piperun-webhook/index.ts` line 341, add fallback to `person.company`:
+```javascript
+let companyData = deal.company || deal.person?.company;
+```
+This handles edge cases where the Piperun payload structure varies.
 
-Validação pós-correção (E2E)
-1. Reprocessar fluxo manual:
-- criar office manualmente com produto.
-- confirmar:
-  - `automation_logs` com `trigger_type=office.registered/office.created`
-  - atividades criadas
-  - CSM atribuído (se regra aplicar)
+## Files Modified
+- `supabase/functions/execute-automations/index.ts` — error handling in handleAction
+- `supabase/functions/piperun-webhook/index.ts` — company fallback
+- Database migration: add `meeting` to `activity_type` enum
 
-2. Reprocessar webhook:
-- reenviar payload do Piperun.
-- confirmar:
-  - office criado com campos
-  - contrato e contato criados
-  - `automation_logs` com `office.imported_piperun`/`office.registered`
-  - `webhook_logs.processed=true`
+## Expected Result After Fix
+- All 17 `create_activity` actions succeed (activities created with correct types)
+- Webhook creates office with all mapped fields populated
+- Webhook triggers automations that execute all 19 actions
+- automation_logs show complete execution with all action IDs
 
-3. Etapa/status:
-- mudar status e etapa.
-- confirmar novos logs `office.status_changed` e `office.stage_changed`.
-
-Resumo do que está faltando por passo (objetivo)
-- Passo 1: existe, mas quebrado por `.catch` inválido + resolver de condição incompleto.
-- Passo 2: manual/status ok parcial; webhook e etapa estão sem trigger v2.
-- Passo 3: executor existe; falha operacional impede efeito.
-- Passo 4: logs detalhados insuficientes.
-- Passo 5: estrutura existe, mas insert de log quebra no runtime.
-- Passo 6: tabela já existe; não criar novamente.
-- Passo 7: tela existe; está vazia por falha backend.
-- Passo 8: precisa reteste E2E após correções.
-- Passo 9: mapeamento técnico está correto; quebra de contrato/contato é erro de runtime, não de path/config.
