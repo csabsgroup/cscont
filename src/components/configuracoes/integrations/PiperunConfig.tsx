@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Loader2, CheckCircle2, XCircle, Download, ArrowRight, Plus, Trash2, RotateCcw, Search, Zap, Copy, Webhook, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -130,6 +131,7 @@ export function PiperunConfig({ setting, onSave }: Props) {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewDeals, setPreviewDeals] = useState<PreviewDeal[]>([]);
   const [previewAlreadyImported, setPreviewAlreadyImported] = useState(0);
+  const [selectedDealIds, setSelectedDealIds] = useState<Set<number>>(new Set());
 
   // Webhook logs state
   const [webhookLogs, setWebhookLogs] = useState<WebhookLog[]>([]);
@@ -213,8 +215,10 @@ export function PiperunConfig({ setting, onSave }: Props) {
       const { data } = await supabase.functions.invoke('integration-piperun', {
         body: { action: 'previewDeals', pipeline_id: pipelineId, stage_id: stageId },
       });
-      setPreviewDeals(data?.deals || []);
+      const deals = data?.deals || [];
+      setPreviewDeals(deals);
       setPreviewAlreadyImported(data?.already_imported || 0);
+      setSelectedDealIds(new Set(deals.map((d: PreviewDeal) => d.id)));
     } catch (e: any) { toast.error('Erro ao buscar deals: ' + e.message); }
     setPreviewLoading(false);
   };
@@ -224,8 +228,9 @@ export function PiperunConfig({ setting, onSave }: Props) {
     setPreviewOpen(false);
     try {
       const fieldMappings = mappings.filter(m => m.crm && m.piperun_key).map(m => ({ piperun: m.piperun_key, local: m.crm }));
+      const dealIds = Array.from(selectedDealIds).map(String);
       const { data } = await supabase.functions.invoke('integration-piperun', {
-        body: { action: 'importDeals', pipeline_id: pipelineId, stage_id: stageId, field_mappings: fieldMappings },
+        body: { action: 'importDeals', pipeline_id: pipelineId, stage_id: stageId, field_mappings: fieldMappings, deal_ids: dealIds },
       });
       setImportResult(data);
       toast.success(`${data.imported} novos clientes importados, ${data.skipped} já existiam`);
@@ -506,15 +511,30 @@ export function PiperunConfig({ setting, onSave }: Props) {
             </div>
           ) : (
             <>
-              <div className="text-sm text-muted-foreground">
-                {previewDeals.length} elegíveis para importação
-                {previewAlreadyImported > 0 && `, ${previewAlreadyImported} já importados`}
+              <div className="flex items-center justify-between text-sm text-muted-foreground">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      checked={selectedDealIds.size === previewDeals.length && previewDeals.length > 0}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setSelectedDealIds(new Set(previewDeals.map(d => d.id)));
+                        } else {
+                          setSelectedDealIds(new Set());
+                        }
+                      }}
+                    />
+                    <span>Selecionar todos</span>
+                  </div>
+                </div>
+                <span>{selectedDealIds.size} selecionado(s) de {previewDeals.length} elegíveis</span>
               </div>
               {previewDeals.length > 0 ? (
                 <div className="max-h-[300px] overflow-y-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-[40px]"></TableHead>
                         <TableHead>Deal</TableHead>
                         <TableHead>Empresa</TableHead>
                         <TableHead>Valor</TableHead>
@@ -524,6 +544,19 @@ export function PiperunConfig({ setting, onSave }: Props) {
                     <TableBody>
                       {previewDeals.map(d => (
                         <TableRow key={d.id}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedDealIds.has(d.id)}
+                              onCheckedChange={(checked) => {
+                                setSelectedDealIds(prev => {
+                                  const next = new Set(prev);
+                                  if (checked) next.add(d.id);
+                                  else next.delete(d.id);
+                                  return next;
+                                });
+                              }}
+                            />
+                          </TableCell>
                           <TableCell className="font-medium">{d.title}</TableCell>
                           <TableCell>{d.company_name}</TableCell>
                           <TableCell>{d.value ? `R$ ${Number(d.value).toLocaleString('pt-BR')}` : '—'}</TableCell>
@@ -540,9 +573,9 @@ export function PiperunConfig({ setting, onSave }: Props) {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setPreviewOpen(false)}>Cancelar</Button>
-            <Button onClick={confirmImport} disabled={previewDeals.length === 0 || previewLoading}>
+            <Button onClick={confirmImport} disabled={selectedDealIds.size === 0 || previewLoading}>
               <Download className="mr-2 h-4 w-4" />
-              Confirmar importação ({previewDeals.length})
+              Importar {selectedDealIds.size} selecionado(s)
             </Button>
           </DialogFooter>
         </DialogContent>
