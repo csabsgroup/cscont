@@ -114,6 +114,7 @@ export function ClienteHeader({
 
   const activeContract = contracts?.find((c: any) => c.status === 'ativo');
   const ltv = contracts?.reduce((sum: number, c: any) => sum + (c.value || 0), 0) || 0;
+  const officeMrr = Number(office.faturamento_mensal) || (activeContract?.monthly_value || 0);
   const overdueInstallments = activeContract?.installments_overdue || 0;
   const renewalDays = office.cycle_end_date ? differenceInDays(new Date(office.cycle_end_date), new Date()) : null;
 
@@ -132,7 +133,10 @@ export function ClienteHeader({
     { key: 'header_renewal_days', label: 'Renovação', getValue: () => renewalDays !== null ? `${renewalDays}d` : null },
     { key: 'header_overdue', label: 'Vencidas', getValue: () => overdueInstallments > 0 ? String(overdueInstallments) : null },
     { key: 'header_ltv', label: 'LTV', getValue: () => ltv > 0 ? `R$ ${ltv.toLocaleString('pt-BR')}` : null },
-    { key: 'header_revenue', label: 'MRR', getValue: () => office.faturamento_mensal ? `R$ ${office.faturamento_mensal.toLocaleString('pt-BR')}` : null },
+    { key: 'header_revenue', label: 'MRR', getValue: () => {
+      const mrr = Number((office as any).mrr) || 0;
+      return mrr > 0 ? `R$ ${mrr.toLocaleString('pt-BR')}` : null;
+    }},
     { key: 'header_city_state', label: 'Local', getValue: () => [office.city, office.state].filter(Boolean).join('/') || null },
     { key: 'header_cnpj', label: 'CNPJ', getValue: () => office.cnpj || null },
     { key: 'header_whatsapp', label: 'WhatsApp', getValue: () => office.whatsapp || null },

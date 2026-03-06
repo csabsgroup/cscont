@@ -8,6 +8,9 @@ import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { CustomFieldsDisplay } from './CustomFieldsDisplay';
 import { StatusDropdown } from './StatusDropdown';
+import { InlineEditField } from '@/components/shared/InlineEditField';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface Props {
   office: any;
@@ -21,10 +24,12 @@ interface Props {
   onNavigateTab: (tab: string) => void;
   onStatusSelect?: (newStatus: string) => void;
   canEditStatus?: boolean;
+  onRefresh?: () => void;
+  readOnly?: boolean;
 }
 
 export function ClienteVisao360({
-  office, health, contracts, meetings, actionPlans, csmProfile, stageName, contacts, onNavigateTab, onStatusSelect, canEditStatus,
+  office, health, contracts, meetings, actionPlans, csmProfile, stageName, contacts, onNavigateTab, onStatusSelect, canEditStatus, onRefresh, readOnly,
 }: Props) {
   const [showMore, setShowMore] = useState(false);
 
@@ -41,30 +46,33 @@ export function ClienteVisao360({
   const totalPlans = actionPlans.length;
   const donePlans = actionPlans.filter(p => p.status === 'done').length;
   const okrPercent = totalPlans > 0 ? Math.round((donePlans / totalPlans) * 100) : 0;
-  const monthsAsClient = office.onboarding_date ? differenceInMonths(new Date(), new Date(office.onboarding_date)) : null;
   const ltv = contracts.reduce((sum: number, c: any) => sum + (c.value || 0), 0);
   const overdueInstallments = activeContract?.installments_overdue || 0;
   const overdueValue = overdueInstallments * (activeContract?.monthly_value || 0);
   const mainContact = contacts.find((c: any) => c.is_main_contact) || contacts[0];
 
-  const renewalColor = daysToRenewal === null ? 'text-muted-foreground' : daysToRenewal < 30 ? 'text-red-600' : daysToRenewal < 60 ? 'text-yellow-600' : 'text-green-600';
+  const diasRenovacao = office.cycle_end_date
+    ? differenceInDays(new Date(office.cycle_end_date), new Date())
+    : daysToRenewal;
+
+  const renewalColor = diasRenovacao === null ? 'text-muted-foreground' : diasRenovacao < 30 ? 'text-red-600' : diasRenovacao < 60 ? 'text-yellow-600' : 'text-green-600';
   const healthColor = !health ? 'text-muted-foreground' : health.band === 'green' ? 'text-green-600' : health.band === 'yellow' ? 'text-yellow-600' : 'text-red-600';
 
-  const statusLabels: Record<string, string> = {
-    ativo: 'Ativo', churn: 'Churn', nao_renovado: 'Não Renovado',
-    nao_iniciado: 'Não Iniciado', upsell: 'Upsell', bonus_elite: 'Bônus Elite', pausado: 'Pausado',
-  };
+  const saveField = async (column: string, value: string | number | null) => {
+    const updateData: Record<string, any> = { [column]: value };
 
-  const infoFields = [
-    { label: 'Status', value: null, isStatus: true },
-    { label: 'CSM', value: csmProfile?.full_name || '—' },
-    { label: 'Etapa Jornada', value: stageName || '—' },
-    { label: 'Produto', value: office.products?.name || '—' },
-    { label: 'Cidade/Estado', value: [office.city, office.state].filter(Boolean).join('/') || '—' },
-    { label: 'Contato Principal', value: mainContact?.name || '—' },
-    { label: 'Data Ativação', value: office.activation_date ? format(new Date(office.activation_date), 'dd/MM/yyyy', { locale: ptBR }) : '—' },
-    { label: 'CNPJ', value: office.cnpj || '—' },
-  ];
+    // If cycle_start_date changed, auto-recalculate cycle_end_date
+    if (column === 'cycle_start_date' && value) {
+      const d = new Date(value as string);
+      d.setMonth(d.getMonth() + 12);
+      updateData.cycle_end_date = d.toISOString().split('T')[0];
+    }
+
+    const { error } = await supabase.from('offices').update(updateData).eq('id', office.id);
+    if (error) throw error;
+    toast.success('Campo atualizado!');
+    onRefresh?.();
+  };
 
   const tempoDeVida = office.activation_date
     ? (() => {
@@ -74,23 +82,59 @@ export function ClienteVisao360({
       })()
     : '—';
 
-  const diasRenovacao = office.cycle_end_date
-    ? differenceInDays(new Date(office.cycle_end_date), new Date())
-    : daysToRenewal;
+  // Static info fields (top row)
+  const infoFields: Array<{ label: string; value: string | number | null; isStatus?: boolean; editable?: boolean; column?: string; fieldType?: any; options?: string[] }> = [
+    { label: 'Status', value: null, isStatus: true },
+    { label: 'CSM', value: csmProfile?.full_name || '—' },
+    { label: 'Etapa Jornada', value: stageName || '—' },
+    { label: 'Produto', value: office.products?.name || '—' },
+    { label: 'Cidade', value: office.city || '—', editable: true, column: 'city', fieldType: 'text' },
+    { label: 'Estado', value: office.state || '—', editable: true, column: 'state', fieldType: 'text' },
+    { label: 'Contato Principal', value: mainContact?.name || '—' },
+    { label: 'Data Ativação', value: office.activation_date ? format(new Date(office.activation_date), 'dd/MM/yyyy', { locale: ptBR }) : '—' },
+  ];
 
-  const extraFields = [
-    { label: 'Email', value: office.email || '—' },
-    { label: 'Telefone', value: office.phone || '—' },
-    { label: 'Instagram', value: office.instagram || '—' },
-    { label: 'Onboarding', value: office.onboarding_date ? format(new Date(office.onboarding_date), 'dd/MM/yyyy', { locale: ptBR }) : '—' },
-    { label: 'Início do Ciclo', value: office.cycle_start_date ? format(new Date(office.cycle_start_date), 'dd/MM/yyyy', { locale: ptBR }) : '—' },
+  // Extra fields (expandable)
+  const extraFields: Array<{ label: string; value: string | number | null; editable?: boolean; column?: string; fieldType?: any; options?: string[] }> = [
+    { label: 'Email', value: office.email, editable: true, column: 'email', fieldType: 'email' },
+    { label: 'WhatsApp', value: office.whatsapp, editable: true, column: 'whatsapp', fieldType: 'phone' },
+    { label: 'CNPJ', value: office.cnpj, editable: true, column: 'cnpj', fieldType: 'text' },
+    { label: 'Faturamento Mensal', value: office.faturamento_mensal, editable: true, column: 'faturamento_mensal', fieldType: 'currency' },
+    { label: 'Faturamento Anual', value: office.faturamento_anual, editable: true, column: 'faturamento_anual', fieldType: 'currency' },
+    { label: 'Qtd Clientes', value: office.qtd_clientes, editable: true, column: 'qtd_clientes', fieldType: 'number' },
+    { label: 'Qtd Colaboradores', value: office.qtd_colaboradores, editable: true, column: 'qtd_colaboradores', fieldType: 'number' },
+    { label: 'CS Feeling', value: office.cs_feeling, editable: true, column: 'cs_feeling', fieldType: 'dropdown', options: ['Muito bom', 'Bom', 'Regular', 'Ruim', 'Muito ruim'] },
+    { label: 'Segmento', value: office.segment, editable: true, column: 'segment', fieldType: 'text' },
+    { label: 'Início do Ciclo', value: office.cycle_start_date, editable: true, column: 'cycle_start_date', fieldType: 'date' },
     { label: 'Fim do Ciclo', value: office.cycle_end_date ? format(new Date(office.cycle_end_date), 'dd/MM/yyyy', { locale: ptBR }) : '—' },
     { label: 'Data Churn', value: office.churn_date ? format(new Date(office.churn_date), 'dd/MM/yyyy', { locale: ptBR }) : '—' },
     { label: 'Tempo de Vida', value: tempoDeVida },
     { label: 'Ciclos', value: String(contracts.length) },
     { label: 'LTV', value: `R$ ${ltv.toLocaleString('pt-BR')}` },
-    { label: 'MRR', value: activeContract?.monthly_value ? `R$ ${activeContract.monthly_value.toLocaleString('pt-BR')}` : '—' },
+    { label: 'MRR', value: office.mrr ? `R$ ${Number(office.mrr).toLocaleString('pt-BR')}` : '—' },
   ];
+
+  const renderField = (f: typeof infoFields[0], i: number) => (
+    <Card key={i} className="p-3">
+      <div className="text-[10px] text-muted-foreground uppercase font-medium tracking-wider">{f.label}</div>
+      <div className="mt-0.5">
+        {f.isStatus && onStatusSelect ? (
+          <StatusDropdown status={office.status} onStatusSelect={onStatusSelect} readonly={!canEditStatus} />
+        ) : f.editable && f.column ? (
+          <InlineEditField
+            value={f.value}
+            fieldType={f.fieldType || 'text'}
+            label={f.label}
+            readOnly={!!readOnly}
+            options={f.options}
+            onSave={(v) => saveField(f.column!, v)}
+          />
+        ) : (
+          <div className="text-sm font-semibold text-foreground truncate">{f.value != null ? String(f.value) : '—'}</div>
+        )}
+      </div>
+    </Card>
+  );
 
   const indicators = [
     {
@@ -133,36 +177,14 @@ export function ClienteVisao360({
       {/* Info fields grid */}
       <div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {infoFields.map((f: any, i: number) => (
-            <Card key={i} className="p-3">
-              <div className="text-[10px] text-muted-foreground uppercase font-medium tracking-wider">{f.label}</div>
-              <div className="mt-0.5">
-                {f.isStatus && onStatusSelect ? (
-                  <StatusDropdown status={office.status} onStatusSelect={onStatusSelect} readonly={!canEditStatus} />
-                ) : (
-                  <div className="text-sm font-semibold text-foreground truncate">{f.value}</div>
-                )}
-              </div>
-            </Card>
-          ))}
-          {/* Custom fields (body position) */}
+          {infoFields.map(renderField)}
           <CustomFieldsDisplay officeId={office.id} productId={office.active_product_id} position="body" />
         </div>
 
         {/* Expandable extra fields */}
-        <div
-          className={cn(
-            'overflow-hidden transition-all duration-300 ease-in-out',
-            showMore ? 'max-h-[500px] opacity-100 mt-3' : 'max-h-0 opacity-0'
-          )}
-        >
+        <div className={cn('overflow-hidden transition-all duration-300 ease-in-out', showMore ? 'max-h-[800px] opacity-100 mt-3' : 'max-h-0 opacity-0')}>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {extraFields.map((f, i) => (
-              <Card key={i} className="p-3">
-                <div className="text-[10px] text-muted-foreground uppercase font-medium tracking-wider">{f.label}</div>
-                <div className="text-sm font-semibold text-foreground mt-0.5 truncate">{f.value}</div>
-              </Card>
-            ))}
+            {extraFields.map(renderField)}
           </div>
         </div>
 
@@ -191,10 +213,7 @@ export function ClienteVisao360({
                 </div>
                 <div className={cn('text-4xl font-bold mt-2', ind.color)}>{ind.value}</div>
                 {ind.sub && <div className="text-xs text-muted-foreground mt-1">{ind.sub}</div>}
-                <button
-                  onClick={ind.onClick}
-                  className="text-[10px] text-red-600 uppercase font-medium mt-2 hover:underline text-left"
-                >
+                <button onClick={ind.onClick} className="text-[10px] text-primary uppercase font-medium mt-2 hover:underline text-left">
                   {ind.detail}
                 </button>
               </Card>

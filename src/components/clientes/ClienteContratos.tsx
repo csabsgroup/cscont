@@ -18,6 +18,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { Database } from '@/integrations/supabase/types';
+import { processContractDates } from '@/lib/mrr-helpers';
 
 type ContractStatus = Database['public']['Enums']['contract_status'];
 
@@ -104,23 +105,13 @@ export function ClienteContratos({ officeId, contracts, onRefresh }: Props) {
         });
       } catch (autoErr) { console.error('Automation trigger failed:', autoErr); }
       
-      // Auto-fill cycle dates on the office
-      const officeUpdate: Record<string, any> = {};
-      if (form.start_date) officeUpdate.cycle_start_date = form.start_date;
-      if (form.end_date) officeUpdate.cycle_end_date = form.end_date;
-      
-      // If this is the first contract, also set activation_date
-      if (contracts.length === 0 && form.start_date) {
-        // Check if activation_date is already set
-        const { data: officeData } = await supabase.from('offices').select('activation_date').eq('id', officeId).single();
-        if (officeData && !officeData.activation_date) {
-          officeUpdate.activation_date = form.start_date;
-        }
-      }
-      
-      if (Object.keys(officeUpdate).length > 0) {
-        await supabase.from('offices').update(officeUpdate).eq('id', officeId);
-      }
+      // Process cycle dates, activation_date, and MRR
+      await processContractDates(officeId, {
+        start_date: form.start_date || null,
+        end_date: form.end_date || null,
+        monthly_value: form.monthly_value ? Number(form.monthly_value) : null,
+        value: form.value ? Number(form.value) : null,
+      });
       
       setOpen(false);
       setForm(emptyForm);
