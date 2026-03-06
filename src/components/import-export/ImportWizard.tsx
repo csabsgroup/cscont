@@ -493,35 +493,138 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
           </div>
         )}
 
-        {step === 'execute' && result && (
-          <div className="space-y-4 text-center py-4">
-            <CheckCircle2 className="h-12 w-12 mx-auto text-green-500" />
-            <h3 className="text-lg font-semibold">Importação concluída</h3>
-            <div className="flex justify-center gap-4 text-sm">
-              <span className="text-green-600">{result.success} importados</span>
-              {result.errors > 0 && <span className="text-destructive">{result.errors} erros</span>}
-              {result.skipped > 0 && <span className="text-muted-foreground">{result.skipped} ignorados</span>}
-            </div>
-            {result.warnings && result.warnings.length > 0 && (
-              <ScrollArea className="h-32 border rounded-lg p-3 text-left">
-                <div className="space-y-1">
-                  {result.warnings.map((w, i) => (
-                    <p key={i} className="text-xs text-warning">⚠️ {w}</p>
-                  ))}
-                </div>
-              </ScrollArea>
-            )}
-            <div className="flex justify-center gap-3">
-              {result.batchId && (
-                <Button variant="outline" onClick={handleUndoImport} disabled={importing} className="gap-1.5">
-                  {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Undo2 className="h-4 w-4" />}
-                  Desfazer importação
-                </Button>
+        {step === 'execute' && result && (() => {
+          const rowResults = result.rowResults || [];
+          const errorRows = rowResults.filter(r => r.status === 'error');
+          const warningRows = rowResults.filter(r => r.status === 'warning');
+          const errorGroups = groupErrorsByType(rowResults);
+          const hasErrors = result.errors > 0;
+          const hasProblems = errorRows.length > 0 || warningRows.length > 0;
+
+          return (
+            <div className="space-y-5 py-4">
+              {/* Header icon */}
+              <div className="text-center">
+                {hasErrors ? (
+                  <XCircle className="h-12 w-12 mx-auto text-destructive" />
+                ) : (
+                  <CheckCircle2 className="h-12 w-12 mx-auto text-success" />
+                )}
+                <h3 className="text-lg font-semibold mt-2">
+                  {result.success === 0 ? 'Importação falhou' : hasErrors ? 'Importação parcial' : 'Importação concluída'}
+                </h3>
+              </div>
+
+              {/* Counters */}
+              <div className="flex justify-center gap-4 text-sm">
+                {result.success > 0 && (
+                  <span className="flex items-center gap-1 text-success">
+                    <CheckCircle2 className="h-4 w-4" />{result.success} importados
+                  </span>
+                )}
+                {warningRows.length > 0 && (
+                  <span className="flex items-center gap-1 text-warning">
+                    <AlertTriangle className="h-4 w-4" />{warningRows.length} com avisos
+                  </span>
+                )}
+                {errorRows.length > 0 && (
+                  <span className="flex items-center gap-1 text-destructive">
+                    <AlertCircle className="h-4 w-4" />{errorRows.length} com erro
+                  </span>
+                )}
+              </div>
+
+              {/* Error details collapsible */}
+              {errorRows.length > 0 && (
+                <Collapsible defaultOpen={errorRows.length <= 20}>
+                  <CollapsibleTrigger className="flex items-center gap-2 w-full text-sm font-medium text-destructive hover:underline">
+                    <ChevronDown className="h-4 w-4" />
+                    Detalhes dos erros ({errorRows.length} linhas)
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <ScrollArea className="h-48 border border-destructive/20 rounded-lg p-3 mt-2">
+                      <div className="space-y-3">
+                        {errorRows.slice(0, 100).map((r, i) => (
+                          <div key={i} className="text-left">
+                            <p className="text-xs font-medium text-foreground">
+                              Linha {r.lineNumber} — "{r.officeName}"
+                            </p>
+                            {r.errors.map((err, j) => (
+                              <p key={j} className="text-xs text-destructive ml-3">├─ ❌ {err}</p>
+                            ))}
+                          </div>
+                        ))}
+                        {errorRows.length > 100 && (
+                          <p className="text-xs text-muted-foreground">...e mais {errorRows.length - 100} linhas com erro</p>
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </CollapsibleContent>
+                </Collapsible>
               )}
-              <Button onClick={() => { reset(); onOpenChange(false); }}>Fechar</Button>
+
+              {/* Warnings collapsible */}
+              {warningRows.length > 0 && (
+                <Collapsible>
+                  <CollapsibleTrigger className="flex items-center gap-2 w-full text-sm font-medium text-warning hover:underline">
+                    <ChevronDown className="h-4 w-4" />
+                    Avisos ({warningRows.length} linhas)
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <ScrollArea className="h-36 border border-warning/20 rounded-lg p-3 mt-2">
+                      <div className="space-y-3">
+                        {warningRows.slice(0, 50).map((r, i) => (
+                          <div key={i} className="text-left">
+                            <p className="text-xs font-medium text-foreground">
+                              Linha {r.lineNumber} — "{r.officeName}"
+                            </p>
+                            {r.warnings.map((w, j) => (
+                              <p key={j} className="text-xs text-warning ml-3">├─ ⚠️ {w}</p>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+
+              {/* Error summary by type */}
+              {Object.keys(errorGroups).length > 0 && (
+                <div className="border rounded-lg p-3 bg-muted/30">
+                  <p className="text-xs font-semibold text-foreground mb-2">Resumo por tipo de erro</p>
+                  <div className="space-y-1">
+                    {Object.entries(errorGroups).sort((a, b) => b[1] - a[1]).map(([type, count]) => (
+                      <div key={type} className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">{type}</span>
+                        <Badge variant="destructive" className="text-[10px] h-4">{count}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex flex-wrap justify-center gap-3">
+                {hasProblems && (
+                  <Button variant="outline" size="sm" onClick={() => exportErrorsCSV(rowResults)} className="gap-1.5">
+                    <FileDown className="h-4 w-4" />Exportar erros como CSV
+                  </Button>
+                )}
+                {result.batchId && (
+                  <Button variant="outline" size="sm" onClick={handleUndoImport} disabled={importing} className="gap-1.5">
+                    {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Undo2 className="h-4 w-4" />}
+                    Desfazer importação
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" onClick={() => { reset(); }} className="gap-1.5">
+                  <RotateCcw className="h-4 w-4" />Tentar novamente
+                </Button>
+                <Button size="sm" onClick={() => { reset(); onOpenChange(false); }}>Fechar</Button>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </DialogContent>
     </Dialog>
   );
