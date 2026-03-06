@@ -13,12 +13,12 @@ async function fetchProfile(userId: string): Promise<CachedProfile> {
   if (profileCache.has(userId)) return profileCache.get(userId)!;
   if (pendingFetches.has(userId)) return pendingFetches.get(userId)!;
 
-  const promise = supabase
-    .from('profiles')
-    .select('full_name, avatar_url')
-    .eq('id', userId)
-    .single()
-    .then(({ data }) => {
+  const promise = (async () => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('full_name, avatar_url')
+      .eq('id', userId)
+      .single();
       const result: CachedProfile = {
         name: data?.full_name || 'Usuário',
         avatarUrl: data?.avatar_url || null,
