@@ -34,6 +34,7 @@ import PortalContatos from "@/pages/portal/PortalContatos";
 import PortalMembros from "@/pages/portal/PortalMembros";
 import PortalArquivos from "@/pages/portal/PortalArquivos";
 import PortalLogin from "@/pages/portal/PortalLogin";
+import FormPublic from "@/pages/FormPublic";
 
 
 const queryClient = new QueryClient();
@@ -83,6 +84,7 @@ const App = () => (
             <Routes>
             <Route path="/auth" element={<Auth />} />
             <Route path="/portal/login" element={<PortalLogin />} />
+            <Route path="/forms/:formHash" element={<FormPublic />} />
             <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
             <Route path="/clientes/:id" element={<ProtectedRoute><Cliente360 /></ProtectedRoute>} />
