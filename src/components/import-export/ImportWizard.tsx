@@ -119,7 +119,7 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
   const [validCount, setValidCount] = useState(0);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [result, setResult] = useState<{ success: number; errors: number; skipped: number; batchId?: string; warnings?: string[] } | null>(null);
+  const [result, setResult] = useState<{ success: number; errors: number; skipped: number; batchId?: string; warnings?: string[]; rowResults?: ImportRowResult[] } | null>(null);
   const [filteredEmptyCount, setFilteredEmptyCount] = useState(0);
 
   const reset = () => {
