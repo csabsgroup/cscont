@@ -679,8 +679,23 @@ async function insertRow(template: EntityTemplate, row: Record<string, any>, war
     }
     // Lookup CSM by name if csm_email didn't resolve
     if (!csmId && row.csm_name) {
-      const { data } = await supabase.from('profiles').select('id').ilike('full_name', `%${row.csm_name.trim()}%`).maybeSingle();
-      csmId = data?.id || null;
+      const searchName = row.csm_name.trim();
+      // Try exact ilike first
+      const { data } = await supabase.from('profiles').select('id, full_name').ilike('full_name', `%${searchName}%`).maybeSingle();
+      if (data) {
+        csmId = data.id;
+      } else {
+        // Try accent-stripped matching: fetch all profiles and match locally
+        const { data: allProfiles } = await supabase.from('profiles').select('id, full_name');
+        if (allProfiles) {
+          const normalizedSearch = searchName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+          const match = allProfiles.find(p => {
+            const normalizedName = (p.full_name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+            return normalizedName.includes(normalizedSearch) || normalizedSearch.includes(normalizedName);
+          });
+          csmId = match?.id || null;
+        }
+      }
       if (!csmId) {
         warnings.push(`CSM "${row.csm_name}" não encontrado para "${row.name}"`);
       }

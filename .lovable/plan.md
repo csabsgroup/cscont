@@ -1,31 +1,63 @@
 
-# Plan: Fix CSM Assignment, CSM Editability, and Date Formatting
 
-## Issues Found
+# Diagnosis and Fix Plan
 
-1. **CSM not assigned during import** — The CSM lookup (line 682) uses `ilike('%name%')` which works, but the problem is that `csm_id` gets deleted on line 745 when it's `null`. More critically, the lookup may fail due to accent normalization. Also need to verify the column header "CS" maps correctly to `csm_name`.
+## Root Causes Found
 
-2. **CSM field not editable in 360** — Line 88 of `ClienteVisao360.tsx` renders CSM as read-only text. It should be a dropdown of available CSMs, editable by Admin and Manager.
+### Problem 1 — Webhook mapping not filling fields
+The webhook_logs table confirms the error: `"supabase.from(...).insert(...).catch is not a function"`. The last two webhooks (March 5 and March 6) both crashed with this error BEFORE reaching office creation. The `.catch()` fix was applied in code but the webhooks arrived before deployment completed. The mapping paths are correct, the company data exists at root level with all expected fields. This problem is already fixed in code — just needs a new webhook to test.
 
-3. **Date fields inconsistent formatting** — `Início do Ciclo` (line 108) passes raw ISO date `2026-01-01` to `InlineEditField`, which displays it as-is. `Fim do Ciclo` and `Data Churn` use `format()` but aren't editable. The `InlineEditField.formatDisplay` doesn't handle dates — just calls `String(value)`.
+### Problem 2 — Only 3 of 17 create_activity actions succeeded
+**This is the critical finding.** The `activity_type` database enum has these valid values:
+`task, follow_up, onboarding, renewal, other, ligacao, check_in, email, whatsapp, planejamento`
 
-## Changes
+It does NOT include `"meeting"`. The automation rule "[ELT] Delegação automática" has 14 actions with `activity_type: "meeting"` — every one of those fails silently because the INSERT violates the enum constraint. The `handleAction` function doesn't capture the error from `supabase.from("activities").insert(...)`.
 
-### File 1: `src/components/shared/InlineEditField.tsx`
-- Update `formatDisplay` to detect and format date fields: if `fieldType === 'date'` and value looks like ISO (`YYYY-MM-DD`), format as `dd/MM/yyyy`.
+Evidence: automation_logs shows 19 `actions_executed` entries, but only 3 `create_activity` have an `id` (the ones with type "task" or "email"). The other 14 have no `id` — they failed silently.
 
-### File 2: `src/components/clientes/ClienteVisao360.tsx`
-- **Make CSM editable**: Change the CSM field from static text to an editable dropdown. Fetch all CSM profiles (role = csm, manager, admin) on mount. Display as a `dropdown` type `InlineEditField` with `onSave` updating `offices.csm_id`. Only Admin/Manager can edit (controlled by `readOnly` prop).
-- **Fix date display consistency**: For `Fim do Ciclo` and `Data Churn`, make them editable date fields (or at minimum, ensure they show formatted dates). Currently `Data Ativação` (line 94) is formatted but not editable. `Início do Ciclo` (line 108) is editable but raw ISO. Standardize: all date fields that are editable should pass the raw ISO value and let `InlineEditField` handle display formatting. Non-editable date fields should use `format()`.
+### Problem 3 — Webhook doesn't trigger automations
+Same root cause as Problem 1 — the webhook crashed before reaching the automation invocation lines (419-430). Once the webhook stops crashing, automations will be invoked via `supabase.functions.invoke()`.
 
-### File 3: `src/components/import-export/ImportWizard.tsx`
-- **Improve CSM matching**: Add accent-stripping normalization before the `ilike` query. Log when CSM is matched/not matched. Ensure the `csm_name` field correctly receives the "CS" column value.
-- Keep `csm_id` in insertData even when null is removed — the real fix is better matching.
+## Fixes
 
-## Summary
+### Fix A — Add "meeting" to activity_type enum (database migration)
+```sql
+ALTER TYPE activity_type ADD VALUE IF NOT EXISTS 'meeting';
+```
+This is the correct fix because:
+- The automation builder UI offers "meeting" as an option
+- Users have configured rules with this type
+- 14 activities are waiting to be created with this type
 
-| File | Changes |
-|------|---------|
-| `InlineEditField.tsx` | Format dates as `dd/MM/yyyy` in display mode |
-| `ClienteVisao360.tsx` | Make CSM an editable dropdown, standardize all date fields to `dd/MM/yyyy` |
-| `ImportWizard.tsx` | Improve CSM name matching with accent normalization |
+### Fix B — Add error handling in handleAction (execute-automations)
+In the `create_activity` case (line 46-47), capture and log the error:
+```javascript
+const { data: act, error: actErr } = await supabase.from("activities").insert(payload).select("id").single();
+if (actErr) {
+  console.error('[AUTOMATIONS] Activity insert error:', actErr.message, 'payload:', JSON.stringify(payload));
+  return { type: "create_activity", error: actErr.message };
+}
+```
+Apply similar error capture to ALL action types that do database inserts (send_notification, add_note, create_action_plan, etc.).
+
+### Fix C — Ensure webhook deployment is current
+The piperun-webhook code already has the `.catch()` fix from the previous iteration. Verify the edge function redeploys by checking logs after saving. No code change needed — just confirmation.
+
+### Fix D — Add company fallback in webhook (safety)
+In `piperun-webhook/index.ts` line 341, add fallback to `person.company`:
+```javascript
+let companyData = deal.company || deal.person?.company;
+```
+This handles edge cases where the Piperun payload structure varies.
+
+## Files Modified
+- `supabase/functions/execute-automations/index.ts` — error handling in handleAction
+- `supabase/functions/piperun-webhook/index.ts` — company fallback
+- Database migration: add `meeting` to `activity_type` enum
+
+## Expected Result After Fix
+- All 17 `create_activity` actions succeed (activities created with correct types)
+- Webhook creates office with all mapped fields populated
+- Webhook triggers automations that execute all 19 actions
+- automation_logs show complete execution with all action IDs
+
