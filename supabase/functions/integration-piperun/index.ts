@@ -632,6 +632,7 @@ Deno.serve(async (req) => {
             proposals: sampleDeal.proposals || [],
             fields: sampleDeal.fields || [],
             signature: {},
+            action: sampleDeal.action || {},
             action: {},
             deal: { ...sampleDeal, owner: sampleDeal.owner || sampleDeal.user || {}, stage: sampleDeal.stage || {}, pipeline: sampleDeal.pipeline || {} },
             proposal: (sampleDeal.proposals || [])[0] || {},

@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { CheckCircle2, Circle, Calendar, FileText, MoreVertical, RotateCcw, Trash2, Loader2, Plus, X, Filter } from 'lucide-react';
+import { CheckCircle2, Circle, Calendar, FileText, MoreVertical, RotateCcw, Trash2, Loader2, Plus, X, Filter, ArrowUpDown } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -38,6 +38,7 @@ export function ClienteTimeline({ officeId, readOnly = false }: Props) {
   // Filters
   const [filterType, setFilterType] = useState<'all' | 'activity' | 'meeting'>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'done'>('all');
+  const [sortAsc, setSortAsc] = useState(true);
 
   // Detail dialog
   const [detailItem, setDetailItem] = useState<{ type: 'activity' | 'meeting'; data: any } | null>(null);
@@ -90,7 +91,7 @@ export function ClienteTimeline({ officeId, readOnly = false }: Props) {
   ]
     .filter(i => filterType === 'all' || i.type === filterType)
     .filter(i => filterStatus === 'all' || (filterStatus === 'done' ? i.done : !i.done))
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    .sort((a, b) => sortAsc ? new Date(a.date).getTime() - new Date(b.date).getTime() : new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const handleComplete = async (item: any) => {
     if (item.type === 'activity') {
@@ -200,6 +201,10 @@ export function ClienteTimeline({ officeId, readOnly = false }: Props) {
               </div>
             </PopoverContent>
           </Popover>
+          <Button size="sm" variant="outline" onClick={() => setSortAsc(v => !v)} title="Alternar ordenação">
+            <ArrowUpDown className="mr-1 h-4 w-4" />
+            {sortAsc ? '↑ Mais próximas' : '↓ Mais distantes'}
+          </Button>
         </div>
       </div>
 
