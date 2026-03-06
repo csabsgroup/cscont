@@ -294,22 +294,36 @@ async function fetchFullSourceData(dealId: number | string, token: string): Prom
   const fullDealRes = await piperunGet(`/deals/${dealId}?with=person,company,proposals,customFields,stage,pipeline,owner`, token);
   const dealData = fullDealRes.data || fullDealRes;
 
-  // Company
-  let companyData = dealData.company;
-  if (!companyData && dealData.company_id) {
+  // Company — ALWAYS fetch from dedicated endpoint for full nested data
+  let companyData = null;
+  const companyId = dealData.company_id || dealData.company?.id;
+  if (companyId) {
     try {
-      const companyRes = await piperunGet(`/companies/${dealData.company_id}`, token);
+      const companyRes = await piperunGet(`/companies/${companyId}`, token);
       companyData = companyRes.data || companyRes;
-    } catch (e) { console.warn('[PIPERUN] Company fetch failed:', e); }
+      console.log('[PIPERUN] Full company fetched:', companyData?.name, 'city:', companyData?.city?.name);
+    } catch (e) {
+      console.warn('[PIPERUN] Company fetch failed, using shallow:', e);
+      companyData = dealData.company || {};
+    }
+  } else {
+    companyData = dealData.company || {};
   }
 
-  // Person
-  let personData = dealData.person;
-  if (!personData && dealData.person_id) {
+  // Person — ALWAYS fetch from dedicated endpoint for full nested data
+  let personData = null;
+  const personId = dealData.person_id || dealData.person?.id;
+  if (personId) {
     try {
-      const personRes = await piperunGet(`/persons/${dealData.person_id}`, token);
+      const personRes = await piperunGet(`/persons/${personId}`, token);
       personData = personRes.data || personRes;
-    } catch (e) { console.warn('[PIPERUN] Person fetch failed:', e); }
+      console.log('[PIPERUN] Full person fetched:', personData?.name, 'emails:', personData?.contact_emails?.length);
+    } catch (e) {
+      console.warn('[PIPERUN] Person fetch failed, using shallow:', e);
+      personData = dealData.person || {};
+    }
+  } else {
+    personData = dealData.person || {};
   }
 
   // Proposals
