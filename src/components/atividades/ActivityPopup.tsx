@@ -5,7 +5,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { ActivityChecklist } from './ActivityChecklist';
+import { ActivityEditDrawer } from './ActivityEditDrawer';
 import { MoreVertical, CheckCircle2, Pencil, Trash2, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -25,7 +25,7 @@ interface Props {
 
 export function ActivityPopup({ activity, onRefresh, readOnly }: Props) {
   const [completeOpen, setCompleteOpen] = useState(false);
-  const [detailOpen, setDetailOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [observations, setObservations] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -65,12 +65,12 @@ export function ActivityPopup({ activity, onRefresh, readOnly }: Props) {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-7 w-7">
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={e => e.stopPropagation()}>
             <MoreVertical className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => setDetailOpen(true)}>
+        <DropdownMenuContent align="end" onClick={e => e.stopPropagation()}>
+          <DropdownMenuItem onClick={() => setDrawerOpen(true)}>
             <Pencil className="h-4 w-4 mr-2" /> Detalhes
           </DropdownMenuItem>
           {!activity.completed_at ? (
@@ -111,31 +111,14 @@ export function ActivityPopup({ activity, onRefresh, readOnly }: Props) {
         </DialogContent>
       </Dialog>
 
-      {/* Detail dialog with checklist */}
-      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{activity.title}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            {activity.description && (
-              <p className="text-sm text-muted-foreground">{activity.description}</p>
-            )}
-            {activity.observations && (
-              <div>
-                <Label className="text-xs">Observações</Label>
-                <p className="text-sm text-muted-foreground mt-1">{activity.observations}</p>
-              </div>
-            )}
-            <div>
-              <Label className="text-xs">Subtarefas</Label>
-              <div className="mt-2">
-                <ActivityChecklist activityId={activity.id} />
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Activity Edit Drawer */}
+      <ActivityEditDrawer
+        activityId={activity.id}
+        isOpen={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        onSave={onRefresh}
+        readOnly={readOnly}
+      />
     </>
   );
 }

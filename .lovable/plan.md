@@ -1,76 +1,63 @@
 
 
-# Implementation Plan: 3 Adjustments
+# Diagnosis and Fix Plan
 
-## Ajuste 1 — Fix Piperun signature fields
+## Root Causes Found
 
-**What's wrong:** The field picker and edge function reference `signature.status`, `signature.signed_at`, `signature.document_url` which don't exist in the webhook JSON. The edge function also makes an unnecessary API call to `/signatures`.
+### Problem 1 — Webhook mapping not filling fields
+The webhook_logs table confirms the error: `"supabase.from(...).insert(...).catch is not a function"`. The last two webhooks (March 5 and March 6) both crashed with this error BEFORE reaching office creation. The `.catch()` fix was applied in code but the webhooks arrived before deployment completed. The mapping paths are correct, the company data exists at root level with all expected fields. This problem is already fixed in code — just needs a new webhook to test.
 
-**Changes:**
+### Problem 2 — Only 3 of 17 create_activity actions succeeded
+**This is the critical finding.** The `activity_type` database enum has these valid values:
+`task, follow_up, onboarding, renewal, other, ligacao, check_in, email, whatsapp, planejamento`
 
-### `src/components/configuracoes/integrations/PiperunFieldPicker.tsx`
-- Lines 87-93: Replace the 3 `signature.*` fields with `action.*` fields:
-  - `action.create` → "Data da assinatura/ação"
-  - `action.trigger_type` → "Tipo do trigger"
-  - `action.stage` → "Etapa no momento da ação"
-  - `action.pipeline` → "Funil no momento da ação"
-- Line 24: Update category prefix from `signature.` to `action.`
+It does NOT include `"meeting"`. The automation rule "[ELT] Delegação automática" has 14 actions with `activity_type: "meeting"` — every one of those fails silently because the INSERT violates the enum constraint. The `handleAction` function doesn't capture the error from `supabase.from("activities").insert(...)`.
 
-### `supabase/functions/integration-piperun/index.ts`
-- Lines 601-607: Replace `signature.*` fields with `action.*` fields in `listFields`
-- Lines 224-239: Update PDF download to check `action.document_url` instead of `signature.document_url`
-- Lines 297-305: Remove the `/signatures` API call entirely (data comes from `action` in webhook body)
-- Line 316: Remove `signature: signatureData || {}` from sourceData (keep `action` which comes from deal spread)
+Evidence: automation_logs shows 19 `actions_executed` entries, but only 3 `create_activity` have an `id` (the ones with type "task" or "email"). The other 14 have no `id` — they failed silently.
 
-### `src/components/configuracoes/integrations/PiperunConfig.tsx`
-- No changes needed — DEFAULT_MAPPINGS don't reference `signature.*`
+### Problem 3 — Webhook doesn't trigger automations
+Same root cause as Problem 1 — the webhook crashed before reaching the automation invocation lines (419-430). Once the webhook stops crashing, automations will be invoked via `supabase.functions.invoke()`.
 
----
+## Fixes
 
-## Ajuste 2 — Sort toggle on Activities tab (Cliente 360)
-
-**What's wrong:** Activities in `ClienteTimeline.tsx` are sorted only by date descending. Need a toggle button.
-
-**Changes in `src/components/clientes/ClienteTimeline.tsx`:**
-- Add state: `const [sortAsc, setSortAsc] = useState(true)` (ascending = closest first)
-- Add an `ArrowUpDown` toggle button next to the Filters button
-- Modify the `.sort()` on line 93 to respect `sortAsc`:
-  - When `sortAsc`: sort by date ascending (closest/most overdue first)
-  - When `!sortAsc`: sort by date descending
-- Button label: "↑ Mais próximas" / "↓ Mais distantes"
-
----
-
-## Ajuste 3 — Activity edit drawer
-
-**New file: `src/components/atividades/ActivityEditDrawer.tsx`**
-
-A reusable drawer component (560px width on desktop, fullscreen on mobile) using `vaul` Drawer component.
-
-**Props:** `activityId`, `isOpen`, `onClose`, `onSave`, `readOnly`
-
-**Features:**
-- Fetches activity by ID + checklist items + mentions on open
-- Fetches internal users for assignee/mentions dropdowns
-- All fields editable: title, type, description, due_date, priority, user_id, observations
-- Checklist management inline (toggle, add, remove, progress bar)
-- Mentions as multi-select tags (stored in new `activity_mentions` table)
-- Footer buttons: Delete (left), Reopen (if completed), Complete (with observations sub-dialog), Save
-- Read-only mode for viewers
-
-**Database migration:** Create `activity_mentions` table with RLS policies.
-
-**Integration points (click handler changes):**
-1. `src/pages/Atividades.tsx` — `ActivityCard`: make card clickable, open drawer
-2. `src/components/clientes/ClienteTimeline.tsx` — activity cards: open drawer instead of detail dialog
-3. `src/components/atividades/ActivityPopup.tsx` — "Detalhes" menu item opens drawer
-
-Each integration adds:
-```tsx
-const [editActivityId, setEditActivityId] = useState<string | null>(null);
-// onClick on card → setEditActivityId(activity.id)
-<ActivityEditDrawer activityId={editActivityId} isOpen={!!editActivityId} onClose={() => setEditActivityId(null)} onSave={fetchData} readOnly={isViewer} />
+### Fix A — Add "meeting" to activity_type enum (database migration)
+```sql
+ALTER TYPE activity_type ADD VALUE IF NOT EXISTS 'meeting';
 ```
+This is the correct fix because:
+- The automation builder UI offers "meeting" as an option
+- Users have configured rules with this type
+- 14 activities are waiting to be created with this type
 
-**Drawer uses Sheet component** (right-side panel) from shadcn for better UX on desktop, with `className="w-[560px] sm:max-w-[560px]"`.
+### Fix B — Add error handling in handleAction (execute-automations)
+In the `create_activity` case (line 46-47), capture and log the error:
+```javascript
+const { data: act, error: actErr } = await supabase.from("activities").insert(payload).select("id").single();
+if (actErr) {
+  console.error('[AUTOMATIONS] Activity insert error:', actErr.message, 'payload:', JSON.stringify(payload));
+  return { type: "create_activity", error: actErr.message };
+}
+```
+Apply similar error capture to ALL action types that do database inserts (send_notification, add_note, create_action_plan, etc.).
+
+### Fix C — Ensure webhook deployment is current
+The piperun-webhook code already has the `.catch()` fix from the previous iteration. Verify the edge function redeploys by checking logs after saving. No code change needed — just confirmation.
+
+### Fix D — Add company fallback in webhook (safety)
+In `piperun-webhook/index.ts` line 341, add fallback to `person.company`:
+```javascript
+let companyData = deal.company || deal.person?.company;
+```
+This handles edge cases where the Piperun payload structure varies.
+
+## Files Modified
+- `supabase/functions/execute-automations/index.ts` — error handling in handleAction
+- `supabase/functions/piperun-webhook/index.ts` — company fallback
+- Database migration: add `meeting` to `activity_type` enum
+
+## Expected Result After Fix
+- All 17 `create_activity` actions succeed (activities created with correct types)
+- Webhook creates office with all mapped fields populated
+- Webhook triggers automations that execute all 19 actions
+- automation_logs show complete execution with all action IDs
 
