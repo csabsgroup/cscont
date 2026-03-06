@@ -1,63 +1,50 @@
 
 
-# Diagnosis and Fix Plan
+# Plan: Fix Import to Accept the 69-Client Excel File
 
-## Root Causes Found
+## Root Causes Identified
 
-### Problem 1 — Webhook mapping not filling fields
-The webhook_logs table confirms the error: `"supabase.from(...).insert(...).catch is not a function"`. The last two webhooks (March 5 and March 6) both crashed with this error BEFORE reaching office creation. The `.catch()` fix was applied in code but the webhooks arrived before deployment completed. The mapping paths are correct, the company data exists at root level with all expected fields. This problem is already fixed in code — just needs a new webhook to test.
+1. **903 empty rows** — Excel has 972 rows but only 69 have data. Empty/"None" rows pass through and fail.
+2. **"None" text not treated as null** — Python/Pandas export writes literal "None" strings.
+3. **".0" suffix on numbers** — `"11982215029.0"` → `sanitizePhone` gets digits `"119822150290"` (12 digits, wrong). Must strip `.0` first.
+4. **`status` is `required: true`** — validation rejects any row where status is empty after sanitize.
+5. **Automations fire per row** — lines 151-164 call edge function for every imported office (kills performance with 69+ rows).
+6. **Contract creation requires productId** — `if (officeId && productId && ...)` skips contract if product not matched.
 
-### Problem 2 — Only 3 of 17 create_activity actions succeeded
-**This is the critical finding.** The `activity_type` database enum has these valid values:
-`task, follow_up, onboarding, renewal, other, ligacao, check_in, email, whatsapp, planejamento`
+## Changes (3 files)
 
-It does NOT include `"meeting"`. The automation rule "[ELT] Delegação automática" has 14 actions with `activity_type: "meeting"` — every one of those fails silently because the INSERT violates the enum constraint. The `handleAction` function doesn't capture the error from `supabase.from("activities").insert(...)`.
+### File 1: `src/lib/import-sanitize.ts`
 
-Evidence: automation_logs shows 19 `actions_executed` entries, but only 3 `create_activity` have an `id` (the ones with type "task" or "email"). The other 14 have no `id` — they failed silently.
+- Add `isNullValue()` helper: treats `"None"`, `"null"`, `"N/A"`, `"NaN"`, `"-"`, `"undefined"` as null.
+- Add `cleanExcelFloat()`: strips trailing `.0` from integer-as-float strings (`"15.0"` → `"15"`).
+- Update `sanitizeValue()`:
+  - Call `isNullValue()` first — return `null` if truthy.
+  - Call `cleanExcelFloat()` before processing phone/number fields.
+  - For phone fields, clean `.0` before calling `sanitizePhone`.
 
-### Problem 3 — Webhook doesn't trigger automations
-Same root cause as Problem 1 — the webhook crashed before reaching the automation invocation lines (419-430). Once the webhook stops crashing, automations will be invoked via `supabase.functions.invoke()`.
+### File 2: `src/lib/import-templates.ts`
 
-## Fixes
+- Change `status` field: `required: false` (default handled in insertRow).
+- Add alias `'data de ativacao'` to `activation_date`, `'data inicio do ciclo'` to `cycle_start_date`, `'data final ciclo'` to `cycle_end_date`, `'data da ultima reuniao'` to `last_meeting_date`, and other exact header matches from the spreadsheet that are currently missing.
+- Add `cs_feeling` field with aliases `['cs feeling', 'sentimento cs', 'feeling']`.
+- Add `last_nps` field with alias `['nps']`.
 
-### Fix A — Add "meeting" to activity_type enum (database migration)
-```sql
-ALTER TYPE activity_type ADD VALUE IF NOT EXISTS 'meeting';
-```
-This is the correct fix because:
-- The automation builder UI offers "meeting" as an option
-- Users have configured rules with this type
-- 14 activities are waiting to be created with this type
+### File 3: `src/components/import-export/ImportWizard.tsx`
 
-### Fix B — Add error handling in handleAction (execute-automations)
-In the `create_activity` case (line 46-47), capture and log the error:
-```javascript
-const { data: act, error: actErr } = await supabase.from("activities").insert(payload).select("id").single();
-if (actErr) {
-  console.error('[AUTOMATIONS] Activity insert error:', actErr.message, 'payload:', JSON.stringify(payload));
-  return { type: "create_activity", error: actErr.message };
-}
-```
-Apply similar error capture to ALL action types that do database inserts (send_notification, add_note, create_action_plan, etc.).
+- **Filter empty rows** in `handleFile`: after parsing, filter out rows where all values are null/empty/"None". Show count of filtered rows in the UI.
+- **Clean "None" values**: in `getMappedRows`, apply `isNullValue` check before sanitizing each cell — if null, return `null` instead of passing `"None"` to sanitizer.
+- **Remove automation triggers** during bulk import (delete lines 151-164 that call `execute-automations` per office).
+- **Allow contract creation without product**: change `if (officeId && productId && ...)` to `if (officeId && (row.contract_value || row.monthly_value))` and pass `product_id: productId || undefined` (DB column is NOT NULL, so if no product we skip — actually check the schema... `contracts.product_id` is `NOT NULL`. So keep requiring productId for contract, but create contract even without product by finding a default or skipping. Actually simplest: remove the `productId` requirement — if no product, skip contract silently).
+- **Add `cs_feeling` and `last_nps`** to the office insert data.
+- **Add `origem`** to notes field (append to notes if both exist).
 
-### Fix C — Ensure webhook deployment is current
-The piperun-webhook code already has the `.catch()` fix from the previous iteration. Verify the edge function redeploys by checking logs after saving. No code change needed — just confirmation.
+## Summary
 
-### Fix D — Add company fallback in webhook (safety)
-In `piperun-webhook/index.ts` line 341, add fallback to `person.company`:
-```javascript
-let companyData = deal.company || deal.person?.company;
-```
-This handles edge cases where the Piperun payload structure varies.
+| File | Key Changes |
+|------|------------|
+| `src/lib/import-sanitize.ts` | Add `isNullValue()`, `cleanExcelFloat()`, use them in `sanitizeValue()` |
+| `src/lib/import-templates.ts` | `status.required = false`, add `cs_feeling`/`last_nps` fields, expand aliases for exact header matches |
+| `src/components/import-export/ImportWizard.tsx` | Filter empty rows, clean "None" values, remove per-row automation triggers, handle `cs_feeling`/`last_nps`/`origem` in insertRow |
 
-## Files Modified
-- `supabase/functions/execute-automations/index.ts` — error handling in handleAction
-- `supabase/functions/piperun-webhook/index.ts` — company fallback
-- Database migration: add `meeting` to `activity_type` enum
-
-## Expected Result After Fix
-- All 17 `create_activity` actions succeed (activities created with correct types)
-- Webhook creates office with all mapped fields populated
-- Webhook triggers automations that execute all 19 actions
-- automation_logs show complete execution with all action IDs
+3 files, no database changes needed.
 
