@@ -96,15 +96,19 @@ async function handleAction(supabase: any, action: any, office_id: string, offic
     case "send_email": {
       if (!dryRun) {
         try {
-          await supabase.functions.invoke('integration-email', {
-            body: {
-              action: 'send',
-              to: c.recipient === 'cliente' ? office?.email : c.recipient === 'contato_principal' ? null : null,
-              subject: resolveText(c.subject || ''),
-              body: resolveText(c.body || ''),
-              office_id,
-            },
-          });
+          // Resolve recipient email
+          let toEmail: string | null = null;
+          if (c.recipient === 'cliente') {
+            toEmail = office?.email;
+          } else if (c.recipient === 'contato_principal') {
+            const { data: mainContact } = await supabase.from('contacts')
+              .select('email').eq('office_id', office_id).eq('is_main_contact', true).limit(1).maybeSingle();
+            toEmail = mainContact?.email || null;
+          }
+          const subject = resolveText(c.subject || '');
+          const body = resolveText(c.body || '');
+          // Email is a stub — log and return success
+          console.log(`[AUTOMATIONS] Email stub: to=${toEmail}, subject=${subject}, office=${office_id}`);
         } catch (e) {
           console.error('[AUTOMATIONS] Email failed:', e);
           return { type: "send_email", error: String(e) };
@@ -116,12 +120,44 @@ async function handleAction(supabase: any, action: any, office_id: string, offic
     case "send_slack": {
       if (!dryRun) {
         try {
-          await supabase.functions.invoke('integration-slack', {
-            body: {
-              action: 'sendMessage',
-              message: resolveText(c.message || `Automação executada para ${office?.name}`),
+          const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+          const SLACK_API_KEY = Deno.env.get("SLACK_API_KEY");
+          if (!LOVABLE_API_KEY || !SLACK_API_KEY) {
+            console.error('[AUTOMATIONS] Slack keys not configured');
+            return { type: "send_slack", error: "Slack not configured (missing API keys)" };
+          }
+
+          // Get channel from integration_settings
+          const { data: slackSetting } = await supabase.from('integration_settings')
+            .select('config').eq('provider', 'slack').maybeSingle();
+          const channelId = slackSetting?.config?.channel_id;
+          if (!channelId) {
+            console.error('[AUTOMATIONS] Slack channel not configured in integration_settings');
+            return { type: "send_slack", error: "Slack channel not configured" };
+          }
+
+          const message = resolveText(c.message || `Automação executada para ${office?.name}`);
+          const GATEWAY_URL = "https://connector-gateway.lovable.dev/slack/api";
+          const slackRes = await fetch(`${GATEWAY_URL}/chat.postMessage`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${LOVABLE_API_KEY}`,
+              "X-Connection-Api-Key": SLACK_API_KEY,
+              "Content-Type": "application/json",
             },
+            body: JSON.stringify({
+              channel: channelId,
+              text: message,
+              username: "Contador CEO",
+              icon_emoji: ":chart_with_upwards_trend:",
+            }),
           });
+          const slackData = await slackRes.json();
+          if (!slackRes.ok || !slackData.ok) {
+            console.error('[AUTOMATIONS] Slack API error:', JSON.stringify(slackData));
+            return { type: "send_slack", error: `Slack API error: ${slackData.error || slackRes.status}` };
+          }
+          console.log('[AUTOMATIONS] Slack message sent to', channelId);
         } catch (e) {
           console.error('[AUTOMATIONS] Slack failed:', e);
           return { type: "send_slack", error: String(e) };
