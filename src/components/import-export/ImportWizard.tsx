@@ -207,56 +207,71 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
   const handleImport = async () => {
     setImporting(true); setProgress(0);
     try {
-      const mappedRows = getMappedRows().filter((row, i) => {
-        const rowErrors = validateRow(row, template.fields, i);
-        return rowErrors.length === 0;
-      });
-
-      console.log(`[IMPORT] Starting import of ${mappedRows.length} valid rows (from ${rows.length} total)`);
-
-      if (mappedRows.length === 0) {
-        toast.error('Nenhuma linha válida para importar.');
-        setImporting(false);
-        return;
-      }
-
-      toast.info(`Importando ${mappedRows.length} registros...`);
-
-      let success = 0, errorCount = 0, skipped = 0;
+      const allMappedRows = getMappedRows();
+      const rowResults: ImportRowResult[] = [];
       const insertedIds: string[] = [];
-      const warnings: string[] = [];
-      const errorDetails: string[] = [];
-      const chunkSize = 50;
+      let batchId: string | undefined;
 
-      for (let i = 0; i < mappedRows.length; i += chunkSize) {
-        const chunk = mappedRows.slice(i, i + chunkSize);
-        for (let j = 0; j < chunk.length; j++) {
-          const row = chunk[j];
-          const rowIndex = i + j + 1;
-          try {
-            console.log(`[IMPORT] Row ${rowIndex}/${mappedRows.length}:`, row.name || row.office_name || 'unknown');
-            const insertResult = await insertRow(template, row, warnings);
-            if (insertResult) {
-              insertedIds.push(insertResult);
-              success++;
-            } else {
-              console.warn(`[IMPORT] Row ${rowIndex} returned null id`);
-              errorDetails.push(`Linha ${rowIndex}: inserção retornou sem ID`);
-              errorCount++;
-            }
-          } catch (err: any) {
-            const msg = err?.message || String(err);
-            console.error(`[IMPORT] Row ${rowIndex} FAILED:`, msg);
-            errorDetails.push(`Linha ${rowIndex}: ${msg}`);
-            errorCount++;
-          }
+      console.log(`[IMPORT] Starting import of ${allMappedRows.length} rows`);
+      toast.info(`Importando ${allMappedRows.length} registros...`);
+
+      for (let i = 0; i < allMappedRows.length; i++) {
+        const row = allMappedRows[i];
+        const rowResult: ImportRowResult = {
+          lineNumber: i + 2, // +2: line 1 = header
+          officeName: row.name || row.office_name || row.title || `Linha ${i + 2}`,
+          status: 'success',
+          errors: [],
+          warnings: [],
+        };
+
+        // Pre-insert validation
+        const validationErrors = validateRow(row, template.fields, i);
+        if (validationErrors.length > 0) {
+          rowResult.errors = validationErrors;
+          rowResult.status = 'error';
+          rowResults.push(rowResult);
+          setProgress(Math.round(((i + 1) / allMappedRows.length) * 100));
+          continue;
         }
-        setProgress(Math.round(((i + chunk.length) / mappedRows.length) * 100));
+
+        try {
+          const rowWarnings: string[] = [];
+          const insertedId = await insertRow(template, row, rowWarnings);
+
+          if (rowWarnings.length > 0) {
+            rowResult.warnings = rowWarnings;
+          }
+
+          if (insertedId) {
+            insertedIds.push(insertedId);
+            rowResult.status = rowWarnings.length > 0 ? 'warning' : 'success';
+          } else {
+            rowResult.errors.push('Inserção retornou sem ID');
+            rowResult.status = 'error';
+          }
+        } catch (err: any) {
+          const friendlyMsg = err?.code ? translateSupabaseError(err) : (err?.message || String(err));
+          rowResult.errors.push(friendlyMsg);
+          rowResult.status = 'error';
+        }
+
+        rowResults.push(rowResult);
+
+        // Progress toast every 20 rows
+        if ((i + 1) % 20 === 0) {
+          toast.info(`Processando ${i + 1}/${allMappedRows.length}...`, { id: 'import-progress' });
+        }
+        setProgress(Math.round(((i + 1) / allMappedRows.length) * 100));
       }
 
-      console.log(`[IMPORT] DONE: ${success} success, ${errorCount} errors, ${insertedIds.length} IDs`);
+      const successCount = rowResults.filter(r => r.status === 'success').length;
+      const warningCount = rowResults.filter(r => r.status === 'warning').length;
+      const errorCount = rowResults.filter(r => r.status === 'error').length;
 
-      let batchId: string | undefined;
+      console.log(`[IMPORT] DONE: ${successCount} success, ${warningCount} warnings, ${errorCount} errors`);
+
+      // Save batch
       if (user && insertedIds.length > 0) {
         try {
           const { data: batchData } = await supabase.from('import_batches' as any).insert({
@@ -269,35 +284,33 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
           batchId = (batchData as any)?.id;
         } catch (batchErr: any) {
           console.error('[IMPORT] Batch log failed:', batchErr?.message);
-          warnings.push('Não foi possível salvar o lote de importação');
         }
       }
 
+      // Audit log
       if (user) {
         try {
           await supabase.from('audit_logs').insert({
             user_id: user.id,
             entity_type: template.table,
             action: 'bulk_import',
-            details: { entity: template.key, success, errors: errorCount, skipped },
+            details: { entity: template.key, success: successCount, errors: errorCount, warnings: warningCount },
           });
         } catch (auditErr: any) {
           console.error('[IMPORT] Audit log failed:', auditErr?.message);
         }
       }
 
-      // Merge error details into warnings for UI display
-      const allWarnings = [...warnings, ...errorDetails];
-
-      if (errorCount === 0 && success > 0) {
-        toast.success(`${success} registros importados com sucesso!`);
-      } else if (success > 0 && errorCount > 0) {
-        toast.warning(`${success} importados, ${errorCount} com erro`);
-      } else if (success === 0) {
+      // Toast result
+      if (errorCount === 0 && successCount > 0) {
+        toast.success(`${successCount + warningCount} registros importados com sucesso!`);
+      } else if (successCount > 0 && errorCount > 0) {
+        toast.warning(`${successCount + warningCount} importados, ${errorCount} com erro. Veja os detalhes.`);
+      } else if (successCount === 0) {
         toast.error(`Nenhum registro importado. ${errorCount} erros encontrados.`);
       }
 
-      setResult({ success, errors: errorCount, skipped, batchId, warnings: allWarnings.length > 0 ? allWarnings : undefined });
+      setResult({ success: successCount + warningCount, errors: errorCount, skipped: 0, batchId, rowResults });
       setStep('execute');
     } catch (err: any) {
       const msg = err?.message || String(err);
