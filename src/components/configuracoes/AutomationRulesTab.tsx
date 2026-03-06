@@ -1356,6 +1356,55 @@ export function AutomationRulesTab() {
                   {triggerDef.params.map(p => renderTriggerParam(p))}
                 </div>
               )}
+
+              {/* Periodic trigger params */}
+              {form.trigger_type === 'client_contains' && (
+                <div className="mt-4 space-y-4 rounded-lg border border-border p-4 bg-muted/20">
+                  <h4 className="text-sm font-semibold flex items-center gap-2">🔄 Configuração Periódica</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs">Frequência de verificação</Label>
+                      <Select
+                        value={form.trigger_params.frequency || 'daily'}
+                        onValueChange={v => setForm(f => ({ ...f, trigger_params: { ...f.trigger_params, frequency: v } }))}
+                      >
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {PERIODIC_FREQUENCY_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">Repetição por cliente</Label>
+                      <Select
+                        value={form.trigger_params.repeat_mode || 'once'}
+                        onValueChange={v => setForm(f => ({ ...f, trigger_params: { ...f.trigger_params, repeat_mode: v } }))}
+                      >
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {PERIODIC_REPEAT_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  {form.trigger_params.repeat_mode === 'interval' && (
+                    <div className="flex items-center gap-2">
+                      <Label className="text-xs">Intervalo mínimo:</Label>
+                      <Input
+                        type="number"
+                        className="w-24"
+                        value={form.trigger_params.repeat_interval_days || ''}
+                        onChange={e => setForm(f => ({ ...f, trigger_params: { ...f.trigger_params, repeat_interval_days: Number(e.target.value) || null } }))}
+                        placeholder="7"
+                      />
+                      <span className="text-xs text-muted-foreground">dias</span>
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Esta regra será verificada periodicamente via cron. Todos os clientes que atenderem às condições terão as ações executadas automaticamente.
+                  </p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
