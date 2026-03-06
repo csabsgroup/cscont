@@ -28,6 +28,7 @@ import { ClienteBonus } from '@/components/clientes/ClienteBonus';
 import { PortalPreviewModal } from '@/components/clientes/PortalPreviewModal';
 import { WhatsAppSendDialog } from '@/components/clientes/WhatsAppSendDialog';
 import { ClienteVisao360 } from '@/components/clientes/ClienteVisao360';
+import { ClienteArquivos } from '@/components/clientes/ClienteArquivos';
 import { StatusChangeModal } from '@/components/clientes/StatusChangeModal';
 import { ActivityCounterBadges, ActivityCounts } from '@/components/shared/ActivityCounterBadges';
 import { Constants } from '@/integrations/supabase/types';
@@ -103,7 +104,7 @@ export default function Cliente360() {
     // Fetch counts for badges
     const [activitiesRes, filesRes] = await Promise.all([
       supabase.from('activities').select('id, completed_at, due_date').eq('office_id', id!),
-      supabase.from('shared_files').select('id', { count: 'exact', head: true }).eq('office_id', id!),
+      supabase.from('office_files' as any).select('id', { count: 'exact', head: true }).eq('office_id', id!).is('note_id', null),
     ]);
     const acts = activitiesRes.data || [];
     setActivitiesCount(acts.length);
@@ -334,10 +335,7 @@ export default function Cliente360() {
       )}
 
       {activeTab === 'arquivos' && (
-        <Card className="p-6">
-          <p className="text-sm text-muted-foreground">Arquivos compartilhados do cliente</p>
-          {/* Existing shared files functionality would go here */}
-        </Card>
+        <Card className="p-6"><ClienteArquivos officeId={office.id} /></Card>
       )}
 
       {activeTab === 'contratos' && (

@@ -11,7 +11,10 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
-import { Plus, FileText, ExternalLink } from 'lucide-react';
+import {
+  Sheet, SheetContent, SheetHeader, SheetTitle,
+} from '@/components/ui/sheet';
+import { Plus, FileText, ExternalLink, Pencil } from 'lucide-react';
 import { ContractStatusBadge } from './StatusBadge';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
@@ -66,11 +69,17 @@ const emptyForm = {
 };
 
 export function ClienteContratos({ officeId, contracts, onRefresh }: Props) {
-  const { isViewer } = useAuth();
+  const { isViewer, isAdmin, user } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+
+  // Edit state
+  const [editOpen, setEditOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState(emptyForm);
+  const [editSaving, setEditSaving] = useState(false);
 
   useEffect(() => {
     supabase.from('products').select('id, name').eq('is_active', true).then(({ data }) => setProducts(data || []));
@@ -98,14 +107,12 @@ export function ClienteContratos({ officeId, contracts, onRefresh }: Props) {
       toast.error('Erro: ' + error.message);
     } else {
       toast.success('Contrato criado!');
-      // Trigger automations
       try {
         await supabase.functions.invoke('execute-automations', {
           body: { action: 'triggerV2', trigger_type: 'contract.created', office_id: officeId, context: { suffix: `contract_${Date.now()}` } },
         });
       } catch (autoErr) { console.error('Automation trigger failed:', autoErr); }
       
-      // Process cycle dates, activation_date, and MRR
       await processContractDates(officeId, {
         start_date: form.start_date || null,
         end_date: form.end_date || null,
@@ -120,6 +127,151 @@ export function ClienteContratos({ officeId, contracts, onRefresh }: Props) {
     setSaving(false);
   };
 
+  const openEdit = (c: Contract) => {
+    setEditId(c.id);
+    setEditForm({
+      product_id: c.product_id,
+      status: c.status,
+      value: c.value?.toString() || '',
+      monthly_value: c.monthly_value?.toString() || '',
+      start_date: c.start_date || '',
+      end_date: c.end_date || '',
+      renewal_date: c.renewal_date || '',
+      installments_total: c.installments_total?.toString() || '',
+      installments_overdue: c.installments_overdue?.toString() || '',
+      asaas_link: c.asaas_link || '',
+      negotiation_notes: c.negotiation_notes || '',
+    });
+    setEditOpen(true);
+  };
+
+  const handleEditSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editId || !user) return;
+    setEditSaving(true);
+
+    const updateData = {
+      product_id: editForm.product_id,
+      status: editForm.status,
+      value: editForm.value ? Number(editForm.value) : null,
+      monthly_value: editForm.monthly_value ? Number(editForm.monthly_value) : null,
+      start_date: editForm.start_date || null,
+      end_date: editForm.end_date || null,
+      renewal_date: editForm.renewal_date || null,
+      installments_total: editForm.installments_total ? Number(editForm.installments_total) : null,
+      installments_overdue: editForm.installments_overdue ? Number(editForm.installments_overdue) : null,
+      asaas_link: editForm.asaas_link || null,
+      negotiation_notes: editForm.negotiation_notes || null,
+    };
+
+    const { error } = await supabase.from('contracts').update(updateData).eq('id', editId);
+    if (error) {
+      toast.error('Erro: ' + error.message);
+    } else {
+      toast.success('Contrato atualizado!');
+
+      await processContractDates(officeId, {
+        start_date: editForm.start_date || null,
+        end_date: editForm.end_date || null,
+        monthly_value: editForm.monthly_value ? Number(editForm.monthly_value) : null,
+        value: editForm.value ? Number(editForm.value) : null,
+      });
+
+      await supabase.from('audit_logs').insert({
+        user_id: user.id,
+        action: 'update_contract',
+        entity_type: 'contract',
+        entity_id: editId,
+        details: { office_id: officeId, changes: updateData },
+      });
+
+      setEditOpen(false);
+      setEditId(null);
+      onRefresh();
+    }
+    setEditSaving(false);
+  };
+
+  const renderForm = (
+    formData: typeof emptyForm,
+    setFormData: (f: typeof emptyForm) => void,
+    onSubmit: (e: React.FormEvent) => void,
+    isSaving: boolean,
+    submitLabel: string,
+    isEdit: boolean,
+  ) => (
+    <form onSubmit={onSubmit} className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Produto *</Label>
+          <Select value={formData.product_id} onValueChange={v => setFormData({ ...formData, product_id: v })} disabled={isEdit && !isAdmin}>
+            <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+            <SelectContent>
+              {products.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>Status</Label>
+          <Select value={formData.status} onValueChange={v => setFormData({ ...formData, status: v as ContractStatus })}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="pendente">Pendente</SelectItem>
+              <SelectItem value="ativo">Ativo</SelectItem>
+              <SelectItem value="encerrado">Encerrado</SelectItem>
+              <SelectItem value="cancelado">Cancelado</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Valor Total</Label>
+          <Input type="number" step="0.01" value={formData.value} onChange={e => setFormData({ ...formData, value: e.target.value })} />
+        </div>
+        <div className="space-y-2">
+          <Label>Valor Mensal</Label>
+          <Input type="number" step="0.01" value={formData.monthly_value} onChange={e => setFormData({ ...formData, monthly_value: e.target.value })} />
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-4">
+        <div className="space-y-2">
+          <Label>Início</Label>
+          <Input type="date" value={formData.start_date} onChange={e => setFormData({ ...formData, start_date: e.target.value })} />
+        </div>
+        <div className="space-y-2">
+          <Label>Fim</Label>
+          <Input type="date" value={formData.end_date} onChange={e => setFormData({ ...formData, end_date: e.target.value })} />
+        </div>
+        <div className="space-y-2">
+          <Label>Renovação</Label>
+          <Input type="date" value={formData.renewal_date} onChange={e => setFormData({ ...formData, renewal_date: e.target.value })} />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Parcelas Total</Label>
+          <Input type="number" value={formData.installments_total} onChange={e => setFormData({ ...formData, installments_total: e.target.value })} />
+        </div>
+        <div className="space-y-2">
+          <Label>Parcelas Vencidas</Label>
+          <Input type="number" value={formData.installments_overdue} onChange={e => setFormData({ ...formData, installments_overdue: e.target.value })} />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label>Link Asaas</Label>
+        <Input value={formData.asaas_link} onChange={e => setFormData({ ...formData, asaas_link: e.target.value })} />
+      </div>
+      <div className="space-y-2">
+        <Label>Notas de Negociação</Label>
+        <Textarea value={formData.negotiation_notes} onChange={e => setFormData({ ...formData, negotiation_notes: e.target.value })} />
+      </div>
+      <Button type="submit" className="w-full" disabled={isSaving || !formData.product_id}>
+        {isSaving ? 'Salvando...' : submitLabel}
+      </Button>
+    </form>
+  );
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -131,76 +283,7 @@ export function ClienteContratos({ officeId, contracts, onRefresh }: Props) {
             </DialogTrigger>
             <DialogContent className="max-w-lg">
               <DialogHeader><DialogTitle>Novo Contrato</DialogTitle></DialogHeader>
-              <form onSubmit={handleSave} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Produto *</Label>
-                    <Select value={form.product_id} onValueChange={v => setForm({ ...form, product_id: v })}>
-                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                      <SelectContent>
-                        {products.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Status</Label>
-                    <Select value={form.status} onValueChange={v => setForm({ ...form, status: v as ContractStatus })}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="pendente">Pendente</SelectItem>
-                        <SelectItem value="ativo">Ativo</SelectItem>
-                        <SelectItem value="encerrado">Encerrado</SelectItem>
-                        <SelectItem value="cancelado">Cancelado</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Valor Total</Label>
-                    <Input type="number" step="0.01" value={form.value} onChange={e => setForm({ ...form, value: e.target.value })} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Valor Mensal</Label>
-                    <Input type="number" step="0.01" value={form.monthly_value} onChange={e => setForm({ ...form, monthly_value: e.target.value })} />
-                  </div>
-                </div>
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label>Início</Label>
-                    <Input type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Fim</Label>
-                    <Input type="date" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Renovação</Label>
-                    <Input type="date" value={form.renewal_date} onChange={e => setForm({ ...form, renewal_date: e.target.value })} />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Parcelas Total</Label>
-                    <Input type="number" value={form.installments_total} onChange={e => setForm({ ...form, installments_total: e.target.value })} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Parcelas Vencidas</Label>
-                    <Input type="number" value={form.installments_overdue} onChange={e => setForm({ ...form, installments_overdue: e.target.value })} />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Link Asaas</Label>
-                  <Input value={form.asaas_link} onChange={e => setForm({ ...form, asaas_link: e.target.value })} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Notas de Negociação</Label>
-                  <Textarea value={form.negotiation_notes} onChange={e => setForm({ ...form, negotiation_notes: e.target.value })} />
-                </div>
-                <Button type="submit" className="w-full" disabled={saving || !form.product_id}>
-                  {saving ? 'Criando...' : 'Criar Contrato'}
-                </Button>
-              </form>
+              {renderForm(form, setForm, handleSave, saving, 'Criar Contrato', false)}
             </DialogContent>
           </Dialog>
         )}
@@ -221,7 +304,7 @@ export function ClienteContratos({ officeId, contracts, onRefresh }: Props) {
               <TableHead>Mensal</TableHead>
               <TableHead>Período</TableHead>
               <TableHead>Parcelas</TableHead>
-              <TableHead className="w-10"></TableHead>
+              <TableHead className="w-20"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -238,17 +321,36 @@ export function ClienteContratos({ officeId, contracts, onRefresh }: Props) {
                   {c.installments_overdue ?? 0}/{c.installments_total ?? 0}
                 </TableCell>
                 <TableCell>
-                  {c.asaas_link && (
-                    <a href={c.asaas_link} target="_blank" rel="noopener noreferrer">
-                      <ExternalLink className="h-4 w-4 text-muted-foreground hover:text-foreground" />
-                    </a>
-                  )}
+                  <div className="flex items-center gap-1">
+                    {!isViewer && (
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(c)}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                    {c.asaas_link && (
+                      <a href={c.asaas_link} target="_blank" rel="noopener noreferrer">
+                        <ExternalLink className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                      </a>
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       )}
+
+      {/* Edit Contract Sheet */}
+      <Sheet open={editOpen} onOpenChange={setEditOpen}>
+        <SheetContent className="sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Editar Contrato</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4">
+            {renderForm(editForm, setEditForm, handleEditSave, editSaving, 'Salvar Alterações', true)}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

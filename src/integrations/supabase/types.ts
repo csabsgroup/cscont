@@ -1595,6 +1595,60 @@ export type Database = {
         }
         Relationships: []
       }
+      office_files: {
+        Row: {
+          created_at: string
+          file_size: number | null
+          file_type: string | null
+          file_url: string
+          id: string
+          name: string
+          note_id: string | null
+          office_id: string
+          share_with_client: boolean
+          uploaded_by: string
+        }
+        Insert: {
+          created_at?: string
+          file_size?: number | null
+          file_type?: string | null
+          file_url: string
+          id?: string
+          name: string
+          note_id?: string | null
+          office_id: string
+          share_with_client?: boolean
+          uploaded_by: string
+        }
+        Update: {
+          created_at?: string
+          file_size?: number | null
+          file_type?: string | null
+          file_url?: string
+          id?: string
+          name?: string
+          note_id?: string | null
+          office_id?: string
+          share_with_client?: boolean
+          uploaded_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "office_files_note_id_fkey"
+            columns: ["note_id"]
+            isOneToOne: false
+            referencedRelation: "office_notes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "office_files_office_id_fkey"
+            columns: ["office_id"]
+            isOneToOne: false
+            referencedRelation: "offices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       office_journey: {
         Row: {
           completed_at: string | null
