@@ -1,63 +1,120 @@
 
 
-# Diagnosis and Fix Plan
+# Plan: Fix Dropdowns, Add Contract Editing, File Upload, and Slack Automation Action
 
-## Root Causes Found
+## AJUSTE 4 (PRIORITY) — Fix All Dropdowns
 
-### Problem 1 — Webhook mapping not filling fields
-The webhook_logs table confirms the error: `"supabase.from(...).insert(...).catch is not a function"`. The last two webhooks (March 5 and March 6) both crashed with this error BEFORE reaching office creation. The `.catch()` fix was applied in code but the webhooks arrived before deployment completed. The mapping paths are correct, the company data exists at root level with all expected fields. This problem is already fixed in code — just needs a new webhook to test.
+### Root Cause
+The Dialog component (`src/components/ui/dialog.tsx`) uses `z-[200]` for both the overlay and content. Select, DropdownMenu, and Popover portals render at `z-50`. When a dropdown opens inside a Dialog, its portal renders *behind* the z-200 overlay, making it invisible and unclickable.
 
-### Problem 2 — Only 3 of 17 create_activity actions succeeded
-**This is the critical finding.** The `activity_type` database enum has these valid values:
-`task, follow_up, onboarding, renewal, other, ligacao, check_in, email, whatsapp, planejamento`
+Session replay confirms: the Select content IS rendered in the DOM with items visible, but stuck at `transform: translate(0px, -200%)` and `pointer-events: none` because the overlay blocks the Radix positioning measurement.
 
-It does NOT include `"meeting"`. The automation rule "[ELT] Delegação automática" has 14 actions with `activity_type: "meeting"` — every one of those fails silently because the INSERT violates the enum constraint. The `handleAction` function doesn't capture the error from `supabase.from("activities").insert(...)`.
+### Fix
+Raise the z-index of all floating elements (Select, DropdownMenu, Popover, Tooltip) to `z-[250]` so they render above Dialogs/Sheets:
 
-Evidence: automation_logs shows 19 `actions_executed` entries, but only 3 `create_activity` have an `id` (the ones with type "task" or "email"). The other 14 have no `id` — they failed silently.
+| File | Current z-index | New z-index |
+|---|---|---|
+| `select.tsx` SelectContent | `z-50` | `z-[250]` |
+| `dropdown-menu.tsx` Content + SubContent | `z-50` | `z-[250]` |
+| `popover.tsx` PopoverContent | `z-50` | `z-[250]` |
+| `tooltip.tsx` TooltipContent | `z-50` | `z-[250]` |
 
-### Problem 3 — Webhook doesn't trigger automations
-Same root cause as Problem 1 — the webhook crashed before reaching the automation invocation lines (419-430). Once the webhook stops crashing, automations will be invoked via `supabase.functions.invoke()`.
+This is a 4-file, 1-line-per-file fix.
 
-## Fixes
+---
 
-### Fix A — Add "meeting" to activity_type enum (database migration)
+## AJUSTE 1 — Edit Contract Drawer
+
+### Changes
+
+**`src/components/clientes/ClienteContratos.tsx`**:
+- Add "Edit" button (pencil icon) on each contract row
+- Add edit state: `editingContract`, `editForm`, `editOpen`
+- Reuse the same form as "New Contract" but in a Sheet (drawer) instead of Dialog
+- On save: `UPDATE contracts SET ... WHERE id = editingId`
+- After save: call `processContractDates()` to recalculate MRR/cycle dates
+- Insert audit_log entry
+- Admin can edit product_id; CSM/Manager cannot (field disabled based on role)
+
+**`src/pages/ContratosGlobal.tsx`**:
+- Add edit button per row, open same edit drawer
+- Pass `onRefresh` to re-fetch after edit
+
+---
+
+## AJUSTE 2 — File Upload (Files + Notes)
+
+### Database Migration
+Create `office_files` table:
 ```sql
-ALTER TYPE activity_type ADD VALUE IF NOT EXISTS 'meeting';
+CREATE TABLE public.office_files (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  office_id uuid NOT NULL,
+  note_id uuid,
+  name text NOT NULL,
+  file_url text NOT NULL,
+  file_type text,
+  file_size integer,
+  uploaded_by uuid NOT NULL,
+  share_with_client boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.office_files ENABLE ROW LEVEL SECURITY;
 ```
-This is the correct fix because:
-- The automation builder UI offers "meeting" as an option
-- Users have configured rules with this type
-- 14 activities are waiting to be created with this type
 
-### Fix B — Add error handling in handleAction (execute-automations)
-In the `create_activity` case (line 46-47), capture and log the error:
-```javascript
-const { data: act, error: actErr } = await supabase.from("activities").insert(payload).select("id").single();
-if (actErr) {
-  console.error('[AUTOMATIONS] Activity insert error:', actErr.message, 'payload:', JSON.stringify(payload));
-  return { type: "create_activity", error: actErr.message };
-}
+RLS policies: Admin ALL, CSM manage for own offices, Viewer/Client SELECT only (client filtered by `get_client_office_ids`).
+
+### Storage
+Create bucket `office-files` (public: true for signed URLs, or use public URLs).
+
+### Components
+
+**New: `src/components/clientes/ClienteArquivos.tsx`**:
+- Upload button + drag-and-drop area
+- File list: icon, name (download link), size, uploader avatar, date, share toggle, delete button
+- Upload to `office-files/{office_id}/{timestamp}_{filename}`
+- Max 10MB validation
+- Insert into `office_files` table
+
+**Edit: `src/components/clientes/ClienteNotas.tsx`**:
+- Add "Attach file" button when creating/editing notes
+- Show paperclip icon on notes that have attachments
+- Click to download attachment
+
+**Edit: `src/pages/portal/PortalArquivos.tsx`**:
+- Query `office_files` WHERE `share_with_client = true` and display for download
+
+**Edit: `src/pages/Cliente360.tsx`**:
+- Add "Arquivos" tab using new `ClienteArquivos` component
+
+---
+
+## AJUSTE 3 — Slack Action in Automation Rules
+
+### Frontend (`AutomationRulesTab.tsx`):
+Add to `ACTION_TYPES` array:
+```typescript
+{ value: 'send_slack', label: '📢 Enviar Slack' }
 ```
-Apply similar error capture to ALL action types that do database inserts (send_notification, add_note, create_action_plan, etc.).
 
-### Fix C — Ensure webhook deployment is current
-The piperun-webhook code already has the `.catch()` fix from the previous iteration. Verify the edge function redeploys by checking logs after saving. No code change needed — just confirmation.
+Add `case 'send_slack'` in `renderActionConfig`:
+- VariableTextInput for message
+- Select for channel: "Canal padrão" or "Canal específico" (with input for channel ID)
 
-### Fix D — Add company fallback in webhook (safety)
-In `piperun-webhook/index.ts` line 341, add fallback to `person.company`:
-```javascript
-let companyData = deal.company || deal.person?.company;
-```
-This handles edge cases where the Piperun payload structure varies.
+### Backend (`execute-automations/index.ts`):
+The `send_slack` case already exists (lines 160-210) and handles message resolution, channel from config, and gateway call. The existing implementation also reads a custom channel from `c.channel` if provided. This is already functional — only the frontend action type registration is missing.
 
-## Files Modified
-- `supabase/functions/execute-automations/index.ts` — error handling in handleAction
-- `supabase/functions/piperun-webhook/index.ts` — company fallback
-- Database migration: add `meeting` to `activity_type` enum
+---
 
-## Expected Result After Fix
-- All 17 `create_activity` actions succeed (activities created with correct types)
-- Webhook creates office with all mapped fields populated
-- Webhook triggers automations that execute all 19 actions
-- automation_logs show complete execution with all action IDs
+## File Summary
+
+| Action | Files |
+|---|---|
+| Dropdown fix | `select.tsx`, `dropdown-menu.tsx`, `popover.tsx`, `tooltip.tsx` (z-index bump) |
+| Contract edit | `ClienteContratos.tsx`, `ContratosGlobal.tsx` |
+| File upload | New `ClienteArquivos.tsx`, edit `ClienteNotas.tsx`, `Cliente360.tsx`, `PortalArquivos.tsx` |
+| DB migration | Create `office_files` table + `office-files` storage bucket |
+| Slack action | `AutomationRulesTab.tsx` (add type + render config) |
+
+Total: ~10 files modified/created, 1 migration.
 
