@@ -84,14 +84,14 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
               </AvatarFallback>
             </Avatar>
             <div className="flex flex-col">
-              <span className="text-sm font-bold text-foreground">{officeName || 'Portal do Cliente'}</span>
+              <span className="font-display text-sm font-bold uppercase tracking-wide text-foreground">{officeName || 'Portal do Cliente'}</span>
               <span className="hidden text-[10px] text-muted-foreground sm:inline">Portal do Cliente</span>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <button
               onClick={toggleTheme}
-              className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="rounded-[10px] h-[38px] w-[38px] flex items-center justify-center border border-border text-muted-foreground transition-all duration-150 hover:bg-accent hover:text-foreground"
               title={theme === 'light' ? 'Modo escuro' : 'Modo claro'}
             >
               {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4 text-yellow-500" />}
@@ -113,7 +113,7 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
       <div className="mx-auto flex max-w-7xl">
         {/* Sidebar */}
         <nav className={cn(
-          "fixed inset-y-16 left-0 z-40 w-60 border-r border-border/60 bg-card p-3 transition-transform md:sticky md:top-16 md:h-[calc(100vh-4rem)] md:translate-x-0",
+          "fixed inset-y-16 left-0 z-[100] w-60 border-r border-border/60 bg-card p-3 transition-transform md:sticky md:top-16 md:h-[calc(100vh-4rem)] md:translate-x-0",
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         )}>
           <div className="space-y-1 mt-2">
@@ -122,10 +122,10 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
               return (
                 <Link key={item.to} to={item.to} onClick={() => setMobileOpen(false)}>
                   <div className={cn(
-                    "flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm transition-all duration-150",
+                    "flex items-center gap-2.5 rounded-card px-3 py-2.5 text-sm transition-all duration-150",
                     active 
-                      ? "bg-primary/5 text-primary font-medium border-l-[3px] border-primary" 
-                      : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                      ? "bg-foreground text-background font-semibold" 
+                      : "text-muted-foreground hover:bg-surface-elevated hover:text-foreground"
                   )}>
                     <item.icon className="h-4 w-4" />
                     {item.label}
@@ -143,7 +143,7 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Mobile overlay */}
-      {mobileOpen && <div className="fixed inset-0 z-30 bg-black/30 backdrop-blur-sm md:hidden" onClick={() => setMobileOpen(false)} />}
+      {mobileOpen && <div className="fixed inset-0 z-[99] bg-black/50 backdrop-blur-sm md:hidden" onClick={() => setMobileOpen(false)} />}
     </div>
   );
 }

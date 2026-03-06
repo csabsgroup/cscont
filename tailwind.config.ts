@@ -13,6 +13,10 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        display: ['Oswald', 'Inter', 'system-ui', 'sans-serif'],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -70,11 +74,23 @@ export default {
           yellow: "hsl(var(--health-yellow))",
           green: "hsl(var(--health-green))",
         },
+        surface: {
+          DEFAULT: "hsl(var(--color-surface))",
+          elevated: "hsl(var(--color-surface-elevated))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+        card: "12px",
+        modal: "16px",
+        sidebar: "20px",
+        button: "6px",
+        input: "8px",
+      },
+      boxShadow: {
+        glow: "var(--shadow-glow)",
       },
       keyframes: {
         "accordion-down": {

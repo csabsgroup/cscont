@@ -31,10 +31,10 @@ export function NavigationTabs() {
               key={tab.path}
               to={tab.path}
               className={cn(
-                'flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap border-b-2',
+                'flex items-center gap-2 px-4 py-3 text-sm font-medium transition-all duration-150 whitespace-nowrap border-b-2',
                 active
-                  ? 'text-primary border-primary bg-primary/5 rounded-t-lg'
-                  : 'text-muted-foreground border-transparent hover:text-foreground hover:bg-muted/50'
+                  ? 'text-primary border-primary bg-primary/5 rounded-t-input'
+                  : 'text-muted-foreground border-transparent hover:text-foreground hover:bg-surface-elevated'
               )}
             >
               <tab.icon className="h-4 w-4" />

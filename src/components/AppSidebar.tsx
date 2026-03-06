@@ -72,7 +72,7 @@ export function AppSidebar() {
 
   const renderGroup = (label: string, items: typeof operationItems) => (
     <SidebarGroup>
-      <SidebarGroupLabel className="text-xs font-medium uppercase tracking-wider text-muted-foreground/60 px-3">
+      <SidebarGroupLabel className="text-label-micro text-muted-foreground/60 px-3">
         {label}
       </SidebarGroupLabel>
       <SidebarGroupContent>
@@ -83,8 +83,8 @@ export function AppSidebar() {
                 <NavLink
                   to={item.url}
                   end={item.url === '/'}
-                  className="rounded-lg px-3 py-2.5 text-muted-foreground transition-all duration-150 hover:bg-accent hover:text-foreground"
-                  activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium border-l-[3px] border-primary"
+                  className="rounded-card px-3 py-2.5 text-muted-foreground transition-all duration-150 hover:bg-surface-elevated hover:text-foreground"
+                  activeClassName="!bg-foreground !text-background font-semibold border-l-0"
                 >
                   <item.icon className="h-4 w-4" />
                   {!collapsed && <span>{item.title}</span>}
@@ -104,7 +104,7 @@ export function AppSidebar() {
           <img src={logo} alt="Contador CEO" className="h-9 w-auto" />
           {!collapsed && (
             <div className="flex flex-col">
-              <span className="text-sm font-bold text-foreground">Contador CEO</span>
+              <span className="font-display text-sm font-bold uppercase tracking-wide text-foreground">Contador CEO</span>
               <span className="text-[10px] text-muted-foreground">Customer Success</span>
             </div>
           )}
@@ -125,7 +125,7 @@ export function AppSidebar() {
             <SidebarMenuButton
               onClick={signOut}
               tooltip="Sair"
-              className="rounded-lg px-3 py-2.5 hover:bg-accent transition-all duration-150"
+              className="rounded-card px-3 py-2.5 hover:bg-surface-elevated transition-all duration-150"
             >
               <Avatar className="h-7 w-7">
                 <AvatarImage src={profile?.avatar_url || undefined} />
