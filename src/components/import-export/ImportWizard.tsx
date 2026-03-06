@@ -367,6 +367,11 @@ async function insertRow(template: EntityTemplate, row: Record<string, any>): Pr
       const { data } = await supabase.from('profiles').select('id').ilike('full_name', `%${row.csm_email.trim().split('@')[0]}%`).maybeSingle();
       csmId = data?.id || null;
     }
+    // Lookup CSM by name if csm_email didn't resolve
+    if (!csmId && row.csm_name) {
+      const { data } = await supabase.from('profiles').select('id').ilike('full_name', `%${row.csm_name.trim()}%`).maybeSingle();
+      csmId = data?.id || null;
+    }
 
     const insertData: Record<string, any> = {
       name: row.name,
@@ -390,6 +395,8 @@ async function insertRow(template: EntityTemplate, row: Record<string, any>): Pr
       cycle_start_date: parseDateBR(row.cycle_start_date),
       cycle_end_date: parseDateBR(row.cycle_end_date),
       churn_date: parseDateBR(row.churn_date),
+      churn_observation: row.churn_observation || null,
+      last_meeting_date: parseDateBR(row.last_meeting_date),
       notes: row.notes || null,
       office_code: row.office_code || null,
     };
