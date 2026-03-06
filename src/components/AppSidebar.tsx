@@ -14,6 +14,7 @@ import {
   ScrollText,
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
+import { UserAvatar } from '@/components/shared/UserAvatar';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -127,12 +128,11 @@ export function AppSidebar() {
               tooltip="Sair"
               className="rounded-card px-3 py-2.5 hover:bg-surface-elevated transition-all duration-150"
             >
-              <Avatar className="h-7 w-7">
-                <AvatarImage src={profile?.avatar_url || undefined} />
-                <AvatarFallback className="bg-primary/10 text-primary text-[10px] font-semibold">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
+              <UserAvatar
+                name={profile?.full_name || 'Usuário'}
+                avatarUrl={profile?.avatar_url || undefined}
+                size="sm"
+              />
               {!collapsed && (
                 <div className="flex flex-1 items-center justify-between min-w-0">
                   <div className="flex flex-col min-w-0">
