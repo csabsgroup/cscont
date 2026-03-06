@@ -1,63 +1,67 @@
 
 
-# Diagnosis and Fix Plan
+# Diagnosis: Manual Import Not Filling Fields
 
-## Root Causes Found
+## Root Cause
 
-### Problem 1 — Webhook mapping not filling fields
-The webhook_logs table confirms the error: `"supabase.from(...).insert(...).catch is not a function"`. The last two webhooks (March 5 and March 6) both crashed with this error BEFORE reaching office creation. The `.catch()` fix was applied in code but the webhooks arrived before deployment completed. The mapping paths are correct, the company data exists at root level with all expected fields. This problem is already fixed in code — just needs a new webhook to test.
+The bug is in `fetchFullSourceData()` (line 293-343 of `integration-piperun/index.ts`).
 
-### Problem 2 — Only 3 of 17 create_activity actions succeeded
-**This is the critical finding.** The `activity_type` database enum has these valid values:
-`task, follow_up, onboarding, renewal, other, ligacao, check_in, email, whatsapp, planejamento`
+The function fetches the deal with `?with=person,company,proposals,...` which returns **shallow** company and person objects — they have `id`, `name`, `cnpj` but are **missing nested relations** like `city`, `address`, `contact_phones[]`, `contact_emails[]`.
 
-It does NOT include `"meeting"`. The automation rule "[ELT] Delegação automática" has 14 actions with `activity_type: "meeting"` — every one of those fails silently because the INSERT violates the enum constraint. The `handleAction` function doesn't capture the error from `supabase.from("activities").insert(...)`.
+Since the shallow `dealData.company` is truthy, the fallback fetch to `/companies/{id}` (which returns the FULL company with all nested data) is **skipped**:
 
-Evidence: automation_logs shows 19 `actions_executed` entries, but only 3 `create_activity` have an `id` (the ones with type "task" or "email"). The other 14 have no `id` — they failed silently.
-
-### Problem 3 — Webhook doesn't trigger automations
-Same root cause as Problem 1 — the webhook crashed before reaching the automation invocation lines (419-430). Once the webhook stops crashing, automations will be invoked via `supabase.functions.invoke()`.
-
-## Fixes
-
-### Fix A — Add "meeting" to activity_type enum (database migration)
-```sql
-ALTER TYPE activity_type ADD VALUE IF NOT EXISTS 'meeting';
-```
-This is the correct fix because:
-- The automation builder UI offers "meeting" as an option
-- Users have configured rules with this type
-- 14 activities are waiting to be created with this type
-
-### Fix B — Add error handling in handleAction (execute-automations)
-In the `create_activity` case (line 46-47), capture and log the error:
 ```javascript
-const { data: act, error: actErr } = await supabase.from("activities").insert(payload).select("id").single();
-if (actErr) {
-  console.error('[AUTOMATIONS] Activity insert error:', actErr.message, 'payload:', JSON.stringify(payload));
-  return { type: "create_activity", error: actErr.message };
+// Line 298-303: this check FAILS because company exists (but is shallow)
+let companyData = dealData.company;
+if (!companyData && dealData.company_id) {  // ← never enters here
+  const companyRes = await piperunGet(`/companies/${dealData.company_id}`, token);
+  companyData = companyRes.data || companyRes;  // ← full data never fetched
 }
 ```
-Apply similar error capture to ALL action types that do database inserts (send_notification, add_note, create_action_plan, etc.).
 
-### Fix C — Ensure webhook deployment is current
-The piperun-webhook code already has the `.catch()` fix from the previous iteration. Verify the edge function redeploys by checking logs after saving. No code change needed — just confirmation.
+Same problem for `person` — the shallow person has `name` and `cpf` but no `contact_emails[]` or `contact_phones[]`.
 
-### Fix D — Add company fallback in webhook (safety)
-In `piperun-webhook/index.ts` line 341, add fallback to `person.company`:
+**Evidence from DB:** The office has `cnpj` filled (top-level company field) and `name` from deal title, but `city`, `state`, `cep`, `email`, `whatsapp` are all null — these all come from nested paths like `company.city.name`, `person.contact_emails[0].address`.
+
+The webhook worked differently because it received the deal payload directly (without `?with=` shallow objects), so the fallback API calls to `/companies/{id}` and `/persons/{id}` actually ran.
+
+## Fix
+
+**File:** `supabase/functions/integration-piperun/index.ts`
+
+**Change in `fetchFullSourceData` (lines 297-313):** Always fetch company and person from their dedicated API endpoints, regardless of what `?with=` returned. The `?with=` data is unreliable for nested relations.
+
 ```javascript
-let companyData = deal.company || deal.person?.company;
+// ALWAYS fetch full company from dedicated endpoint
+let companyData = null;
+const companyId = dealData.company_id || dealData.company?.id;
+if (companyId) {
+  try {
+    const companyRes = await piperunGet(`/companies/${companyId}`, token);
+    companyData = companyRes.data || companyRes;
+  } catch (e) { 
+    companyData = dealData.company || {};
+  }
+} else {
+  companyData = dealData.company || {};
+}
+
+// ALWAYS fetch full person from dedicated endpoint
+let personData = null;
+const personId = dealData.person_id || dealData.person?.id;
+if (personId) {
+  try {
+    const personRes = await piperunGet(`/persons/${personId}`, token);
+    personData = personRes.data || personRes;
+  } catch (e) {
+    personData = dealData.person || {};
+  }
+} else {
+  personData = dealData.person || {};
+}
 ```
-This handles edge cases where the Piperun payload structure varies.
 
-## Files Modified
-- `supabase/functions/execute-automations/index.ts` — error handling in handleAction
-- `supabase/functions/piperun-webhook/index.ts` — company fallback
-- Database migration: add `meeting` to `activity_type` enum
+This ensures company and person always have full nested data (city, address, contact_phones, contact_emails) regardless of what the `?with=` query returned.
 
-## Expected Result After Fix
-- All 17 `create_activity` actions succeed (activities created with correct types)
-- Webhook creates office with all mapped fields populated
-- Webhook triggers automations that execute all 19 actions
-- automation_logs show complete execution with all action IDs
+No other changes needed — the mapping logic and `processAndCreateOffice` are correct; the problem is purely that the source data is incomplete.
 
