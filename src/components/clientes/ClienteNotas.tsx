@@ -41,7 +41,7 @@ export function ClienteNotas({ officeId, initialNotes }: Props) {
     let filesMap: Record<string, any[]> = {};
     if (noteIds.length > 0) {
       const { data: files } = await supabase
-        .from('office_files' as any)
+        .from('office_files')
         .select('*')
         .in('note_id', noteIds);
       (files || []).forEach((f: any) => {
@@ -87,7 +87,7 @@ export function ClienteNotas({ officeId, initialNotes }: Props) {
       const { error: upErr } = await supabase.storage.from('office-files').upload(path, attachFile);
       if (!upErr) {
         const { data: urlData } = supabase.storage.from('office-files').getPublicUrl(path);
-        await supabase.from('office_files' as any).insert({
+        await supabase.from('office_files').insert({
           office_id: officeId,
           note_id: noteData.id,
           name: attachFile.name,
@@ -107,7 +107,7 @@ export function ClienteNotas({ officeId, initialNotes }: Props) {
   };
 
   const handleDeleteNote = async (noteId: string) => {
-    await supabase.from('office_files' as any).delete().eq('note_id', noteId);
+    await supabase.from('office_files').delete().eq('note_id', noteId);
     await supabase.from('office_notes').delete().eq('id', noteId);
     toast.success('Nota excluída.');
     fetchNotes();

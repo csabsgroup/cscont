@@ -42,7 +42,7 @@ export function ClienteArquivos({ officeId }: Props) {
 
   const fetchFiles = useCallback(async () => {
     const { data } = await supabase
-      .from('office_files' as any)
+      .from('office_files')
       .select('*')
       .eq('office_id', officeId)
       .is('note_id', null)
@@ -74,7 +74,7 @@ export function ClienteArquivos({ officeId }: Props) {
 
     const { data: urlData } = supabase.storage.from('office-files').getPublicUrl(path);
 
-    const { error: dbError } = await supabase.from('office_files' as any).insert({
+    const { error: dbError } = await supabase.from('office_files').insert({
       office_id: officeId,
       name: file.name,
       file_url: urlData.publicUrl,
@@ -111,7 +111,7 @@ export function ClienteArquivos({ officeId }: Props) {
     if (urlParts[1]) {
       await supabase.storage.from('office-files').remove([urlParts[1]]);
     }
-    await supabase.from('office_files' as any).delete().eq('id', f.id);
+    await supabase.from('office_files').delete().eq('id', f.id);
     await supabase.from('audit_logs').insert({
       user_id: user.id,
       action: 'delete_file',
@@ -124,7 +124,7 @@ export function ClienteArquivos({ officeId }: Props) {
   };
 
   const toggleShare = async (f: any) => {
-    await supabase.from('office_files' as any).update({ share_with_client: !f.share_with_client }).eq('id', f.id);
+    await supabase.from('office_files').update({ share_with_client: !f.share_with_client }).eq('id', f.id);
     fetchFiles();
   };
 

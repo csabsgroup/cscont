@@ -22,7 +22,7 @@ export default function PortalArquivos() {
     if (!officeId) { setLoading(false); return; }
     (async () => {
       const { data } = await supabase
-        .from('office_files' as any)
+        .from('office_files')
         .select('*')
         .eq('office_id', officeId)
         .eq('share_with_client', true)
