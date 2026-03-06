@@ -45,13 +45,19 @@ export function PortalProvider({ children, previewOfficeId }: Props) {
 
     if (!user) return;
     (async () => {
-      const { data: links } = await supabase
+      console.log('[PORTAL] Resolving office for user:', user.id);
+      const { data: links, error } = await supabase
         .from('client_office_links')
         .select('office_id')
         .eq('user_id', user.id);
+      console.log('[PORTAL] client_office_links result:', links, error);
       const oid = links?.[0]?.office_id;
-      if (!oid) return;
+      if (!oid) {
+        console.warn('[PORTAL] No office linked for user', user.id);
+        return;
+      }
       setOfficeId(oid);
+      console.log('[PORTAL] Office ID resolved:', oid);
       const { data: office } = await supabase
         .from('offices')
         .select('name, logo_url, photo_url')
