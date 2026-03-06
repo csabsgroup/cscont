@@ -295,6 +295,7 @@ const ACTION_TYPES = [
   { value: 'create_activity', label: 'Criar Atividade' },
   { value: 'send_notification', label: 'Enviar Notificação' },
   { value: 'send_email', label: 'Enviar Email' },
+  { value: 'send_slack', label: '📢 Enviar Slack' },
   { value: 'move_journey_stage', label: 'Mover Etapa da Jornada' },
   { value: 'change_status', label: 'Alterar Status' },
   { value: 'create_action_plan', label: 'Criar Plano de Ação' },
@@ -1025,6 +1026,29 @@ export function AutomationRulesTab() {
             </div>
             <div className="space-y-1"><Label className="text-xs">Quantidade</Label><Input type="number" value={action.config.quantity || ''} onChange={e => updateConfig({ quantity: e.target.value })} placeholder="1" /></div>
             <div className="space-y-1"><Label className="text-xs">Validade (dias)</Label><Input type="number" value={action.config.validity_days || ''} onChange={e => updateConfig({ validity_days: e.target.value })} placeholder="90" /></div>
+          </div>
+        );
+
+      case 'send_slack':
+        return (
+          <div className="space-y-3">
+            <VariableTextInput value={action.config.message || ''} onChange={v => updateConfig({ message: v })} label="Mensagem *" multiline placeholder="🔴 {{escritorio}} caiu para health vermelho" />
+            <div className="space-y-1">
+              <Label className="text-xs">Canal</Label>
+              <Select value={action.config.channel_mode || 'default'} onValueChange={v => updateConfig({ channel_mode: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="default">Usar canal padrão</SelectItem>
+                  <SelectItem value="custom">Canal específico</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {action.config.channel_mode === 'custom' && (
+              <div className="space-y-1">
+                <Label className="text-xs">ID do canal</Label>
+                <Input value={action.config.channel || ''} onChange={e => updateConfig({ channel: e.target.value })} placeholder="C0XXXXXXX" />
+              </div>
+            )}
           </div>
         );
 
