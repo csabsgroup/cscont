@@ -469,10 +469,10 @@ export function FormTemplatesTab() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Produto</Label>
-                  <Select value={productId} onValueChange={setProductId}>
+                  <Select value={productId || '__all__'} onValueChange={v => setProductId(v === '__all__' ? '' : v)}>
                     <SelectTrigger><SelectValue placeholder="Todos os produtos" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Todos</SelectItem>
+                      <SelectItem value="__all__">Todos</SelectItem>
                       {products.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
@@ -588,10 +588,10 @@ export function FormTemplatesTab() {
                                       {sections.length > 0 && (
                                         <div className="space-y-1">
                                           <Label className="text-xs">Seção</Label>
-                                          <Select value={field.section_id || ''} onValueChange={v => updateField(idx, { section_id: v || null })}>
+                                          <Select value={field.section_id || '__none__'} onValueChange={v => updateField(idx, { section_id: v === '__none__' ? null : v })}>
                                             <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Nenhuma" /></SelectTrigger>
                                             <SelectContent>
-                                              <SelectItem value="">Nenhuma</SelectItem>
+                                              <SelectItem value="__none__">Nenhuma</SelectItem>
                                               {sections.map(s => <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>)}
                                             </SelectContent>
                                           </Select>
