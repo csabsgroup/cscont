@@ -2186,6 +2186,7 @@ export type Database = {
         | "email"
         | "whatsapp"
         | "planejamento"
+        | "meeting"
       app_role: "admin" | "manager" | "csm" | "viewer" | "client"
       bonus_request_status: "pending" | "approved" | "denied"
       contract_status: "ativo" | "encerrado" | "cancelado" | "pendente"
@@ -2349,6 +2350,7 @@ export const Constants = {
         "email",
         "whatsapp",
         "planejamento",
+        "meeting",
       ],
       app_role: ["admin", "manager", "csm", "viewer", "client"],
       bonus_request_status: ["pending", "approved", "denied"],

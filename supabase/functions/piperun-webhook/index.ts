@@ -338,7 +338,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ success: false, message: msg });
     }
 
-    let companyData = deal.company;
+    let companyData = deal.company || deal.person?.company;
     if (!companyData && deal.company_id) {
       try {
         const res = await piperunGet(`/companies/${deal.company_id}`, token);

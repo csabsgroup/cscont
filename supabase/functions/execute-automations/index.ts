@@ -43,7 +43,11 @@ async function handleAction(supabase: any, action: any, office_id: string, offic
         priority: c.priority || "medium",
       };
       if (dryRun) return { type: "create_activity", would_create: payload };
-      const { data: act } = await supabase.from("activities").insert(payload).select("id").single();
+      const { data: act, error: actErr } = await supabase.from("activities").insert(payload).select("id").single();
+      if (actErr) {
+        console.error('[AUTOMATIONS] Activity insert error:', actErr.message, 'payload:', JSON.stringify(payload));
+        return { type: "create_activity", error: actErr.message };
+      }
       return { type: "create_activity", id: act?.id };
     }
 
@@ -73,7 +77,7 @@ async function handleAction(supabase: any, action: any, office_id: string, offic
     case "send_notification": {
       const recipientId = c.recipient === "csm" ? assignedCsm : userId;
       if (recipientId && !dryRun) {
-        await supabase.from("notifications").insert({
+        const { error: notifErr } = await supabase.from("notifications").insert({
           user_id: recipientId,
           title: resolveText(c.title || "Notificação automática"),
           message: resolveText(c.message || ""),
@@ -81,6 +85,10 @@ async function handleAction(supabase: any, action: any, office_id: string, offic
           entity_type: "office",
           entity_id: office_id,
         });
+        if (notifErr) {
+          console.error('[AUTOMATIONS] Notification insert error:', notifErr.message);
+          return { type: "send_notification", error: notifErr.message };
+        }
       }
       return { type: "send_notification" };
     }
@@ -145,13 +153,17 @@ async function handleAction(supabase: any, action: any, office_id: string, offic
       const dueDate = new Date();
       dueDate.setDate(dueDate.getDate() + (parseInt(c.due_days) || 7));
       if (!dryRun) {
-        await supabase.from("action_plans").insert({
+        const { error: apErr } = await supabase.from("action_plans").insert({
           title: resolveText(c.title || "Plano de ação automático"),
           description: resolveText(c.description || ""),
           office_id,
           created_by: assignedCsm || userId,
           due_date: dueDate.toISOString().split("T")[0],
         });
+        if (apErr) {
+          console.error('[AUTOMATIONS] Action plan insert error:', apErr.message);
+          return { type: "create_action_plan", error: apErr.message };
+        }
       }
       return { type: "create_action_plan" };
     }
@@ -232,12 +244,16 @@ async function handleAction(supabase: any, action: any, office_id: string, offic
 
     case "add_note": {
       if (!dryRun) {
-        await supabase.from("office_notes").insert({
+        const { error: noteErr } = await supabase.from("office_notes").insert({
           office_id,
           note_type: c.note_type || "observacao",
           content: resolveText(c.content || "Nota automática"),
           created_by: assignedCsm || userId,
         });
+        if (noteErr) {
+          console.error('[AUTOMATIONS] Note insert error:', noteErr.message);
+          return { type: "add_note", error: noteErr.message };
+        }
       }
       return { type: "add_note" };
     }
