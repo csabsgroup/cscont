@@ -1,63 +1,80 @@
 
 
-# Diagnosis and Fix Plan
+# Plan: Add "Run Now" and "Affected Clients Preview" to Automation Rules
 
-## Root Causes Found
+## Summary
 
-### Problem 1 — Webhook mapping not filling fields
-The webhook_logs table confirms the error: `"supabase.from(...).insert(...).catch is not a function"`. The last two webhooks (March 5 and March 6) both crashed with this error BEFORE reaching office creation. The `.catch()` fix was applied in code but the webhooks arrived before deployment completed. The mapping paths are correct, the company data exists at root level with all expected fields. This problem is already fixed in code — just needs a new webhook to test.
+Add two features to the automation rule editor: (1) a toggle to execute the rule immediately vs only on next scheduled execution, and (2) a panel showing which clients match the rule's conditions.
 
-### Problem 2 — Only 3 of 17 create_activity actions succeeded
-**This is the critical finding.** The `activity_type` database enum has these valid values:
-`task, follow_up, onboarding, renewal, other, ligacao, check_in, email, whatsapp, planejamento`
+## Changes
 
-It does NOT include `"meeting"`. The automation rule "[ELT] Delegação automática" has 14 actions with `activity_type: "meeting"` — every one of those fails silently because the INSERT violates the enum constraint. The `handleAction` function doesn't capture the error from `supabase.from("activities").insert(...)`.
+### File 1: `src/components/configuracoes/AutomationRulesTab.tsx`
 
-Evidence: automation_logs shows 19 `actions_executed` entries, but only 3 `create_activity` have an `id` (the ones with type "task" or "email"). The other 14 have no `id` — they failed silently.
+**A. Add "Run Now" option in Step 3 (Agendamento) — after line ~1513:**
+- Add a separator and a new section with a Switch: "Disparar regra agora ao salvar"
+- When enabled, after `handleSave` succeeds, invoke `execute-automations` with `action: 'runNow'` passing the saved rule ID
+- Store this in a local state `runNow` (not persisted to DB — it's a one-time action)
 
-### Problem 3 — Webhook doesn't trigger automations
-Same root cause as Problem 1 — the webhook crashed before reaching the automation invocation lines (419-430). Once the webhook stops crashing, automations will be invoked via `supabase.functions.invoke()`.
+**B. Add "Preview affected clients" button + panel in Step 2 (Condições) — after line ~1410:**
+- Add a button "Ver clientes atingidos" with the `Users` icon (already imported)
+- When clicked, call a new edge function action `previewMatchedOffices` that evaluates the rule's conditions against all active offices and returns a list of matched office names/IDs
+- Display results in a collapsible card showing office names, count, and CSM
 
-## Fixes
+**C. Update `handleSave` (line 432-475):**
+- After successful save, if `runNow` is true, invoke `execute-automations` with `action: 'runNowAll'` + `rule_id` to execute the rule against all matching clients immediately
 
-### Fix A — Add "meeting" to activity_type enum (database migration)
-```sql
-ALTER TYPE activity_type ADD VALUE IF NOT EXISTS 'meeting';
+**D. Wire the existing `dryRunResults` state (line 340) and `handleDryRun` (line 524):**
+- The dry run infrastructure exists but is never shown in the UI. Expose it in the conditions step or as a footer button.
+
+### File 2: `supabase/functions/execute-automations/index.ts`
+
+**A. Add `previewMatchedOffices` action (after line ~778):**
+- Accepts: `conditions`, `condition_logic`, `product_id`
+- Queries all active offices (status in ativo/upsell/bonus_elite)
+- Evaluates conditions against each office using existing `resolveConditionValue` + `evaluateCondition`
+- Returns list of `{ id, name, csm_name }` for matched offices (limit 100)
+
+**B. Add `runNowAll` action (after `previewMatchedOffices`):**
+- Accepts: `rule_id`
+- Fetches the rule, gets all active offices matching product scope
+- Runs `executeV2Rules` for each matched office with `dryRun=false`
+- Returns summary of executed/skipped/errors
+
+## UI Layout for Step 3 (Schedule)
+
+After the existing "Retrigger" section, add:
+
+```text
+─────────────────────────────────
+Execução imediata
+[Toggle] Disparar regra agora ao salvar
+  Texto auxiliar: "A regra será executada imediatamente
+  para todos os clientes que atendem as condições."
+─────────────────────────────────
 ```
-This is the correct fix because:
-- The automation builder UI offers "meeting" as an option
-- Users have configured rules with this type
-- 14 activities are waiting to be created with this type
 
-### Fix B — Add error handling in handleAction (execute-automations)
-In the `create_activity` case (line 46-47), capture and log the error:
-```javascript
-const { data: act, error: actErr } = await supabase.from("activities").insert(payload).select("id").single();
-if (actErr) {
-  console.error('[AUTOMATIONS] Activity insert error:', actErr.message, 'payload:', JSON.stringify(payload));
-  return { type: "create_activity", error: actErr.message };
-}
+## UI Layout for Step 2 (Conditions) — bottom
+
+```text
+─────────────────────────────────
+[Users icon] Ver clientes atingidos (Preview)
+  Loading... or
+  ┌─────────────────────────────┐
+  │ 23 clientes atingidos       │
+  │                             │
+  │ • Escritório ABC (CSM: Ana) │
+  │ • Escritório DEF (CSM: João)│
+  │ • ... (mostrar até 50)      │
+  └─────────────────────────────┘
+─────────────────────────────────
 ```
-Apply similar error capture to ALL action types that do database inserts (send_notification, add_note, create_action_plan, etc.).
 
-### Fix C — Ensure webhook deployment is current
-The piperun-webhook code already has the `.catch()` fix from the previous iteration. Verify the edge function redeploys by checking logs after saving. No code change needed — just confirmation.
+## Summary
 
-### Fix D — Add company fallback in webhook (safety)
-In `piperun-webhook/index.ts` line 341, add fallback to `person.company`:
-```javascript
-let companyData = deal.company || deal.person?.company;
-```
-This handles edge cases where the Piperun payload structure varies.
+| File | Changes |
+|------|---------|
+| `AutomationRulesTab.tsx` | Add run-now toggle in step 3, preview panel in step 2, wire to save |
+| `execute-automations/index.ts` | Add `previewMatchedOffices` and `runNowAll` actions |
 
-## Files Modified
-- `supabase/functions/execute-automations/index.ts` — error handling in handleAction
-- `supabase/functions/piperun-webhook/index.ts` — company fallback
-- Database migration: add `meeting` to `activity_type` enum
-
-## Expected Result After Fix
-- All 17 `create_activity` actions succeed (activities created with correct types)
-- Webhook creates office with all mapped fields populated
-- Webhook triggers automations that execute all 19 actions
-- automation_logs show complete execution with all action IDs
+2 files modified. No database changes.
 
