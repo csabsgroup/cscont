@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronUp, Heart, Calendar, Target, CreditCard, DollarSign, Shield, Clock, Info } from 'lucide-react';
@@ -11,6 +11,7 @@ import { StatusDropdown } from './StatusDropdown';
 import { InlineEditField } from '@/components/shared/InlineEditField';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface Props {
   office: any;
@@ -32,6 +33,8 @@ export function ClienteVisao360({
   office, health, contracts, meetings, actionPlans, csmProfile, stageName, contacts, onNavigateTab, onStatusSelect, canEditStatus, onRefresh, readOnly,
 }: Props) {
   const [showMore, setShowMore] = useState(false);
+  const { isAdmin, isManager } = useAuth();
+  const [csmOptions, setCsmOptions] = useState<Array<{ id: string; full_name: string }>>([]);
 
   const activeContract = contracts.find(c => c.status === 'ativo');
   const daysToRenewal = activeContract?.renewal_date ? differenceInDays(new Date(activeContract.renewal_date), new Date()) : null;
