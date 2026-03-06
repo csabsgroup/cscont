@@ -6,7 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Upload, Download, CheckCircle2, AlertCircle, Loader2, Undo2, Eye } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Upload, Download, CheckCircle2, AlertCircle, AlertTriangle, Loader2, Undo2, Eye, ChevronDown, FileDown, RotateCcw, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -16,6 +17,78 @@ import {
 } from '@/lib/import-templates';
 import { sanitizeValue, normalizeStatus, isNullValue } from '@/lib/import-sanitize';
 import { parseUploadedFile, downloadCSV } from '@/lib/export-helpers';
+
+// ── Types for structured import results ─────────────────────
+interface ImportRowResult {
+  lineNumber: number;
+  officeName: string;
+  status: 'success' | 'error' | 'warning';
+  errors: string[];
+  warnings: string[];
+}
+
+// ── Translate Supabase errors to friendly Portuguese ────────
+function translateSupabaseError(error: any): string {
+  const msg = error?.message || '';
+  const detail = error?.details || '';
+
+  if (msg.includes('duplicate key') || msg.includes('unique')) {
+    if (msg.includes('cnpj') || detail.includes('cnpj')) {
+      const match = detail.match(/\(cnpj\)=\(([^)]+)\)/);
+      return `CNPJ duplicado: ${match?.[1] || 'valor'} já existe no sistema`;
+    }
+    if (msg.includes('email') || detail.includes('email')) return 'Email duplicado: já existe um registro com este email';
+    if (msg.includes('name') || detail.includes('name')) return 'Nome duplicado: já existe um registro com este nome';
+    return `Registro duplicado: ${detail || msg}`;
+  }
+  if (msg.includes('not-null') || msg.includes('null value')) {
+    const colMatch = msg.match(/column "(\w+)"/);
+    return `Campo obrigatório "${colMatch?.[1] || 'desconhecido'}" está vazio`;
+  }
+  if (msg.includes('foreign key') || msg.includes('violates foreign key')) return `Referência inválida: ${detail || msg}`;
+  if (msg.includes('RLS') || msg.includes('policy') || msg.includes('permission') || msg.includes('row-level security')) return 'Sem permissão para inserir. Verifique suas permissões.';
+  if (msg.includes('invalid input syntax')) {
+    const typeMatch = msg.match(/type (\w+)/);
+    return `Formato de dado inválido para o tipo ${typeMatch?.[1] || 'desconhecido'}`;
+  }
+  return `Erro no banco: ${msg}${detail ? ' — ' + detail : ''}`;
+}
+
+// ── Group errors by type for summary ────────────────────────
+function groupErrorsByType(results: ImportRowResult[]): Record<string, number> {
+  const groups: Record<string, number> = {};
+  for (const r of results.filter(r => r.status === 'error')) {
+    for (const err of r.errors) {
+      let type = 'Outro';
+      if (err.includes('duplicado') || err.includes('duplicate')) type = 'Registro duplicado';
+      else if (err.includes('obrigatório') || err.includes('vazio') || err.includes('required')) type = 'Campo obrigatório vazio';
+      else if (err.includes('inválido') || err.includes('formato') || err.includes('syntax')) type = 'Formato de dado inválido';
+      else if (err.includes('permissão') || err.includes('RLS') || err.includes('security')) type = 'Sem permissão';
+      else if (err.includes('CNPJ')) type = 'CNPJ inválido/duplicado';
+      else if (err.includes('não encontrad')) type = 'Referência não encontrada';
+      groups[type] = (groups[type] || 0) + 1;
+    }
+  }
+  return groups;
+}
+
+// ── Export errors as CSV ────────────────────────────────────
+function exportErrorsCSV(results: ImportRowResult[]) {
+  const problemRows = results.filter(r => r.status === 'error' || r.status === 'warning');
+  if (problemRows.length === 0) return;
+  const csvLines = ['Linha,Escritório,Status,Detalhes'];
+  for (const r of problemRows) {
+    const status = r.status === 'error' ? 'Erro' : 'Aviso';
+    const details = [...r.errors, ...r.warnings].join(' | ');
+    csvLines.push(`${r.lineNumber},"${r.officeName.replace(/"/g, '""')}",${status},"${details.replace(/"/g, '""')}"`);
+  }
+  const blob = new Blob(['\uFEFF' + csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'erros_importacao.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 interface ImportWizardProps {
   open: boolean;
@@ -46,7 +119,7 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
   const [validCount, setValidCount] = useState(0);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [result, setResult] = useState<{ success: number; errors: number; skipped: number; batchId?: string; warnings?: string[] } | null>(null);
+  const [result, setResult] = useState<{ success: number; errors: number; skipped: number; batchId?: string; warnings?: string[]; rowResults?: ImportRowResult[] } | null>(null);
   const [filteredEmptyCount, setFilteredEmptyCount] = useState(0);
 
   const reset = () => {
@@ -134,56 +207,71 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
   const handleImport = async () => {
     setImporting(true); setProgress(0);
     try {
-      const mappedRows = getMappedRows().filter((row, i) => {
-        const rowErrors = validateRow(row, template.fields, i);
-        return rowErrors.length === 0;
-      });
-
-      console.log(`[IMPORT] Starting import of ${mappedRows.length} valid rows (from ${rows.length} total)`);
-
-      if (mappedRows.length === 0) {
-        toast.error('Nenhuma linha válida para importar.');
-        setImporting(false);
-        return;
-      }
-
-      toast.info(`Importando ${mappedRows.length} registros...`);
-
-      let success = 0, errorCount = 0, skipped = 0;
+      const allMappedRows = getMappedRows();
+      const rowResults: ImportRowResult[] = [];
       const insertedIds: string[] = [];
-      const warnings: string[] = [];
-      const errorDetails: string[] = [];
-      const chunkSize = 50;
+      let batchId: string | undefined;
 
-      for (let i = 0; i < mappedRows.length; i += chunkSize) {
-        const chunk = mappedRows.slice(i, i + chunkSize);
-        for (let j = 0; j < chunk.length; j++) {
-          const row = chunk[j];
-          const rowIndex = i + j + 1;
-          try {
-            console.log(`[IMPORT] Row ${rowIndex}/${mappedRows.length}:`, row.name || row.office_name || 'unknown');
-            const insertResult = await insertRow(template, row, warnings);
-            if (insertResult) {
-              insertedIds.push(insertResult);
-              success++;
-            } else {
-              console.warn(`[IMPORT] Row ${rowIndex} returned null id`);
-              errorDetails.push(`Linha ${rowIndex}: inserção retornou sem ID`);
-              errorCount++;
-            }
-          } catch (err: any) {
-            const msg = err?.message || String(err);
-            console.error(`[IMPORT] Row ${rowIndex} FAILED:`, msg);
-            errorDetails.push(`Linha ${rowIndex}: ${msg}`);
-            errorCount++;
-          }
+      console.log(`[IMPORT] Starting import of ${allMappedRows.length} rows`);
+      toast.info(`Importando ${allMappedRows.length} registros...`);
+
+      for (let i = 0; i < allMappedRows.length; i++) {
+        const row = allMappedRows[i];
+        const rowResult: ImportRowResult = {
+          lineNumber: i + 2, // +2: line 1 = header
+          officeName: row.name || row.office_name || row.title || `Linha ${i + 2}`,
+          status: 'success',
+          errors: [],
+          warnings: [],
+        };
+
+        // Pre-insert validation
+        const validationErrors = validateRow(row, template.fields, i);
+        if (validationErrors.length > 0) {
+          rowResult.errors = validationErrors;
+          rowResult.status = 'error';
+          rowResults.push(rowResult);
+          setProgress(Math.round(((i + 1) / allMappedRows.length) * 100));
+          continue;
         }
-        setProgress(Math.round(((i + chunk.length) / mappedRows.length) * 100));
+
+        try {
+          const rowWarnings: string[] = [];
+          const insertedId = await insertRow(template, row, rowWarnings);
+
+          if (rowWarnings.length > 0) {
+            rowResult.warnings = rowWarnings;
+          }
+
+          if (insertedId) {
+            insertedIds.push(insertedId);
+            rowResult.status = rowWarnings.length > 0 ? 'warning' : 'success';
+          } else {
+            rowResult.errors.push('Inserção retornou sem ID');
+            rowResult.status = 'error';
+          }
+        } catch (err: any) {
+          const friendlyMsg = err?.code ? translateSupabaseError(err) : (err?.message || String(err));
+          rowResult.errors.push(friendlyMsg);
+          rowResult.status = 'error';
+        }
+
+        rowResults.push(rowResult);
+
+        // Progress toast every 20 rows
+        if ((i + 1) % 20 === 0) {
+          toast.info(`Processando ${i + 1}/${allMappedRows.length}...`, { id: 'import-progress' });
+        }
+        setProgress(Math.round(((i + 1) / allMappedRows.length) * 100));
       }
 
-      console.log(`[IMPORT] DONE: ${success} success, ${errorCount} errors, ${insertedIds.length} IDs`);
+      const successCount = rowResults.filter(r => r.status === 'success').length;
+      const warningCount = rowResults.filter(r => r.status === 'warning').length;
+      const errorCount = rowResults.filter(r => r.status === 'error').length;
 
-      let batchId: string | undefined;
+      console.log(`[IMPORT] DONE: ${successCount} success, ${warningCount} warnings, ${errorCount} errors`);
+
+      // Save batch
       if (user && insertedIds.length > 0) {
         try {
           const { data: batchData } = await supabase.from('import_batches' as any).insert({
@@ -196,35 +284,33 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
           batchId = (batchData as any)?.id;
         } catch (batchErr: any) {
           console.error('[IMPORT] Batch log failed:', batchErr?.message);
-          warnings.push('Não foi possível salvar o lote de importação');
         }
       }
 
+      // Audit log
       if (user) {
         try {
           await supabase.from('audit_logs').insert({
             user_id: user.id,
             entity_type: template.table,
             action: 'bulk_import',
-            details: { entity: template.key, success, errors: errorCount, skipped },
+            details: { entity: template.key, success: successCount, errors: errorCount, warnings: warningCount },
           });
         } catch (auditErr: any) {
           console.error('[IMPORT] Audit log failed:', auditErr?.message);
         }
       }
 
-      // Merge error details into warnings for UI display
-      const allWarnings = [...warnings, ...errorDetails];
-
-      if (errorCount === 0 && success > 0) {
-        toast.success(`${success} registros importados com sucesso!`);
-      } else if (success > 0 && errorCount > 0) {
-        toast.warning(`${success} importados, ${errorCount} com erro`);
-      } else if (success === 0) {
+      // Toast result
+      if (errorCount === 0 && successCount > 0) {
+        toast.success(`${successCount + warningCount} registros importados com sucesso!`);
+      } else if (successCount > 0 && errorCount > 0) {
+        toast.warning(`${successCount + warningCount} importados, ${errorCount} com erro. Veja os detalhes.`);
+      } else if (successCount === 0) {
         toast.error(`Nenhum registro importado. ${errorCount} erros encontrados.`);
       }
 
-      setResult({ success, errors: errorCount, skipped, batchId, warnings: allWarnings.length > 0 ? allWarnings : undefined });
+      setResult({ success: successCount + warningCount, errors: errorCount, skipped: 0, batchId, rowResults });
       setStep('execute');
     } catch (err: any) {
       const msg = err?.message || String(err);
@@ -407,35 +493,138 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
           </div>
         )}
 
-        {step === 'execute' && result && (
-          <div className="space-y-4 text-center py-4">
-            <CheckCircle2 className="h-12 w-12 mx-auto text-green-500" />
-            <h3 className="text-lg font-semibold">Importação concluída</h3>
-            <div className="flex justify-center gap-4 text-sm">
-              <span className="text-green-600">{result.success} importados</span>
-              {result.errors > 0 && <span className="text-destructive">{result.errors} erros</span>}
-              {result.skipped > 0 && <span className="text-muted-foreground">{result.skipped} ignorados</span>}
-            </div>
-            {result.warnings && result.warnings.length > 0 && (
-              <ScrollArea className="h-32 border rounded-lg p-3 text-left">
-                <div className="space-y-1">
-                  {result.warnings.map((w, i) => (
-                    <p key={i} className="text-xs text-warning">⚠️ {w}</p>
-                  ))}
-                </div>
-              </ScrollArea>
-            )}
-            <div className="flex justify-center gap-3">
-              {result.batchId && (
-                <Button variant="outline" onClick={handleUndoImport} disabled={importing} className="gap-1.5">
-                  {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Undo2 className="h-4 w-4" />}
-                  Desfazer importação
-                </Button>
+        {step === 'execute' && result && (() => {
+          const rowResults = result.rowResults || [];
+          const errorRows = rowResults.filter(r => r.status === 'error');
+          const warningRows = rowResults.filter(r => r.status === 'warning');
+          const errorGroups = groupErrorsByType(rowResults);
+          const hasErrors = result.errors > 0;
+          const hasProblems = errorRows.length > 0 || warningRows.length > 0;
+
+          return (
+            <div className="space-y-5 py-4">
+              {/* Header icon */}
+              <div className="text-center">
+                {hasErrors ? (
+                  <XCircle className="h-12 w-12 mx-auto text-destructive" />
+                ) : (
+                  <CheckCircle2 className="h-12 w-12 mx-auto text-success" />
+                )}
+                <h3 className="text-lg font-semibold mt-2">
+                  {result.success === 0 ? 'Importação falhou' : hasErrors ? 'Importação parcial' : 'Importação concluída'}
+                </h3>
+              </div>
+
+              {/* Counters */}
+              <div className="flex justify-center gap-4 text-sm">
+                {result.success > 0 && (
+                  <span className="flex items-center gap-1 text-success">
+                    <CheckCircle2 className="h-4 w-4" />{result.success} importados
+                  </span>
+                )}
+                {warningRows.length > 0 && (
+                  <span className="flex items-center gap-1 text-warning">
+                    <AlertTriangle className="h-4 w-4" />{warningRows.length} com avisos
+                  </span>
+                )}
+                {errorRows.length > 0 && (
+                  <span className="flex items-center gap-1 text-destructive">
+                    <AlertCircle className="h-4 w-4" />{errorRows.length} com erro
+                  </span>
+                )}
+              </div>
+
+              {/* Error details collapsible */}
+              {errorRows.length > 0 && (
+                <Collapsible defaultOpen={errorRows.length <= 20}>
+                  <CollapsibleTrigger className="flex items-center gap-2 w-full text-sm font-medium text-destructive hover:underline">
+                    <ChevronDown className="h-4 w-4" />
+                    Detalhes dos erros ({errorRows.length} linhas)
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <ScrollArea className="h-48 border border-destructive/20 rounded-lg p-3 mt-2">
+                      <div className="space-y-3">
+                        {errorRows.slice(0, 100).map((r, i) => (
+                          <div key={i} className="text-left">
+                            <p className="text-xs font-medium text-foreground">
+                              Linha {r.lineNumber} — "{r.officeName}"
+                            </p>
+                            {r.errors.map((err, j) => (
+                              <p key={j} className="text-xs text-destructive ml-3">├─ ❌ {err}</p>
+                            ))}
+                          </div>
+                        ))}
+                        {errorRows.length > 100 && (
+                          <p className="text-xs text-muted-foreground">...e mais {errorRows.length - 100} linhas com erro</p>
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </CollapsibleContent>
+                </Collapsible>
               )}
-              <Button onClick={() => { reset(); onOpenChange(false); }}>Fechar</Button>
+
+              {/* Warnings collapsible */}
+              {warningRows.length > 0 && (
+                <Collapsible>
+                  <CollapsibleTrigger className="flex items-center gap-2 w-full text-sm font-medium text-warning hover:underline">
+                    <ChevronDown className="h-4 w-4" />
+                    Avisos ({warningRows.length} linhas)
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <ScrollArea className="h-36 border border-warning/20 rounded-lg p-3 mt-2">
+                      <div className="space-y-3">
+                        {warningRows.slice(0, 50).map((r, i) => (
+                          <div key={i} className="text-left">
+                            <p className="text-xs font-medium text-foreground">
+                              Linha {r.lineNumber} — "{r.officeName}"
+                            </p>
+                            {r.warnings.map((w, j) => (
+                              <p key={j} className="text-xs text-warning ml-3">├─ ⚠️ {w}</p>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+
+              {/* Error summary by type */}
+              {Object.keys(errorGroups).length > 0 && (
+                <div className="border rounded-lg p-3 bg-muted/30">
+                  <p className="text-xs font-semibold text-foreground mb-2">Resumo por tipo de erro</p>
+                  <div className="space-y-1">
+                    {Object.entries(errorGroups).sort((a, b) => b[1] - a[1]).map(([type, count]) => (
+                      <div key={type} className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">{type}</span>
+                        <Badge variant="destructive" className="text-[10px] h-4">{count}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex flex-wrap justify-center gap-3">
+                {hasProblems && (
+                  <Button variant="outline" size="sm" onClick={() => exportErrorsCSV(rowResults)} className="gap-1.5">
+                    <FileDown className="h-4 w-4" />Exportar erros como CSV
+                  </Button>
+                )}
+                {result.batchId && (
+                  <Button variant="outline" size="sm" onClick={handleUndoImport} disabled={importing} className="gap-1.5">
+                    {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Undo2 className="h-4 w-4" />}
+                    Desfazer importação
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" onClick={() => { reset(); }} className="gap-1.5">
+                  <RotateCcw className="h-4 w-4" />Tentar novamente
+                </Button>
+                <Button size="sm" onClick={() => { reset(); onOpenChange(false); }}>Fechar</Button>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </DialogContent>
     </Dialog>
   );
