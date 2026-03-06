@@ -19,6 +19,7 @@ import { useNavigate } from 'react-router-dom';
 import { format, isToday, isFuture, isPast, differenceInDays, subMonths, startOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { ActivityCounterBadges, type ActivityCounts } from '@/components/shared/ActivityCounterBadges';
+import { UserAvatar } from '@/components/shared/UserAvatar';
 
 export default function Dashboard() {
   const { user, role, isAdmin, isManager, isCSM } = useAuth();
