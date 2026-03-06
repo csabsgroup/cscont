@@ -701,6 +701,90 @@ async function executeV2Rules(supabase: any, triggerType: string, office_id: str
   return { executed, skipped, errors, results, total_time_ms: Date.now() - startTime };
 }
 
+// ─── Periodic Trigger Helpers ─────────────────────────────────
+function checkShouldRun(triggerParams: any): boolean {
+  if (!triggerParams) return true;
+  const lastRun = triggerParams.last_run_at;
+  if (!lastRun) return true; // never ran, run now
+  const frequency = triggerParams.frequency || 'daily';
+  const hoursSinceLast = (Date.now() - new Date(lastRun).getTime()) / 3600000;
+  switch (frequency) {
+    case 'hourly': return hoursSinceLast >= 1;
+    case 'every_6h': return hoursSinceLast >= 6;
+    case 'every_12h': return hoursSinceLast >= 12;
+    case 'daily': return hoursSinceLast >= 23;
+    case 'weekly': return hoursSinceLast >= 167;
+    default: return hoursSinceLast >= 23;
+  }
+}
+
+async function checkRepeatMode(rule: any, officeId: string, supabase: any): Promise<boolean> {
+  const mode = rule.trigger_params?.repeat_mode || 'once';
+  if (mode === 'always') return true;
+
+  const { data: lastExec } = await supabase
+    .from('automation_executions')
+    .select('executed_at')
+    .eq('rule_id', rule.id)
+    .eq('office_id', officeId)
+    .order('executed_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!lastExec) return true; // never executed
+
+  if (mode === 'once') return false; // already executed
+
+  if (mode === 'interval') {
+    const intervalDays = rule.trigger_params?.repeat_interval_days || 7;
+    const daysSinceLast = (Date.now() - new Date(lastExec.executed_at).getTime()) / 86400000;
+    return daysSinceLast >= intervalDays;
+  }
+
+  return true;
+}
+
+async function enrichOfficeData(office: any, supabase: any): Promise<any> {
+  const now = new Date();
+
+  // Active contract
+  const activeContract = office.contracts?.find((c: any) => c.status === 'ativo') || office.contracts?.[0];
+
+  // Journey stage
+  const { data: journeyData } = await supabase
+    .from('office_journey')
+    .select('journey_stage_id')
+    .eq('office_id', office.id)
+    .maybeSingle();
+
+  // Health score
+  const { data: healthData } = await supabase
+    .from('health_scores')
+    .select('score, band')
+    .eq('office_id', office.id)
+    .maybeSingle();
+
+  return {
+    ...office,
+    // Calculated fields
+    days_to_renewal: office.cycle_end_date
+      ? Math.ceil((new Date(office.cycle_end_date).getTime() - now.getTime()) / 86400000)
+      : null,
+    days_without_meeting: office.last_meeting_date
+      ? Math.ceil((now.getTime() - new Date(office.last_meeting_date).getTime()) / 86400000)
+      : null,
+    days_since_creation: Math.ceil((now.getTime() - new Date(office.created_at).getTime()) / 86400000),
+    // Contract data
+    contract_value: activeContract?.value || null,
+    installments_overdue: activeContract?.installments_overdue || office.asaas_total_overdue || 0,
+    // Journey
+    journey_stage_id: journeyData?.journey_stage_id || null,
+    // Health
+    health_score: healthData?.score ?? null,
+    health_band: healthData?.band || null,
+  };
+}
+
 // ─── Main Handler ────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -983,6 +1067,185 @@ Deno.serve(async (req) => {
 
       return new Response(JSON.stringify({ success: true, executed, errors, total: (offices || []).length }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ========== runPeriodicRules ==========
+    if (action === "runPeriodicRules") {
+      console.log('[PERIODIC] Starting periodic rules check');
+
+      const { data: periodicRules, error: rulesError } = await supabase
+        .from('automation_rules_v2')
+        .select('*')
+        .eq('is_active', true)
+        .eq('trigger_type', 'client_contains');
+
+      if (rulesError) {
+        console.error('[PERIODIC] Error fetching rules:', rulesError.message);
+        return new Response(JSON.stringify({ error: rulesError.message }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      console.log('[PERIODIC] Found', periodicRules?.length || 0, 'active periodic rules');
+      const results: any[] = [];
+
+      for (const rule of (periodicRules || [])) {
+        const ruleStart = Date.now();
+        console.log('[PERIODIC] Evaluating rule:', rule.name, '(id:', rule.id, ')');
+
+        // Check if it's time to run based on frequency
+        const shouldRun = checkShouldRun(rule.trigger_params);
+        console.log('[PERIODIC] Should run:', shouldRun, 'Frequency:', rule.trigger_params?.frequency, 'Last run:', rule.trigger_params?.last_run_at);
+
+        if (!shouldRun) {
+          results.push({ rule: rule.name, status: 'skipped', reason: 'Not time yet' });
+          continue;
+        }
+
+        // Fetch offices (filter by product if set, exclude pausado)
+        let officeQuery = supabase
+          .from('offices')
+          .select('*, contracts!contracts_office_id_fkey(*)')
+          .neq('status', 'pausado');
+
+        if (rule.product_id) {
+          officeQuery = officeQuery.eq('active_product_id', rule.product_id);
+        }
+
+        const { data: offices, error: officesError } = await officeQuery;
+
+        if (officesError) {
+          console.error('[PERIODIC] Error fetching offices:', officesError.message);
+          results.push({ rule: rule.name, status: 'error', reason: officesError.message });
+          continue;
+        }
+
+        console.log('[PERIODIC] Rule "' + rule.name + '": checking', offices?.length || 0, 'offices');
+
+        let matchCount = 0;
+        let actionCount = 0;
+        let skipCount = 0;
+
+        for (const office of (offices || [])) {
+          try {
+            // Enrich office with calculated fields
+            const enriched = await enrichOfficeData(office, supabase);
+
+            // Evaluate conditions using existing group-based logic
+            const conditionsPayload = rule.conditions as any;
+            const groups = conditionsPayload?.groups || (Array.isArray(conditionsPayload) ? [{ logic: rule.condition_logic || 'and', conditions: conditionsPayload }] : []);
+            const groupLogic = conditionsPayload?.logic || rule.condition_logic || 'and';
+
+            let conditionsMet = true;
+            if (groups.length > 0) {
+              const groupResults: boolean[] = [];
+              for (const group of groups) {
+                const conds = group.conditions || [];
+                if (conds.length === 0) { groupResults.push(true); continue; }
+                const condResults: boolean[] = [];
+                for (const cond of conds) {
+                  if (!cond.field || !cond.operator) { condResults.push(true); continue; }
+                  try {
+                    const resolved = await resolveConditionValue(supabase, cond, enriched, office.id);
+                    const condResult = evaluateCondition(resolved, cond.operator, cond.value, cond.value2);
+                    console.log(`[PERIODIC] Condition: ${cond.field} ${cond.operator} ${cond.value} → resolved=${JSON.stringify(resolved)}, result=${condResult}`);
+                    condResults.push(condResult);
+                  } catch (condErr: any) {
+                    console.error('[PERIODIC] Condition eval error:', condErr?.message);
+                    condResults.push(false);
+                  }
+                }
+                const groupMatch = (group.logic || 'and') === 'and' ? condResults.every(Boolean) : condResults.some(Boolean);
+                groupResults.push(groupMatch);
+              }
+              conditionsMet = groupLogic === 'and' ? groupResults.every(Boolean) : groupResults.some(Boolean);
+            }
+
+            if (!conditionsMet) continue;
+            matchCount++;
+
+            // Check repeat mode / idempotency
+            const canExecute = await checkRepeatMode(rule, office.id, supabase);
+            if (!canExecute) {
+              skipCount++;
+              console.log('[PERIODIC] Skipping office', office.name, '(already executed per repeat_mode)');
+              continue;
+            }
+
+            // Get CSM profile for variable resolution
+            let csmProfile: any = null;
+            if (office.csm_id) {
+              const { data: p } = await supabase.from('profiles').select('full_name').eq('id', office.csm_id).maybeSingle();
+              csmProfile = p;
+            }
+
+            // Execute ALL actions (individual try/catch per action)
+            const executedActions: any[] = [];
+            for (const ruleAction of ((rule.actions as any[]) || [])) {
+              try {
+                const result = await handleAction(supabase, ruleAction, office.id, enriched, office.csm_id, userId, csmProfile, false);
+                executedActions.push({ ...result, success: true });
+                actionCount++;
+                console.log('[PERIODIC] Action SUCCESS:', ruleAction.type, 'for', office.name);
+              } catch (actionErr: any) {
+                executedActions.push({ type: ruleAction.type, success: false, error: actionErr?.message });
+                console.error('[PERIODIC] Action FAILED:', ruleAction.type, 'for', office.name, actionErr?.message);
+              }
+            }
+
+            // Register execution for idempotency
+            const { error: execInsertErr } = await supabase.from('automation_executions').insert({
+              rule_id: rule.id,
+              office_id: office.id,
+              context_key: `periodic_${rule.id}_${office.id}`,
+              result: { actions: executedActions },
+            });
+            if (execInsertErr) {
+              console.error('[PERIODIC] Failed to register execution:', execInsertErr.message);
+            }
+
+            // Log
+            const { error: logErr } = await supabase.from('automation_logs').insert({
+              rule_id: rule.id,
+              rule_name: rule.name,
+              office_id: office.id,
+              trigger_type: 'client_contains',
+              conditions_met: true,
+              actions_executed: executedActions,
+              execution_time_ms: Date.now() - ruleStart,
+            });
+            if (logErr) {
+              console.error('[PERIODIC] Failed to insert log:', logErr.message);
+            }
+
+          } catch (officeErr: any) {
+            console.error('[PERIODIC] Error processing office', office.name, ':', officeErr?.message);
+          }
+        }
+
+        // Update last_run_at
+        const updatedParams = {
+          ...(rule.trigger_params || {}),
+          last_run_at: new Date().toISOString(),
+        };
+        const { error: updateErr } = await supabase
+          .from('automation_rules_v2')
+          .update({ trigger_params: updatedParams })
+          .eq('id', rule.id);
+
+        if (updateErr) {
+          console.error('[PERIODIC] Failed to update last_run_at:', updateErr.message);
+        }
+
+        console.log(`[PERIODIC] Rule "${rule.name}" done: ${matchCount} matched, ${actionCount} actions, ${skipCount} skipped (repeat)`);
+        results.push({ rule: rule.name, status: 'executed', matched: matchCount, actions: actionCount, skipped: skipCount });
+      }
+
+      console.log('[PERIODIC] All periodic rules done:', JSON.stringify(results));
+      return new Response(JSON.stringify({ success: true, results }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 

@@ -57,6 +57,7 @@ const TRIGGERS: TriggerDef[] = [
   { value: 'office.created', label: 'Novo cliente criado (manual)', category: 'Cliente', timing: 'realtime' },
   { value: 'office.status_changed', label: 'Status do cliente mudou', category: 'Cliente', timing: 'realtime', params: STATUS_PARAMS },
   { value: 'office.imported_piperun', label: 'Cliente importado do Piperun', category: 'Cliente', timing: 'realtime' },
+  { value: 'client_contains', label: '🔄 Cliente contém (verificação periódica)', category: 'Periódico', timing: 'cron' },
   { value: 'office.stage_changed', label: 'Cliente mudou de etapa', category: 'Jornada', timing: 'realtime', params: STAGE_PARAMS },
   { value: 'health.band_changed', label: 'Health Score mudou de faixa', category: 'Health Score', timing: 'realtime', params: BAND_PARAMS },
   { value: 'form.submitted', label: 'Formulário submetido', category: 'Formulários', timing: 'realtime', params: [{ key: 'formulario_id', label: 'Formulário (opcional)', type: 'select_form' }] },
@@ -313,6 +314,20 @@ const FREQUENCY_OPTIONS = [
   { value: 'weekly', label: 'Toda semana' },
   { value: 'monthly', label: 'Todo mês' },
   { value: 'last_day_month', label: 'Último dia do mês' },
+];
+
+const PERIODIC_FREQUENCY_OPTIONS = [
+  { value: 'hourly', label: 'A cada 1 hora' },
+  { value: 'every_6h', label: 'A cada 6 horas' },
+  { value: 'every_12h', label: 'A cada 12 horas' },
+  { value: 'daily', label: 'Diariamente (08:00 BRT)' },
+  { value: 'weekly', label: 'Semanalmente (segunda 08:00 BRT)' },
+];
+
+const PERIODIC_REPEAT_OPTIONS = [
+  { value: 'once', label: 'Executar apenas 1 vez por cliente' },
+  { value: 'always', label: 'Repetir toda execução' },
+  { value: 'interval', label: 'Repetir com intervalo mínimo' },
 ];
 
 // ─── Main Component ──────────────────────────────────────────
@@ -1164,7 +1179,9 @@ export function AutomationRulesTab() {
                     <TableCell>
                       <div className="flex items-center gap-1.5">
                         <Badge variant="outline" className="text-xs">{getTriggerLabel(r.trigger_type)}</Badge>
-                        {getTriggerTiming(r.trigger_type) === 'cron' ? (
+                        {r.trigger_type === 'client_contains' ? (
+                          <Badge variant="secondary" className="text-[10px] gap-0.5">🔄 Periódico</Badge>
+                        ) : getTriggerTiming(r.trigger_type) === 'cron' ? (
                           <Badge variant="secondary" className="text-[10px] gap-0.5"><Clock className="h-3 w-3" />Cron</Badge>
                         ) : (
                           <Badge variant="secondary" className="text-[10px] gap-0.5"><Zap className="h-3 w-3" />Tempo real</Badge>
@@ -1337,6 +1354,55 @@ export function AutomationRulesTab() {
               {triggerDef?.params && triggerDef.params.length > 0 && (
                 <div className="grid grid-cols-2 gap-3 pl-3 border-l-2 border-primary/20">
                   {triggerDef.params.map(p => renderTriggerParam(p))}
+                </div>
+              )}
+
+              {/* Periodic trigger params */}
+              {form.trigger_type === 'client_contains' && (
+                <div className="mt-4 space-y-4 rounded-lg border border-border p-4 bg-muted/20">
+                  <h4 className="text-sm font-semibold flex items-center gap-2">🔄 Configuração Periódica</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs">Frequência de verificação</Label>
+                      <Select
+                        value={form.trigger_params.frequency || 'daily'}
+                        onValueChange={v => setForm(f => ({ ...f, trigger_params: { ...f.trigger_params, frequency: v } }))}
+                      >
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {PERIODIC_FREQUENCY_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">Repetição por cliente</Label>
+                      <Select
+                        value={form.trigger_params.repeat_mode || 'once'}
+                        onValueChange={v => setForm(f => ({ ...f, trigger_params: { ...f.trigger_params, repeat_mode: v } }))}
+                      >
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {PERIODIC_REPEAT_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  {form.trigger_params.repeat_mode === 'interval' && (
+                    <div className="flex items-center gap-2">
+                      <Label className="text-xs">Intervalo mínimo:</Label>
+                      <Input
+                        type="number"
+                        className="w-24"
+                        value={form.trigger_params.repeat_interval_days || ''}
+                        onChange={e => setForm(f => ({ ...f, trigger_params: { ...f.trigger_params, repeat_interval_days: Number(e.target.value) || null } }))}
+                        placeholder="7"
+                      />
+                      <span className="text-xs text-muted-foreground">dias</span>
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Esta regra será verificada periodicamente via cron. Todos os clientes que atenderem às condições terão as ações executadas automaticamente.
+                  </p>
                 </div>
               )}
             </div>
