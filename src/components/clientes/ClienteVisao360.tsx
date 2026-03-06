@@ -36,6 +36,15 @@ export function ClienteVisao360({
   const { isAdmin, isManager } = useAuth();
   const [csmOptions, setCsmOptions] = useState<Array<{ id: string; full_name: string }>>([]);
 
+  // Fetch CSM options for dropdown (admin/manager only)
+  useEffect(() => {
+    if (!isAdmin && !isManager) return;
+    (async () => {
+      const { data } = await supabase.from('profiles').select('id, full_name').order('full_name');
+      setCsmOptions(data || []);
+    })();
+  }, [isAdmin, isManager]);
+
   const activeContract = contracts.find(c => c.status === 'ativo');
   const daysToRenewal = activeContract?.renewal_date ? differenceInDays(new Date(activeContract.renewal_date), new Date()) : null;
   const completedMeetings = meetings.filter(m => m.status === 'completed');
