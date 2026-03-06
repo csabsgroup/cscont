@@ -537,13 +537,15 @@ export default function Clientes() {
       // Trigger automations
       if (newOffice?.id) {
         try {
-          await supabase.functions.invoke('execute-automations', {
-            body: {
-              action: 'onNewOffice',
-              office_id: newOffice.id,
-              product_id: newOffice.active_product_id,
-            },
-          });
+          if (newOffice.active_product_id) {
+            await supabase.functions.invoke('execute-automations', {
+              body: { action: 'onNewOffice', office_id: newOffice.id, product_id: newOffice.active_product_id },
+            });
+          } else {
+            await supabase.functions.invoke('execute-automations', {
+              body: { action: 'triggerV2', trigger_type: 'office.registered', office_id: newOffice.id },
+            });
+          }
         } catch (autoErr) {
           console.error('Automation trigger failed:', autoErr);
         }

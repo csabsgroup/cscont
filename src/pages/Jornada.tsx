@@ -156,6 +156,12 @@ export default function Jornada() {
         reason: moveReason,
         change_type: 'manual',
       });
+      // Trigger automation for stage change
+      try {
+        await supabase.functions.invoke('execute-automations', {
+          body: { action: 'triggerV2', trigger_type: 'office.stage_changed', office_id: moveDialog.journey.office_id, context: { stage_id: moveDialog.targetStage } },
+        });
+      } catch (e) { console.error('Stage automation trigger failed:', e); }
       toast.success('Cliente movido!');
       fetchAll();
     }

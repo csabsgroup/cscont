@@ -388,6 +388,20 @@ async function resolveConditionValue(supabase: any, cond: any, office: any, offi
     return row.value_text;
   }
 
+  // Common condition field aliases
+  if (field === 'product_id') return office?.active_product_id ?? null;
+  if (field === 'days_since_creation') return daysBetween(office?.created_at);
+  if (field === 'days_since_activation') return daysBetween(office?.activation_date);
+  if (field === 'days_since_onboarding') return daysBetween(office?.onboarding_date);
+  if (field === 'journey_stage_id') {
+    const { data: oj } = await supabase.from('office_journey').select('journey_stage_id').eq('office_id', officeId).maybeSingle();
+    return oj?.journey_stage_id ?? null;
+  }
+  if (field === 'health_score' || field === 'health_band') {
+    const { data: hs } = await supabase.from('health_scores').select('score, band').eq('office_id', officeId).maybeSingle();
+    return field === 'health_score' ? hs?.score ?? null : hs?.band ?? null;
+  }
+
   return office?.[field] ?? null;
 }
 
@@ -419,17 +433,23 @@ function evaluateCondition(resolvedValue: any, operator: string, condValue: any,
 // ─── Execute v2 rules for a given trigger ────────────────────
 async function executeV2Rules(supabase: any, triggerType: string, office_id: string, csm_id: string | null, userId: string, extraContext?: Record<string, any>, dryRun = false) {
   const startTime = Date.now();
+  console.log(`[AUTOMATIONS] Trigger received: ${triggerType} for office: ${office_id}${dryRun ? ' (DRY RUN)' : ''}`);
+
   const { data: v2Rules } = await supabase
     .from("automation_rules_v2")
     .select("*")
     .eq("trigger_type", triggerType)
     .eq("is_active", true);
 
-  if (!v2Rules || v2Rules.length === 0) return { executed: 0, skipped: 0, errors: 0, results: [] };
+  if (!v2Rules || v2Rules.length === 0) {
+    console.log(`[AUTOMATIONS] No active rules for trigger: ${triggerType}`);
+    return { executed: 0, skipped: 0, errors: 0, results: [] };
+  }
+
+  console.log(`[AUTOMATIONS] Found ${v2Rules.length} active rules for trigger: ${triggerType}`);
 
   const { data: office } = await supabase.from("offices").select("*").eq("id", office_id).single();
-  
-  // Fetch CSM profile for variable substitution
+
   const effectiveCsmId = csm_id || office?.csm_id;
   let csmProfile: any = null;
   if (effectiveCsmId) {
@@ -442,16 +462,21 @@ async function executeV2Rules(supabase: any, triggerType: string, office_id: str
 
   for (const rule of v2Rules) {
     const ruleStart = Date.now();
+    console.log(`[AUTOMATIONS] Evaluating rule: "${rule.name}" (id: ${rule.id})`);
+    console.log(`[AUTOMATIONS] Rule product_id: ${rule.product_id}, Office product: ${office?.active_product_id}`);
+
     try {
       // Product scope check
       if (rule.product_id && office?.active_product_id && rule.product_id !== office.active_product_id) {
+        console.log(`[AUTOMATIONS] Skipping rule (product mismatch): "${rule.name}"`);
         skipped++;
         if (!dryRun) {
-          await supabase.from("automation_logs").insert({
+          const { error: logErr } = await supabase.from("automation_logs").insert({
             rule_id: rule.id, rule_name: rule.name, office_id, trigger_type: triggerType,
             conditions_met: false, actions_executed: [], error: 'Product mismatch',
             execution_time_ms: Date.now() - ruleStart,
-          }).catch(() => {});
+          });
+          if (logErr) console.error('[AUTOMATIONS] Log insert error:', logErr.message);
         }
         continue;
       }
@@ -467,6 +492,7 @@ async function executeV2Rules(supabase: any, triggerType: string, office_id: str
           .eq("context_key", contextKey)
           .maybeSingle();
         if (existing) {
+          console.log(`[AUTOMATIONS] Skipping rule (already executed): "${rule.name}"`);
           skipped++;
           continue;
         }
@@ -476,6 +502,8 @@ async function executeV2Rules(supabase: any, triggerType: string, office_id: str
       const conditionsPayload = rule.conditions as any;
       const groups = conditionsPayload?.groups || (Array.isArray(conditionsPayload) ? [{ logic: rule.condition_logic || 'and', conditions: conditionsPayload }] : []);
       const groupLogic = conditionsPayload?.logic || rule.condition_logic || 'and';
+
+      console.log(`[AUTOMATIONS] Conditions: ${JSON.stringify(conditionsPayload)?.substring(0, 200)}`);
 
       let ruleMatches = true;
       if (groups.length > 0) {
@@ -487,7 +515,9 @@ async function executeV2Rules(supabase: any, triggerType: string, office_id: str
           for (const cond of conds) {
             if (!cond.field || !cond.operator) { condResults.push(true); continue; }
             const resolved = await resolveConditionValue(supabase, cond, office, office_id);
-            condResults.push(evaluateCondition(resolved, cond.operator, cond.value, cond.value2));
+            const condResult = evaluateCondition(resolved, cond.operator, cond.value, cond.value2);
+            console.log(`[AUTOMATIONS] Condition: ${cond.field} ${cond.operator} ${cond.value} → resolved=${JSON.stringify(resolved)}, result=${condResult}`);
+            condResults.push(condResult);
           }
           const groupMatch = (group.logic || 'and') === 'and' ? condResults.every(Boolean) : condResults.some(Boolean);
           groupResults.push(groupMatch);
@@ -495,14 +525,18 @@ async function executeV2Rules(supabase: any, triggerType: string, office_id: str
         ruleMatches = groupLogic === 'and' ? groupResults.every(Boolean) : groupResults.some(Boolean);
       }
 
+      console.log(`[AUTOMATIONS] Conditions met: ${ruleMatches}`);
+
       if (!ruleMatches) {
+        console.log(`[AUTOMATIONS] Skipping rule (conditions not met): "${rule.name}"`);
         skipped++;
         if (!dryRun) {
-          await supabase.from("automation_logs").insert({
+          const { error: logErr } = await supabase.from("automation_logs").insert({
             rule_id: rule.id, rule_name: rule.name, office_id, trigger_type: triggerType,
             conditions_met: false, actions_executed: [],
             execution_time_ms: Date.now() - ruleStart,
-          }).catch(() => {});
+          });
+          if (logErr) console.error('[AUTOMATIONS] Log insert error:', logErr.message);
         }
         continue;
       }
@@ -512,47 +546,54 @@ async function executeV2Rules(supabase: any, triggerType: string, office_id: str
       const assignedCsm = effectiveCsmId;
       const actionResults: any[] = [];
 
+      console.log(`[AUTOMATIONS] Executing ${actions.length} actions for rule: "${rule.name}"`);
+
       for (const action of actions) {
         try {
+          console.log(`[AUTOMATIONS] Executing action: ${action.type} ${JSON.stringify(action.config)?.substring(0, 150)}`);
           const result = await handleAction(supabase, action, office_id, office, assignedCsm, userId, csmProfile, dryRun);
           actionResults.push(result);
+          console.log(`[AUTOMATIONS] Action SUCCESS: ${action.type}`);
         } catch (actionErr: any) {
-          console.error(`[AUTOMATIONS] Action ${action.type} failed:`, actionErr);
+          console.error(`[AUTOMATIONS] Action FAILED: ${action.type}`, actionErr?.message);
           actionResults.push({ type: action.type, error: actionErr?.message || String(actionErr) });
         }
       }
 
       if (!dryRun) {
-        await supabase.from("automation_executions").insert({
-          rule_id: rule.id,
-          office_id,
-          context_key: contextKey,
+        const { error: execErr } = await supabase.from("automation_executions").insert({
+          rule_id: rule.id, office_id, context_key: contextKey,
           result: { trigger: triggerType, actions: actionResults },
         });
+        if (execErr) console.error('[AUTOMATIONS] Execution insert error:', execErr.message);
 
-        await supabase.from("automation_logs").insert({
+        const { error: logErr } = await supabase.from("automation_logs").insert({
           rule_id: rule.id, rule_name: rule.name, office_id, trigger_type: triggerType,
           conditions_met: true, actions_executed: actionResults,
           execution_time_ms: Date.now() - ruleStart,
-        }).catch(() => {});
+        });
+        if (logErr) console.error('[AUTOMATIONS] Log insert error:', logErr.message);
       }
 
       executed++;
       results.push({ rule_id: rule.id, rule_name: rule.name, actions: actionResults });
+      console.log(`[AUTOMATIONS] Rule executed successfully: "${rule.name}"`);
     } catch (ruleErr: any) {
       errors++;
-      console.error(`[AUTOMATIONS] Rule ${rule.id} failed:`, ruleErr);
+      console.error(`[AUTOMATIONS] Rule "${rule.name}" (${rule.id}) FAILED:`, ruleErr?.message);
       if (!dryRun) {
-        await supabase.from("automation_logs").insert({
+        const { error: logErr } = await supabase.from("automation_logs").insert({
           rule_id: rule.id, rule_name: rule.name, office_id, trigger_type: triggerType,
           conditions_met: false, actions_executed: [],
           error: ruleErr?.message || String(ruleErr),
           execution_time_ms: Date.now() - ruleStart,
-        }).catch(() => {});
+        });
+        if (logErr) console.error('[AUTOMATIONS] Log insert error:', logErr.message);
       }
     }
   }
 
+  console.log(`[AUTOMATIONS] Summary: executed=${executed}, skipped=${skipped}, errors=${errors}, time=${Date.now() - startTime}ms`);
   return { executed, skipped, errors, results, total_time_ms: Date.now() - startTime };
 }
 
@@ -569,26 +610,34 @@ Deno.serve(async (req) => {
     }
 
     const url = Deno.env.get("SUPABASE_URL")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const userClient = createClient(url, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user }, error: userErr } = await userClient.auth.getUser();
-    if (userErr || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const token = authHeader.replace("Bearer ", "");
     const supabase = createClient(url, serviceRoleKey);
+    let userId: string;
 
-    const { data: roleCheck } = await supabase.rpc("get_user_role", { _user_id: user.id });
-    const allowedRoles = ["admin", "manager", "csm"];
-    if (!roleCheck || !allowedRoles.includes(roleCheck)) {
-      return new Response(JSON.stringify({ error: "Forbidden" }), {
-        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    if (token === serviceRoleKey) {
+      // Internal service-to-service call (e.g. piperun-webhook)
+      console.log('[AUTOMATIONS] Internal service call detected');
+      const { data: adminUsers } = await supabase.from('user_roles').select('user_id').eq('role', 'admin').limit(1);
+      userId = adminUsers?.[0]?.user_id || '00000000-0000-0000-0000-000000000000';
+    } else {
+      const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+      const userClient = createClient(url, anonKey, {
+        global: { headers: { Authorization: authHeader } },
       });
+      const { data: { user }, error: userErr } = await userClient.auth.getUser();
+      if (userErr || !user) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const { data: roleCheck } = await supabase.rpc("get_user_role", { _user_id: user.id });
+      if (!roleCheck || !["admin", "manager", "csm"].includes(roleCheck)) {
+        return new Response(JSON.stringify({ error: "Forbidden" }), {
+          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      userId = user.id;
     }
 
     const body = await req.json();
@@ -599,7 +648,7 @@ Deno.serve(async (req) => {
       const { trigger_type, context } = body;
       if (!trigger_type || !office_id) throw new Error("trigger_type and office_id required");
       
-      const result = await executeV2Rules(supabase, trigger_type, office_id, csm_id || null, user.id, context);
+      const result = await executeV2Rules(supabase, trigger_type, office_id, csm_id || null, userId, context);
       return new Response(JSON.stringify({ success: true, ...result }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -610,7 +659,6 @@ Deno.serve(async (req) => {
       const { trigger_type, context } = body;
       if (!trigger_type) throw new Error("trigger_type required");
 
-      // Get offices to test against (first 5 matching product)
       let officeQuery = supabase.from("offices").select("id, name, active_product_id, csm_id, status")
         .in("status", ["ativo", "upsell", "bonus_elite"]).limit(5);
       if (body.product_id) officeQuery = officeQuery.eq("active_product_id", body.product_id);
@@ -618,12 +666,8 @@ Deno.serve(async (req) => {
 
       const previews: any[] = [];
       for (const off of (testOffices || [])) {
-        const result = await executeV2Rules(supabase, trigger_type, off.id, off.csm_id, user.id, context, true);
-        previews.push({
-          office_id: off.id,
-          office_name: off.name,
-          ...result,
-        });
+        const result = await executeV2Rules(supabase, trigger_type, off.id, off.csm_id, userId, context, true);
+        previews.push({ office_id: off.id, office_name: off.name, ...result });
       }
 
       return new Response(JSON.stringify({ success: true, previews }), {
@@ -646,7 +690,6 @@ Deno.serve(async (req) => {
     if (action === "onNewOffice") {
       if (!office_id || !product_id) throw new Error("office_id and product_id required");
 
-      // 1. Distribution (legacy v1)
       const { data: distRule } = await supabase
         .from("automation_rules").select("*")
         .eq("product_id", product_id).eq("rule_type", "distribution").eq("is_active", true).maybeSingle();
@@ -685,7 +728,6 @@ Deno.serve(async (req) => {
         }
       }
 
-      // 2. Onboarding tasks (legacy v1)
       const { data: onbRule } = await supabase
         .from("automation_rules").select("*")
         .eq("product_id", product_id).eq("rule_type", "onboarding_tasks").eq("is_active", true).maybeSingle();
@@ -714,9 +756,8 @@ Deno.serve(async (req) => {
         }
       }
 
-      // 3. Execute v2 rules
-      await executeV2Rules(supabase, "office.registered", office_id, csm_id, user.id);
-      await executeV2Rules(supabase, "office.created", office_id, csm_id, user.id);
+      await executeV2Rules(supabase, "office.registered", office_id, csm_id, userId);
+      await executeV2Rules(supabase, "office.created", office_id, csm_id, userId);
 
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -756,7 +797,7 @@ Deno.serve(async (req) => {
         }
       }
 
-      await executeV2Rules(supabase, "office.stage_changed", office_id, csm_id, user.id, { suffix: stage_id });
+      await executeV2Rules(supabase, "office.stage_changed", office_id, csm_id, userId, { suffix: stage_id });
 
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
