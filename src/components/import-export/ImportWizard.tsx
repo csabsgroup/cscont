@@ -133,57 +133,106 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
 
   const handleImport = async () => {
     setImporting(true); setProgress(0);
-    const mappedRows = getMappedRows().filter((row, i) => {
-      const rowErrors = validateRow(row, template.fields, i);
-      return rowErrors.length === 0;
-    });
+    try {
+      const mappedRows = getMappedRows().filter((row, i) => {
+        const rowErrors = validateRow(row, template.fields, i);
+        return rowErrors.length === 0;
+      });
 
-    let success = 0, errorCount = 0, skipped = 0;
-    const insertedIds: string[] = [];
-    const warnings: string[] = [];
-    const chunkSize = 50;
+      console.log(`[IMPORT] Starting import of ${mappedRows.length} valid rows (from ${rows.length} total)`);
 
-    for (let i = 0; i < mappedRows.length; i += chunkSize) {
-      const chunk = mappedRows.slice(i, i + chunkSize);
-      for (const row of chunk) {
+      if (mappedRows.length === 0) {
+        toast.error('Nenhuma linha válida para importar.');
+        setImporting(false);
+        return;
+      }
+
+      toast.info(`Importando ${mappedRows.length} registros...`);
+
+      let success = 0, errorCount = 0, skipped = 0;
+      const insertedIds: string[] = [];
+      const warnings: string[] = [];
+      const errorDetails: string[] = [];
+      const chunkSize = 50;
+
+      for (let i = 0; i < mappedRows.length; i += chunkSize) {
+        const chunk = mappedRows.slice(i, i + chunkSize);
+        for (let j = 0; j < chunk.length; j++) {
+          const row = chunk[j];
+          const rowIndex = i + j + 1;
+          try {
+            console.log(`[IMPORT] Row ${rowIndex}/${mappedRows.length}:`, row.name || row.office_name || 'unknown');
+            const insertResult = await insertRow(template, row, warnings);
+            if (insertResult) {
+              insertedIds.push(insertResult);
+              success++;
+            } else {
+              console.warn(`[IMPORT] Row ${rowIndex} returned null id`);
+              errorDetails.push(`Linha ${rowIndex}: inserção retornou sem ID`);
+              errorCount++;
+            }
+          } catch (err: any) {
+            const msg = err?.message || String(err);
+            console.error(`[IMPORT] Row ${rowIndex} FAILED:`, msg);
+            errorDetails.push(`Linha ${rowIndex}: ${msg}`);
+            errorCount++;
+          }
+        }
+        setProgress(Math.round(((i + chunk.length) / mappedRows.length) * 100));
+      }
+
+      console.log(`[IMPORT] DONE: ${success} success, ${errorCount} errors, ${insertedIds.length} IDs`);
+
+      let batchId: string | undefined;
+      if (user && insertedIds.length > 0) {
         try {
-          const result = await insertRow(template, row, warnings);
-          if (result) insertedIds.push(result);
-          success++;
-        } catch (err: any) {
-          console.error('Import row failed:', err?.message || err);
-          errorCount++;
+          const { data: batchData } = await supabase.from('import_batches' as any).insert({
+            user_id: user.id,
+            entity_type: template.key,
+            table_name: template.table,
+            record_ids: insertedIds,
+            record_count: insertedIds.length,
+          } as any).select('id').single();
+          batchId = (batchData as any)?.id;
+        } catch (batchErr: any) {
+          console.error('[IMPORT] Batch log failed:', batchErr?.message);
+          warnings.push('Não foi possível salvar o lote de importação');
         }
       }
-      setProgress(Math.round(((i + chunk.length) / mappedRows.length) * 100));
-    }
 
-    let batchId: string | undefined;
-    if (user && insertedIds.length > 0) {
-      const { data: batchData } = await supabase.from('import_batches' as any).insert({
-        user_id: user.id,
-        entity_type: template.key,
-        table_name: template.table,
-        record_ids: insertedIds,
-        record_count: insertedIds.length,
-      } as any).select('id').single();
-      batchId = (batchData as any)?.id;
-    }
+      if (user) {
+        try {
+          await supabase.from('audit_logs').insert({
+            user_id: user.id,
+            entity_type: template.table,
+            action: 'bulk_import',
+            details: { entity: template.key, success, errors: errorCount, skipped },
+          });
+        } catch (auditErr: any) {
+          console.error('[IMPORT] Audit log failed:', auditErr?.message);
+        }
+      }
 
-    if (user) {
-      await supabase.from('audit_logs').insert({
-        user_id: user.id,
-        entity_type: template.table,
-        action: 'bulk_import',
-        details: { entity: template.key, success, errors: errorCount, skipped },
-      });
-      // NOTE: Automations are NOT triggered during bulk import for performance.
-      // They can be triggered manually after import if needed.
-    }
+      // Merge error details into warnings for UI display
+      const allWarnings = [...warnings, ...errorDetails];
 
-    setResult({ success, errors: errorCount, skipped, batchId, warnings: warnings.length > 0 ? warnings : undefined });
-    setStep('execute');
-    setImporting(false);
+      if (errorCount === 0 && success > 0) {
+        toast.success(`${success} registros importados com sucesso!`);
+      } else if (success > 0 && errorCount > 0) {
+        toast.warning(`${success} importados, ${errorCount} com erro`);
+      } else if (success === 0) {
+        toast.error(`Nenhum registro importado. ${errorCount} erros encontrados.`);
+      }
+
+      setResult({ success, errors: errorCount, skipped, batchId, warnings: allWarnings.length > 0 ? allWarnings : undefined });
+      setStep('execute');
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      console.error('[IMPORT] FATAL ERROR:', msg, err?.stack);
+      toast.error('Erro fatal na importação: ' + msg);
+    } finally {
+      setImporting(false);
+    }
   };
 
   const handleUndoImport = async () => {
