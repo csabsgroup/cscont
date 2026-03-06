@@ -6,6 +6,7 @@ import { StatusDropdown } from './StatusDropdown';
 import { HealthScoreBars } from './HealthScoreBars';
 import { CustomFieldsDisplay } from './CustomFieldsDisplay';
 import { ArrowLeft, Pencil, MoreVertical, UserCog, RefreshCw, StickyNote, Eye, Camera, Phone, Trash2 } from 'lucide-react';
+import { UserAvatar } from '@/components/shared/UserAvatar';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -125,7 +126,7 @@ export function ClienteHeader({
     { key: 'header_status', label: 'Status', getValue: () => null }, // rendered as StatusBadge
     { key: 'header_health', label: 'Health', getValue: () => null }, // rendered as HealthScoreBars
     { key: 'header_product', label: 'Produto', getValue: () => office.products?.name || null },
-    { key: 'header_csm', label: 'CSM', getValue: () => csmProfile?.full_name || null },
+    { key: 'header_csm', label: 'CSM', getValue: () => null }, // rendered as UserAvatar
     { key: 'header_stage', label: 'Etapa', getValue: () => stageName || null },
     { key: 'header_activation_date', label: 'Ativação', getValue: () => office.activation_date ? format(new Date(office.activation_date), 'dd/MM/yyyy', { locale: ptBR }) : null },
     { key: 'header_cycle_start', label: 'Início Ciclo', getValue: () => office.cycle_start_date ? format(new Date(office.cycle_start_date), 'dd/MM/yyyy', { locale: ptBR }) : null },
@@ -175,8 +176,17 @@ export function ClienteHeader({
               <StatusDropdown status={office.status} onStatusSelect={onStatusSelect} readonly={!canEditStatus} />
             )}
             {isFieldVisible('header_health') && health && <HealthScoreBars score={health.score} band={health.band} />}
-            {badgeDefs.filter(b => !['header_status', 'header_health'].includes(b.key)).map(b => {
-              if (!isFieldVisible(b.key, ['header_product', 'header_csm'].includes(b.key))) return null;
+            {isFieldVisible('header_csm', true) && csmProfile?.full_name && (
+              <UserAvatar
+                name={csmProfile.full_name}
+                avatarUrl={csmProfile.avatar_url}
+                size="xs"
+                showName
+                subtitle="CSM"
+              />
+            )}
+            {badgeDefs.filter(b => !['header_status', 'header_health', 'header_csm'].includes(b.key)).map(b => {
+              if (!isFieldVisible(b.key, ['header_product'].includes(b.key))) return null;
               const val = b.getValue();
               if (!val) return null;
               return (

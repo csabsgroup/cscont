@@ -34,11 +34,13 @@ export function ClienteBonus({ officeId }: { officeId: string }) {
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
+    console.log('[BONUS] Fetching catalog for office:', officeId);
     const [gRes, rRes, cRes] = await Promise.all([
       supabase.from('bonus_grants').select('*, bonus_catalog(name, unit)').eq('office_id', officeId).order('granted_at', { ascending: false }),
       supabase.from('bonus_requests').select('*, bonus_catalog(name, unit)').eq('office_id', officeId).order('created_at', { ascending: false }),
       supabase.from('bonus_catalog').select('*').order('name'),
     ]);
+    console.log('[BONUS] Catalog items found:', cRes.data?.length, cRes.data, cRes.error);
     setGrants(gRes.data || []);
     setRequests(rRes.data || []);
     setCatalog(cRes.data || []);

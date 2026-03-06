@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { usePortal } from '@/contexts/PortalContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,7 @@ import { ptBR } from 'date-fns/locale';
 import { PortalCalendar } from '@/components/portal/PortalCalendar';
 
 export default function PortalEventos() {
-  const { user } = useAuth();
+  const { officeId } = usePortal();
   const [events, setEvents] = useState<any[]>([]);
   const [meetings, setMeetings] = useState<any[]>([]);
   const [participation, setParticipation] = useState<Record<string, { confirmed: boolean }>>({});
@@ -18,19 +18,15 @@ export default function PortalEventos() {
   const [view, setView] = useState<'lista' | 'calendario'>('lista');
 
   useEffect(() => {
-    if (!user) return;
+    if (!officeId) { setLoading(false); return; }
     (async () => {
-      const { data: links } = await supabase.from('client_office_links').select('office_id').eq('user_id', user.id);
-      const oid = links?.[0]?.office_id;
-      if (!oid) { setLoading(false); return; }
-
-      const { data: office } = await supabase.from('offices').select('active_product_id').eq('id', oid).single();
+      const { data: office } = await supabase.from('offices').select('active_product_id').eq('id', officeId).single();
       const productId = office?.active_product_id;
 
       const [eventsRes, participantsRes, meetingsRes] = await Promise.all([
         supabase.from('events').select('*').order('event_date', { ascending: true }),
-        supabase.from('event_participants').select('event_id, confirmed').eq('office_id', oid),
-        supabase.from('meetings').select('*').eq('office_id', oid).eq('share_with_client', true).order('scheduled_at', { ascending: true }),
+        supabase.from('event_participants').select('event_id, confirmed').eq('office_id', officeId),
+        supabase.from('meetings').select('*').eq('office_id', officeId).eq('share_with_client', true).order('scheduled_at', { ascending: true }),
       ]);
 
       const pMap: Record<string, { confirmed: boolean }> = {};
@@ -48,7 +44,7 @@ export default function PortalEventos() {
       setMeetings(meetingsRes.data || []);
       setLoading(false);
     })();
-  }, [user]);
+  }, [officeId]);
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
 
@@ -91,20 +87,10 @@ export default function PortalEventos() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Eventos</h1>
         <div className="flex gap-1 rounded-lg border p-0.5">
-          <Button
-            size="sm"
-            variant={view === 'lista' ? 'default' : 'ghost'}
-            className="h-7 px-2 text-xs"
-            onClick={() => setView('lista')}
-          >
+          <Button size="sm" variant={view === 'lista' ? 'default' : 'ghost'} className="h-7 px-2 text-xs" onClick={() => setView('lista')}>
             <List className="mr-1 h-3.5 w-3.5" /> Lista
           </Button>
-          <Button
-            size="sm"
-            variant={view === 'calendario' ? 'default' : 'ghost'}
-            className="h-7 px-2 text-xs"
-            onClick={() => setView('calendario')}
-          >
+          <Button size="sm" variant={view === 'calendario' ? 'default' : 'ghost'} className="h-7 px-2 text-xs" onClick={() => setView('calendario')}>
             <Grid3x3 className="mr-1 h-3.5 w-3.5" /> Calendário
           </Button>
         </div>

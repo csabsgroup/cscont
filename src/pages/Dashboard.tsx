@@ -19,6 +19,7 @@ import { useNavigate } from 'react-router-dom';
 import { format, isToday, isFuture, isPast, differenceInDays, subMonths, startOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { ActivityCounterBadges, type ActivityCounts } from '@/components/shared/ActivityCounterBadges';
+import { UserAvatar } from '@/components/shared/UserAvatar';
 
 export default function Dashboard() {
   const { user, role, isAdmin, isManager, isCSM } = useAuth();
@@ -292,10 +293,11 @@ export default function Dashboard() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Avatar className="h-6 w-6">
-                        <AvatarImage src={csm?.avatar_url} />
-                        <AvatarFallback className="text-[10px]">{initials}</AvatarFallback>
-                      </Avatar>
+                      <UserAvatar
+                        name={csm?.full_name || '?'}
+                        avatarUrl={csm?.avatar_url}
+                        size="xs"
+                      />
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{a.offices?.name || '—'}</TableCell>
                     <TableCell><Badge variant="secondary" className="text-[10px]">{typeLabel(a.type)}</Badge></TableCell>

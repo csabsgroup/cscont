@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { usePortal } from '@/contexts/PortalContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,8 +21,7 @@ const statusLabels: Record<string, { label: string; variant: 'default' | 'second
 };
 
 export default function PortalBonus() {
-  const { user } = useAuth();
-  const [officeId, setOfficeId] = useState<string | null>(null);
+  const { officeId } = usePortal();
   const [grants, setGrants] = useState<any[]>([]);
   const [requests, setRequests] = useState<any[]>([]);
   const [catalog, setCatalog] = useState<any[]>([]);
@@ -34,31 +33,39 @@ export default function PortalBonus() {
   const [notes, setNotes] = useState('');
 
   const fetchAll = useCallback(async () => {
-    if (!user) return;
-    const { data: links } = await supabase.from('client_office_links').select('office_id').eq('user_id', user.id);
-    const oid = links?.[0]?.office_id;
-    setOfficeId(oid || null);
-    if (!oid) { setLoading(false); return; }
+    if (!officeId) { setLoading(false); return; }
+
+    // Get office product for filtering catalog
+    const { data: office } = await supabase.from('offices').select('active_product_id').eq('id', officeId).single();
 
     const [gRes, rRes, cRes] = await Promise.all([
-      supabase.from('bonus_grants').select('*, bonus_catalog(name, unit)').eq('office_id', oid).order('granted_at', { ascending: false }),
-      supabase.from('bonus_requests').select('*, bonus_catalog(name, unit)').eq('office_id', oid).order('created_at', { ascending: false }),
+      supabase.from('bonus_grants').select('*, bonus_catalog(name, unit)').eq('office_id', officeId).order('granted_at', { ascending: false }),
+      supabase.from('bonus_requests').select('*, bonus_catalog(name, unit)').eq('office_id', officeId).order('created_at', { ascending: false }),
       supabase.from('bonus_catalog').select('*').eq('visible_in_portal', true).order('name'),
     ]);
+
+    // Filter catalog by eligible products
+    const allCatalog = cRes.data || [];
+    const productId = office?.active_product_id;
+    const filteredCatalog = allCatalog.filter(item => {
+      const eligible = item.eligible_product_ids as string[] | null;
+      if (!eligible || eligible.length === 0) return true;
+      return productId ? eligible.includes(productId) : true;
+    });
+
     setGrants(gRes.data || []);
     setRequests(rRes.data || []);
-    setCatalog(cRes.data || []);
+    setCatalog(filteredCatalog);
     setLoading(false);
-  }, [user]);
+  }, [officeId]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const handleRequest = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!officeId || !user) return;
+    if (!officeId) return;
     setSaving(true);
 
-    // Insert bonus request
     const { data: newRequest, error } = await supabase.from('bonus_requests').insert({
       office_id: officeId,
       catalog_item_id: selectedItem,
@@ -72,31 +79,27 @@ export default function PortalBonus() {
       return;
     }
 
-    // Auto-create activity for CSM
-    const { data: office } = await supabase.from('offices').select('csm_id, name').eq('id', officeId).single();
+    const { data: officeData } = await supabase.from('offices').select('csm_id, name').eq('id', officeId).single();
     const catalogItem = catalog.find(c => c.id === selectedItem);
 
-    if (office?.csm_id) {
+    if (officeData?.csm_id) {
       await supabase.from('activities').insert({
         title: `Solicitação de bônus: ${catalogItem?.name || 'Item'} (${qty}x)`,
-        description: `O cliente ${office.name} solicitou ${qty}x ${catalogItem?.name}. ${notes ? 'Obs: ' + notes : ''}`,
-        user_id: office.csm_id,
+        description: `O cliente ${officeData.name} solicitou ${qty}x ${catalogItem?.name}. ${notes ? 'Obs: ' + notes : ''}`,
+        user_id: officeData.csm_id,
         office_id: officeId,
         type: 'task' as any,
         priority: 'high' as any,
       });
 
-      // Try Slack notification
       try {
         await supabase.functions.invoke('integration-slack', {
           body: {
             action: 'sendNotification',
-            message: `🎁 *Nova solicitação de bônus*\nCliente: ${office.name}\nItem: ${catalogItem?.name} (${qty}x)\n${notes ? 'Obs: ' + notes : ''}`,
+            message: `🎁 *Nova solicitação de bônus*\nCliente: ${officeData.name}\nItem: ${catalogItem?.name} (${qty}x)\n${notes ? 'Obs: ' + notes : ''}`,
           },
         });
-      } catch {
-        // Slack not configured, ignore
-      }
+      } catch { /* Slack not configured */ }
     }
 
     toast.success('Solicitação enviada!');

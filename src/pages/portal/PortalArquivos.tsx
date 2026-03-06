@@ -1,26 +1,23 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { usePortal } from '@/contexts/PortalContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Loader2, FileText, ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
 
 export default function PortalArquivos() {
-  const { user } = useAuth();
+  const { officeId } = usePortal();
   const [files, setFiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) return;
+    if (!officeId) { setLoading(false); return; }
     (async () => {
-      const { data: links } = await supabase.from('client_office_links').select('office_id').eq('user_id', user.id);
-      const oid = links?.[0]?.office_id;
-      if (!oid) { setLoading(false); return; }
-      const { data } = await supabase.from('shared_files' as any).select('*').eq('office_id', oid).eq('shared_with_client', true).order('created_at', { ascending: false });
+      const { data } = await supabase.from('shared_files' as any).select('*').eq('office_id', officeId).eq('shared_with_client', true).order('created_at', { ascending: false });
       setFiles(data || []);
       setLoading(false);
     })();
-  }, [user]);
+  }, [officeId]);
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
 
