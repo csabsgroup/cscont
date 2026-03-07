@@ -66,10 +66,10 @@ export async function checkPlaybookCompletion(playbookInstanceId: string, userId
   const inst = instance as any;
 
   // Count completed activities for this instance
-  const { count } = await supabase
+  const { count } = await (supabase
     .from('activities')
-    .select('*', { count: 'exact', head: true })
-    .eq('playbook_instance_id' as any, playbookInstanceId)
+    .select('*', { count: 'exact', head: true }) as any)
+    .eq('playbook_instance_id', playbookInstanceId)
     .not('completed_at', 'is', null);
 
   const completedCount = count || 0;
