@@ -23,6 +23,7 @@ import { PiperunConfig } from '@/components/configuracoes/integrations/PiperunCo
 import { FirefliesConfig } from '@/components/configuracoes/integrations/FirefliesConfig';
 import { WhatsAppConfig } from '@/components/configuracoes/integrations/WhatsAppConfig';
 import { useIntegrationSettings } from '@/hooks/useIntegrationSettings';
+import { PlaybooksTab } from '@/components/configuracoes/PlaybooksTab';
 
 // ─── Inline sub-components (Products, Stages, Users) ─────────
 import { useEffect, useCallback } from 'react';
