@@ -167,6 +167,10 @@ export default function Clientes() {
   const [pageSize, setPageSize] = useState(25);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  // URL filter preset
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activePresetFilter = searchParams.get('filter');
+
   // Saved views
   const [savedViews, setSavedViews] = useState<any[]>([]);
   const [saveViewOpen, setSaveViewOpen] = useState(false);
@@ -209,6 +213,22 @@ export default function Clientes() {
 
   // Reset page on filter/search change
   useEffect(() => { setPage(1); }, [debouncedSearch, filters]);
+
+  // Apply URL preset filter
+  useEffect(() => {
+    if (!activePresetFilter) return;
+    switch (activePresetFilter) {
+      case 'ativos': setFilters({ ...emptyFilters, statuses: ['ativo', 'bonus_elite', 'upsell'] }); break;
+      case 'health_vermelho': setFilters({ ...emptyFilters, health: ['red'] }); break;
+      case 'health_amarelo': setFilters({ ...emptyFilters, health: ['yellow'] }); break;
+      case 'health_verde': setFilters({ ...emptyFilters, health: ['green'] }); break;
+      case 'churn': setFilters({ ...emptyFilters, statuses: ['churn', 'nao_renovado'] }); break;
+      case 'renovam_30d': setFilters({ ...emptyFilters, renewal30d: true }); break;
+      case 'sem_reuniao_30d': setFilters({ ...emptyFilters, noMeeting30d: true }); break;
+      case 'nps_detratores': setFilters({ ...emptyFilters }); break; // handled in filtered
+      case 'atividades_atrasadas': setFilters({ ...emptyFilters }); break; // handled in filtered
+    }
+  }, [activePresetFilter]);
 
   // ─── Data fetching ──────────────────────────────────────────
   const fetchData = useCallback(async () => {
