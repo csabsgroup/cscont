@@ -707,8 +707,45 @@ export default function Clientes() {
 
   const canBulk = (isAdmin || isManager) && !isViewer;
 
+  const presetFilterLabels: Record<string, string> = {
+    ativos: 'Clientes Ativos',
+    health_vermelho: 'Clientes em Risco (Health Vermelho)',
+    health_amarelo: 'Health Amarelo',
+    health_verde: 'Health Verde',
+    churn: 'Churn / Não Renovado',
+    renovam_30d: 'Renovam em 30 dias',
+    sem_reuniao_30d: 'Sem reunião há +30 dias',
+    nps_detratores: 'NPS Detratores',
+    atividades_atrasadas: 'Com Atividades Atrasadas',
+  };
+
+  const presetFilterColors: Record<string, string> = {
+    health_vermelho: 'bg-destructive/10 border-destructive/30 text-destructive',
+    health_amarelo: 'bg-warning/10 border-warning/30 text-warning',
+    health_verde: 'bg-success/10 border-success/30 text-success',
+    churn: 'bg-destructive/10 border-destructive/30 text-destructive',
+    atividades_atrasadas: 'bg-destructive/10 border-destructive/30 text-destructive',
+    nps_detratores: 'bg-warning/10 border-warning/30 text-warning',
+  };
+
   return (
     <div className="space-y-4">
+      {/* Preset filter banner */}
+      {activePresetFilter && (
+        <div className={`flex items-center justify-between rounded-lg border px-4 py-2.5 ${presetFilterColors[activePresetFilter] || 'bg-primary/10 border-primary/30 text-primary'}`}>
+          <span className="text-sm font-medium">
+            🔍 Filtro ativo: {presetFilterLabels[activePresetFilter] || activePresetFilter}
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 p-0"
+            onClick={() => { setSearchParams({}); setFilters(emptyFilters); }}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
       {/* ─── Header ─────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div>
