@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -216,7 +217,7 @@ export default function Cliente360() {
         'contacts', 'contracts', 'action_plans', 'bonus_grants', 'bonus_requests',
         'health_scores', 'health_playbook_executions', 'office_stage_history',
         'office_journey', 'automation_executions', 'event_participants',
-        'client_office_links', 'shared_files', 'whatsapp_messages',
+        'client_office_links', 'office_files', 'office_notes', 'custom_field_values',
       ] as const;
       for (const table of directTables) {
         await supabase.from(table).delete().eq('office_id', id);
@@ -323,7 +324,7 @@ export default function Cliente360() {
       />
 
       {/* Horizontal tabs */}
-      <div className="bg-white border-b border-gray-200 overflow-x-auto -mx-6 px-6">
+      <div className="bg-background border-b border-border overflow-x-auto -mx-6 px-6">
         <nav className="flex min-w-max">
           {tabs360.map(tab => (
             <button
@@ -332,8 +333,8 @@ export default function Cliente360() {
               className={cn(
                 'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors whitespace-nowrap border-b-2',
                 activeTab === tab.key
-                  ? 'text-red-700 border-red-600 bg-red-50 rounded-t-lg'
-                  : 'text-gray-500 border-transparent hover:text-gray-700 hover:bg-gray-50'
+                  ? 'text-primary border-primary bg-primary/5 rounded-t-lg'
+                  : 'text-muted-foreground border-transparent hover:text-foreground hover:bg-muted/50'
               )}
             >
               <tab.icon className="h-3.5 w-3.5" />
@@ -408,6 +409,72 @@ export default function Cliente360() {
 
       {activeTab === 'jornada' && (
         <ClienteJornada officeId={office.id} productId={office.active_product_id} />
+      )}
+
+      {activeTab === 'playbooks' && (
+        <div className="space-y-4">
+          {!isViewer && !isClient && (
+            <div className="flex justify-end">
+              <Button onClick={() => setPlaybookDialogOpen(true)} size="sm">
+                <PlayCircle className="mr-1 h-4 w-4" /> Aplicar Playbook
+              </Button>
+            </div>
+          )}
+          {playbookInstances.length === 0 ? (
+            <Card className="p-8 text-center text-muted-foreground">Nenhum playbook aplicado ainda.</Card>
+          ) : (
+            playbookInstances.map((inst: any) => {
+              const template = inst.playbook_templates;
+              const pct = inst.total_activities > 0 ? Math.round((inst.completed_activities / inst.total_activities) * 100) : 0;
+              return (
+                <Card key={inst.id} className="p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-semibold text-sm">{template?.name || 'Playbook'}</h3>
+                      <p className="text-xs text-muted-foreground">
+                        Aplicado em {inst.applied_at ? format(new Date(inst.applied_at), "dd/MM/yyyy", { locale: ptBR }) : '—'}
+                      </p>
+                    </div>
+                    <Badge variant={inst.status === 'completed' ? 'default' : 'outline'} className="text-xs">
+                      {inst.status === 'completed' ? '✅ Concluído' : inst.status === 'cancelled' ? 'Cancelado' : 'Em andamento'}
+                    </Badge>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>{inst.completed_activities}/{inst.total_activities} atividades</span>
+                      <span>{pct}%</span>
+                    </div>
+                    <Progress value={pct} className="h-2" />
+                  </div>
+                </Card>
+              );
+            })
+          )}
+
+          {/* Apply Playbook Dialog */}
+          <Dialog open={playbookDialogOpen} onOpenChange={setPlaybookDialogOpen}>
+            <DialogContent>
+              <DialogHeader><DialogTitle>Aplicar Playbook</DialogTitle></DialogHeader>
+              <div className="space-y-3">
+                <Label>Selecione o playbook</Label>
+                <Select value={selectedPlaybookId} onValueChange={setSelectedPlaybookId}>
+                  <SelectTrigger><SelectValue placeholder="Escolher playbook..." /></SelectTrigger>
+                  <SelectContent>
+                    {filteredPlaybooks.map(pb => (
+                      <SelectItem key={pb.id} value={pb.id}>{pb.name} ({(pb.activities || []).length} atividades)</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setPlaybookDialogOpen(false)}>Cancelar</Button>
+                <Button onClick={handleApplyPlaybook} disabled={!selectedPlaybookId || applyingPlaybook}>
+                  {applyingPlaybook ? 'Aplicando...' : 'Aplicar'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       )}
 
       {/* Edit Office Dialog */}

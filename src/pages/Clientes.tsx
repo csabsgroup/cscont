@@ -237,7 +237,7 @@ export default function Clientes() {
     const [officesRes, contactsRes, healthRes, contractsRes, meetingsRes, stagesRes, journeysRes, profilesRes, rolesRes, activitiesRes, churnReasonsRes] = await Promise.all([
       supabase.from('offices').select('*, products:active_product_id(name)').order('name'),
       supabase.from('contacts').select('name, office_id').eq('is_main_contact', true),
-      supabase.from('health_scores').select('office_id, score, band'),
+      supabase.from('health_scores').select('office_id, score, band').order('calculated_at', { ascending: false }),
       supabase.from('contracts').select('office_id, monthly_value, value, installments_overdue, renewal_date, status'),
       supabase.from('meetings').select('office_id, scheduled_at, status').eq('status', 'completed'),
       supabase.from('journey_stages').select('id, name, product_id'),
@@ -253,7 +253,11 @@ export default function Clientes() {
     if (officesRes.error) { setError(officesRes.error.message); setLoading(false); return; }
 
     const contactMap = new Map((contactsRes.data || []).map(c => [c.office_id, c.name]));
-    const healthMap = new Map((healthRes.data || []).map(h => [h.office_id, h]));
+    // Deduplicate health scores: keep first (latest) per office_id
+    const healthMap = new Map<string, any>();
+    for (const h of (healthRes.data || [])) {
+      if (!healthMap.has(h.office_id)) healthMap.set(h.office_id, h);
+    }
     const stagesData = stagesRes.data || [];
     const stageMap = new Map(stagesData.map(s => [s.id, s]));
     const journeyMap = new Map((journeysRes.data || []).map(j => [j.office_id, j.journey_stage_id]));
@@ -265,11 +269,17 @@ export default function Clientes() {
     setCsmList(csms);
     setStages(stagesData as JourneyStage[]);
 
-    // Next step per office (first pending activity)
+    // Next step per office (first pending activity) + overdue tracking
     const nextStepMap = new Map<string, string>();
+    const overdueOfficeIds = new Set<string>();
+    const todayDate = new Date(); todayDate.setHours(0,0,0,0);
     (activitiesRes.data || []).forEach(a => {
       if (a.office_id && !nextStepMap.has(a.office_id)) {
         nextStepMap.set(a.office_id, a.title);
+      }
+      if (a.office_id && a.due_date) {
+        const d = new Date(a.due_date); d.setHours(0,0,0,0);
+        if (d < todayDate) overdueOfficeIds.add(a.office_id);
       }
     });
 
@@ -311,6 +321,7 @@ export default function Clientes() {
         csmName: o.csm_id ? profileMap.get(o.csm_id) || null : null,
         nextStep: nextStepMap.get(o.id) || null,
         churnReasonName: o.churn_reason_id ? churnReasonMap.get(o.churn_reason_id) || null : null,
+        hasOverdueActivities: overdueOfficeIds.has(o.id),
       };
     }));
     setLoading(false);
@@ -356,6 +367,7 @@ export default function Clientes() {
     if (filters.renewal30d) result = result.filter(o => o.daysToRenewal != null && o.daysToRenewal <= 30);
     // URL preset filters
     if (activePresetFilter === 'nps_detratores') result = result.filter(o => (o as any).last_nps != null && Number((o as any).last_nps) <= 6);
+    if (activePresetFilter === 'atividades_atrasadas') result = result.filter(o => (o as any).hasOverdueActivities);
     return result;
   }, [offices, debouncedSearch, filters, activePresetFilter]);
 
@@ -695,8 +707,45 @@ export default function Clientes() {
 
   const canBulk = (isAdmin || isManager) && !isViewer;
 
+  const presetFilterLabels: Record<string, string> = {
+    ativos: 'Clientes Ativos',
+    health_vermelho: 'Clientes em Risco (Health Vermelho)',
+    health_amarelo: 'Health Amarelo',
+    health_verde: 'Health Verde',
+    churn: 'Churn / Não Renovado',
+    renovam_30d: 'Renovam em 30 dias',
+    sem_reuniao_30d: 'Sem reunião há +30 dias',
+    nps_detratores: 'NPS Detratores',
+    atividades_atrasadas: 'Com Atividades Atrasadas',
+  };
+
+  const presetFilterColors: Record<string, string> = {
+    health_vermelho: 'bg-destructive/10 border-destructive/30 text-destructive',
+    health_amarelo: 'bg-warning/10 border-warning/30 text-warning',
+    health_verde: 'bg-success/10 border-success/30 text-success',
+    churn: 'bg-destructive/10 border-destructive/30 text-destructive',
+    atividades_atrasadas: 'bg-destructive/10 border-destructive/30 text-destructive',
+    nps_detratores: 'bg-warning/10 border-warning/30 text-warning',
+  };
+
   return (
     <div className="space-y-4">
+      {/* Preset filter banner */}
+      {activePresetFilter && (
+        <div className={`flex items-center justify-between rounded-lg border px-4 py-2.5 ${presetFilterColors[activePresetFilter] || 'bg-primary/10 border-primary/30 text-primary'}`}>
+          <span className="text-sm font-medium">
+            🔍 Filtro ativo: {presetFilterLabels[activePresetFilter] || activePresetFilter}
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 p-0"
+            onClick={() => { setSearchParams({}); setFilters(emptyFilters); }}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
       {/* ─── Header ─────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div>

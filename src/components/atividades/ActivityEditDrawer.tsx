@@ -147,6 +147,16 @@ export function ActivityEditDrawer({ activityId, isOpen, onClose, onSave, readOn
       }
     }
 
+    // Check playbook completion if activity belongs to a playbook
+    if (activity?.playbook_instance_id) {
+      try {
+        const { checkPlaybookCompletion } = await import('@/lib/playbook-helpers');
+        await checkPlaybookCompletion(activity.playbook_instance_id, activity.user_id);
+      } catch (e) {
+        console.error('Failed to check playbook completion:', e);
+      }
+    }
+
     toast.success('Atividade concluída!');
     setSaving(false);
     setCompleteOpen(false);

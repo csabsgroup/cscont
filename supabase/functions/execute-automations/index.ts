@@ -368,12 +368,16 @@ async function handleAction(supabase: any, action: any, office_id: string, offic
 
     case "force_health_band": {
       if (c.band && !dryRun) {
-        await supabase.from("health_scores").upsert({
+        const { error: hsErr } = await supabase.from("health_scores").insert({
           office_id,
           band: c.band,
           score: c.band === 'red' ? 0 : c.band === 'yellow' ? 50 : 100,
           calculated_at: new Date().toISOString(),
-        }, { onConflict: "office_id" });
+        });
+        if (hsErr) {
+          console.error('[AUTOMATIONS] force_health_band error:', hsErr.message);
+          return { type: "force_health_band", error: hsErr.message };
+        }
       }
       return { type: "force_health_band", band: c.band };
     }
@@ -391,6 +395,62 @@ async function handleAction(supabase: any, action: any, office_id: string, offic
         });
       }
       return { type: "create_alert" };
+    }
+
+    case "apply_playbook": {
+      if (c.playbook_id && !dryRun) {
+        try {
+          const { data: playbook, error: pbErr } = await supabase
+            .from('playbook_templates')
+            .select('*')
+            .eq('id', c.playbook_id)
+            .single();
+          if (pbErr || !playbook) {
+            console.error('[AUTOMATIONS] Playbook not found:', c.playbook_id);
+            return { type: "apply_playbook", error: pbErr?.message || 'Playbook not found' };
+          }
+          const acts = Array.isArray(playbook.activities) ? playbook.activities : [];
+          const { data: instance, error: instErr } = await supabase
+            .from('playbook_instances')
+            .insert({
+              playbook_template_id: c.playbook_id,
+              office_id,
+              applied_by: userId,
+              total_activities: acts.length,
+              completed_activities: 0,
+            })
+            .select('id')
+            .single();
+          if (instErr || !instance) {
+            console.error('[AUTOMATIONS] Playbook instance error:', instErr?.message);
+            return { type: "apply_playbook", error: instErr?.message || 'Instance creation failed' };
+          }
+          const now = new Date();
+          const activitiesToInsert = acts.map((act: any, index: number) => ({
+            title: act.title,
+            description: act.description || null,
+            type: act.type || 'task',
+            priority: act.priority || 'medium',
+            office_id,
+            user_id: act.responsible_type === 'office_csm' ? (assignedCsm || userId) : userId,
+            due_date: new Date(now.getTime() + (act.due_days_offset || 1) * 86400000).toISOString().split('T')[0],
+            playbook_instance_id: instance.id,
+            playbook_order: index + 1,
+          }));
+          if (activitiesToInsert.length > 0) {
+            const { error: actErr } = await supabase.from('activities').insert(activitiesToInsert);
+            if (actErr) {
+              console.error('[AUTOMATIONS] Playbook activities error:', actErr.message);
+              return { type: "apply_playbook", error: actErr.message };
+            }
+          }
+          console.log(`[AUTOMATIONS] Applied playbook ${playbook.name} to office ${office_id}, ${acts.length} activities created`);
+        } catch (e) {
+          console.error('[AUTOMATIONS] apply_playbook failed:', e);
+          return { type: "apply_playbook", error: String(e) };
+        }
+      }
+      return { type: "apply_playbook" };
     }
 
     default:
