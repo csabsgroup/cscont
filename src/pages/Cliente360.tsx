@@ -283,8 +283,25 @@ export default function Cliente360() {
     { key: 'metricas', label: 'Métricas', icon: BarChart3 },
     { key: 'okr', label: 'Plano de Ação', icon: Target },
     { key: 'bonus', label: 'Cashback', icon: Gift },
+    { key: 'playbooks', label: 'Playbooks', icon: PlayCircle, count: playbookInstances.filter(i => (i as any).status === 'in_progress').length },
   ];
 
+  const handleApplyPlaybook = async () => {
+    if (!selectedPlaybookId || !id || !user) return;
+    setApplyingPlaybook(true);
+    try {
+      await applyPlaybook(selectedPlaybookId, id, user.id);
+      toast.success('Playbook aplicado com sucesso!');
+      setPlaybookDialogOpen(false);
+      setSelectedPlaybookId('');
+      fetchAll();
+    } catch (err: any) {
+      toast.error('Erro: ' + (err.message || 'Erro desconhecido'));
+    }
+    setApplyingPlaybook(false);
+  };
+
+  const filteredPlaybooks = playbooks.filter(pb => !pb.product_id || pb.product_id === office?.active_product_id);
   return (
     <div className="space-y-4">
       {/* Header */}
