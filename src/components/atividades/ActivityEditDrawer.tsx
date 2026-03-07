@@ -26,7 +26,7 @@ interface Props {
 const TYPE_LABELS: Record<string, string> = {
   task: 'Tarefa', follow_up: 'Follow-up', onboarding: 'Onboarding', renewal: 'Renovação',
   ligacao: 'Ligação', check_in: 'Check-in', email: 'E-mail', whatsapp: 'WhatsApp',
-  planejamento: 'Planejamento', other: 'Outro',
+  planejamento: 'Planejamento', meeting: 'Reunião', other: 'Outro',
 };
 
 const PRIORITY_LABELS: Record<string, string> = { low: 'Baixa', medium: 'Média', high: 'Alta', urgent: 'Urgente' };
