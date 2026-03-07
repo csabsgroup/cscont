@@ -182,16 +182,17 @@ export default function Dashboard() {
 
   // === FILTERED ACTIVITY LIST ===
   const displayActivities = useMemo(() => {
-    let list = activities;
+    const filteredIds = new Set(filteredOffices.map(o => o.id));
+    let list = activities.filter(a => !a.office_id || filteredIds.has(a.office_id));
     switch (activityFilter) {
-      case 'atrasadas': list = overdueActs; break;
-      case 'vencemHoje': list = todayActs; break;
-      case 'aVencer': list = futureActs; break;
-      case 'concluidas': list = completedActivities; break;
+      case 'atrasadas': list = list.filter(a => !a.completed_at && a.due_date && isPast(new Date(a.due_date)) && !isToday(new Date(a.due_date))); break;
+      case 'vencemHoje': list = list.filter(a => !a.completed_at && a.due_date && isToday(new Date(a.due_date))); break;
+      case 'aVencer': list = list.filter(a => !a.completed_at && (!a.due_date || (isFuture(new Date(a.due_date)) && !isToday(new Date(a.due_date))))); break;
+      case 'concluidas': list = list.filter(a => a.completed_at); break;
     }
     if (categoryFilter) list = list.filter(a => a.type === categoryFilter);
     return list;
-  }, [activities, activityFilter, categoryFilter, overdueActs, todayActs, futureActs, completedActivities]);
+  }, [activities, activityFilter, categoryFilter, filteredOffices]);
 
   const totalPages = Math.max(1, Math.ceil(displayActivities.length / PAGE_SIZE));
   const pagedActivities = displayActivities.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -438,7 +439,7 @@ function typeLabel(type: string): string {
   const labels: Record<string, string> = {
     task: 'Tarefa', follow_up: 'Follow-up', onboarding: 'Onboarding', renewal: 'Renovação',
     ligacao: 'Ligação', check_in: 'Check-in', email: 'E-mail', whatsapp: 'WhatsApp',
-    planejamento: 'Planejamento', other: 'Outro',
+    planejamento: 'Planejamento', meeting: 'Reunião', other: 'Outro',
   };
   return labels[type] || type;
 }

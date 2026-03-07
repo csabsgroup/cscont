@@ -51,7 +51,7 @@ const priorityLabels: Record<string, string> = {
 const typeLabels: Record<string, string> = {
   task: 'Tarefa', follow_up: 'Follow-up', onboarding: 'Onboarding', renewal: 'Renovação',
   ligacao: 'Ligação', check_in: 'Check-in', email: 'E-mail', whatsapp: 'WhatsApp',
-  planejamento: 'Planejamento', other: 'Outro',
+  planejamento: 'Planejamento', meeting: 'Reunião', other: 'Outro',
 };
 
 export default function Atividades() {
