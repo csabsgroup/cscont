@@ -70,6 +70,8 @@ export type Database = {
           id: string
           observations: string | null
           office_id: string | null
+          playbook_instance_id: string | null
+          playbook_order: number | null
           priority: Database["public"]["Enums"]["activity_priority"]
           shared_with_client: boolean
           title: string
@@ -85,6 +87,8 @@ export type Database = {
           id?: string
           observations?: string | null
           office_id?: string | null
+          playbook_instance_id?: string | null
+          playbook_order?: number | null
           priority?: Database["public"]["Enums"]["activity_priority"]
           shared_with_client?: boolean
           title: string
@@ -100,6 +104,8 @@ export type Database = {
           id?: string
           observations?: string | null
           office_id?: string | null
+          playbook_instance_id?: string | null
+          playbook_order?: number | null
           priority?: Database["public"]["Enums"]["activity_priority"]
           shared_with_client?: boolean
           title?: string
@@ -2040,6 +2046,99 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      playbook_instances: {
+        Row: {
+          applied_at: string | null
+          applied_by: string | null
+          completed_activities: number | null
+          completed_at: string | null
+          id: string
+          office_id: string
+          playbook_template_id: string
+          status: string | null
+          total_activities: number | null
+        }
+        Insert: {
+          applied_at?: string | null
+          applied_by?: string | null
+          completed_activities?: number | null
+          completed_at?: string | null
+          id?: string
+          office_id: string
+          playbook_template_id: string
+          status?: string | null
+          total_activities?: number | null
+        }
+        Update: {
+          applied_at?: string | null
+          applied_by?: string | null
+          completed_activities?: number | null
+          completed_at?: string | null
+          id?: string
+          office_id?: string
+          playbook_template_id?: string
+          status?: string | null
+          total_activities?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "playbook_instances_office_id_fkey"
+            columns: ["office_id"]
+            isOneToOne: false
+            referencedRelation: "offices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "playbook_instances_playbook_template_id_fkey"
+            columns: ["playbook_template_id"]
+            isOneToOne: false
+            referencedRelation: "playbook_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      playbook_templates: {
+        Row: {
+          activities: Json
+          advance_to_stage_id: string | null
+          auto_advance_journey: boolean | null
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          product_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          activities?: Json
+          advance_to_stage_id?: string | null
+          auto_advance_journey?: boolean | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          product_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          activities?: Json
+          advance_to_stage_id?: string | null
+          auto_advance_journey?: boolean | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          product_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       portal_settings: {
         Row: {

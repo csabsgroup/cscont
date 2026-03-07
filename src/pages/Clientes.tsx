@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Building2, Plus, Search, Filter, X, Save, Eye, ChevronUp, ChevronDown, ChevronsUpDown, GripVertical, Trash2, Pencil, Check as CheckIcon } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -167,6 +167,10 @@ export default function Clientes() {
   const [pageSize, setPageSize] = useState(25);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  // URL filter preset
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activePresetFilter = searchParams.get('filter');
+
   // Saved views
   const [savedViews, setSavedViews] = useState<any[]>([]);
   const [saveViewOpen, setSaveViewOpen] = useState(false);
@@ -209,6 +213,22 @@ export default function Clientes() {
 
   // Reset page on filter/search change
   useEffect(() => { setPage(1); }, [debouncedSearch, filters]);
+
+  // Apply URL preset filter
+  useEffect(() => {
+    if (!activePresetFilter) return;
+    switch (activePresetFilter) {
+      case 'ativos': setFilters({ ...emptyFilters, statuses: ['ativo', 'bonus_elite', 'upsell'] }); break;
+      case 'health_vermelho': setFilters({ ...emptyFilters, health: ['red'] }); break;
+      case 'health_amarelo': setFilters({ ...emptyFilters, health: ['yellow'] }); break;
+      case 'health_verde': setFilters({ ...emptyFilters, health: ['green'] }); break;
+      case 'churn': setFilters({ ...emptyFilters, statuses: ['churn', 'nao_renovado'] }); break;
+      case 'renovam_30d': setFilters({ ...emptyFilters, renewal30d: true }); break;
+      case 'sem_reuniao_30d': setFilters({ ...emptyFilters, noMeeting30d: true }); break;
+      case 'nps_detratores': setFilters({ ...emptyFilters }); break; // handled in filtered
+      case 'atividades_atrasadas': setFilters({ ...emptyFilters }); break; // handled in filtered
+    }
+  }, [activePresetFilter]);
 
   // ─── Data fetching ──────────────────────────────────────────
   const fetchData = useCallback(async () => {
@@ -334,8 +354,10 @@ export default function Clientes() {
     if (filters.noMeeting30d) result = result.filter(o => !o.lastMeeting || differenceInDays(new Date(), new Date(o.lastMeeting)) > 30);
     if (filters.overdueInstallments) result = result.filter(o => (o.installmentsOverdue || 0) > 0);
     if (filters.renewal30d) result = result.filter(o => o.daysToRenewal != null && o.daysToRenewal <= 30);
+    // URL preset filters
+    if (activePresetFilter === 'nps_detratores') result = result.filter(o => (o as any).last_nps != null && Number((o as any).last_nps) <= 6);
     return result;
-  }, [offices, debouncedSearch, filters]);
+  }, [offices, debouncedSearch, filters, activePresetFilter]);
 
   // ─── Sorting ────────────────────────────────────────────────
   const sorted = useMemo(() => {
@@ -787,7 +809,30 @@ export default function Clientes() {
         )}
       </div>
 
-      {/* Active filter chips */}
+      {/* Preset filter banner from URL */}
+      {activePresetFilter && (
+        <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/10 border border-primary/20">
+          <span className="text-sm font-medium text-primary">
+            🔍 Filtro ativo: {
+              ({
+                ativos: 'Clientes Ativos',
+                health_vermelho: 'Clientes em Risco (Health Vermelho)',
+                health_amarelo: 'Health Amarelo',
+                health_verde: 'Health Verde',
+                churn: 'Churn / Não Renovado',
+                renovam_30d: 'Renovam em 30 dias',
+                sem_reuniao_30d: 'Sem reunião > 30 dias',
+                nps_detratores: 'NPS Detratores',
+                atividades_atrasadas: 'Atividades Atrasadas',
+              } as Record<string, string>)[activePresetFilter] || activePresetFilter
+            }
+          </span>
+          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => { setSearchParams({}); setFilters(emptyFilters); }}>
+            <X className="h-3 w-3 mr-1" />Remover
+          </Button>
+        </div>
+      )}
+
       {activeChips.length > 0 && (
         <div className="flex gap-1.5 flex-wrap">
           {activeChips.map(chip => (

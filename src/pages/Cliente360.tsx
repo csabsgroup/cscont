@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { FileText, Eye, ClipboardList, Paperclip, History, Phone, StickyNote, BarChart3, Target, Gift } from 'lucide-react';
+import { FileText, Eye, ClipboardList, Paperclip, History, Phone, StickyNote, BarChart3, Target, Gift, PlayCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -33,7 +33,8 @@ import { StatusChangeModal } from '@/components/clientes/StatusChangeModal';
 import { ActivityCounterBadges, ActivityCounts } from '@/components/shared/ActivityCounterBadges';
 import { Constants } from '@/integrations/supabase/types';
 import { cn } from '@/lib/utils';
-
+import { applyPlaybook } from '@/lib/playbook-helpers';
+import { Progress } from '@/components/ui/progress';
 
 export default function Cliente360() {
   const { id } = useParams<{ id: string }>();
@@ -71,6 +72,11 @@ export default function Cliente360() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [playbookDialogOpen, setPlaybookDialogOpen] = useState(false);
+  const [playbooks, setPlaybooks] = useState<any[]>([]);
+  const [playbookInstances, setPlaybookInstances] = useState<any[]>([]);
+  const [selectedPlaybookId, setSelectedPlaybookId] = useState('');
+  const [applyingPlaybook, setApplyingPlaybook] = useState(false);
 
   const fetchAll = useCallback(async () => {
     if (!id) return;
@@ -126,6 +132,21 @@ export default function Cliente360() {
     setActivityCounts({ todas: acts.length, atrasadas, vencemHoje, aVencer, concluidas });
 
     setLoading(false);
+
+    // Fetch playbook instances
+    const { data: instData } = await supabase
+      .from('playbook_instances' as any)
+      .select('*, playbook_templates(*)')
+      .eq('office_id', id!)
+      .order('applied_at', { ascending: false });
+    setPlaybookInstances((instData as any[]) || []);
+
+    // Fetch playbook templates
+    const { data: pbData } = await supabase
+      .from('playbook_templates' as any)
+      .select('*')
+      .eq('is_active', true);
+    setPlaybooks((pbData as any[]) || []);
   }, [id]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
@@ -262,8 +283,25 @@ export default function Cliente360() {
     { key: 'metricas', label: 'Métricas', icon: BarChart3 },
     { key: 'okr', label: 'Plano de Ação', icon: Target },
     { key: 'bonus', label: 'Cashback', icon: Gift },
+    { key: 'playbooks', label: 'Playbooks', icon: PlayCircle, count: playbookInstances.filter(i => (i as any).status === 'in_progress').length },
   ];
 
+  const handleApplyPlaybook = async () => {
+    if (!selectedPlaybookId || !id || !user) return;
+    setApplyingPlaybook(true);
+    try {
+      await applyPlaybook(selectedPlaybookId, id, user.id);
+      toast.success('Playbook aplicado com sucesso!');
+      setPlaybookDialogOpen(false);
+      setSelectedPlaybookId('');
+      fetchAll();
+    } catch (err: any) {
+      toast.error('Erro: ' + (err.message || 'Erro desconhecido'));
+    }
+    setApplyingPlaybook(false);
+  };
+
+  const filteredPlaybooks = playbooks.filter(pb => !pb.product_id || pb.product_id === office?.active_product_id);
   return (
     <div className="space-y-4">
       {/* Header */}

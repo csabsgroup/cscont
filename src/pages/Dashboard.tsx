@@ -265,12 +265,12 @@ export default function Dashboard() {
           <p className="text-xs text-muted-foreground mt-1">Últimos 10 dias</p>
           <div className="flex gap-2 mt-4 w-full">
             {[
-              { label: 'Vermelho', count: redCount, color: 'bg-health-red' },
-              { label: 'Amarelo', count: yellowCount, color: 'bg-health-yellow' },
-              { label: 'Verde', count: greenCount, color: 'bg-health-green' },
+              { label: 'Vermelho', count: redCount, color: 'bg-health-red', filter: 'health_vermelho' },
+              { label: 'Amarelo', count: yellowCount, color: 'bg-health-yellow', filter: 'health_amarelo' },
+              { label: 'Verde', count: greenCount, color: 'bg-health-green', filter: 'health_verde' },
             ].map(b => (
-              <div key={b.label} className="flex-1">
-                <div className={`${b.color} h-6 rounded-button flex items-center justify-center text-white text-xs font-bold`}>
+              <div key={b.label} className="flex-1 cursor-pointer" onClick={() => navigate(`/clientes?filter=${b.filter}`)}>
+                <div className={`${b.color} h-6 rounded-button flex items-center justify-center text-white text-xs font-bold hover:opacity-80 transition-opacity`}>
                   {b.count}
                 </div>
                 <p className="text-[10px] text-center text-muted-foreground mt-1">{b.label}</p>
@@ -283,16 +283,20 @@ export default function Dashboard() {
         {/* KPIs Grid */}
         <div className="lg:col-span-2 grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { label: 'MRR', value: `R$ ${mrr.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`, icon: DollarSign, tip: 'Receita mensal recorrente total' },
-            { label: 'Variação MRR', value: `${mrrDeltaFormatted}${mrrDeltaPercentStr}`, icon: mrrDelta >= 0 ? ArrowUpRight : ArrowDownRight, tip: 'Variação do MRR total vs mês anterior', color: mrrDelta > 0 ? 'text-health-green' : mrrDelta < 0 ? 'text-health-red' : 'text-muted-foreground' },
-            { label: 'MRR em Risco', value: `R$ ${mrrAtRisk.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`, icon: ShieldAlert, tip: 'MRR dos clientes com health vermelho', color: 'text-health-red' },
-            { label: 'MRR Expansão', value: `R$ ${mrrExpansion.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`, icon: TrendingUp, tip: 'MRR dos clientes em upsell', color: 'text-health-green' },
-            { label: 'Clientes Ativos', value: String(ativos.length), icon: Building2, tip: 'Clientes com status ativo, bonus elite ou upsell' },
-            { label: 'Cobertura', value: `${coveragePercent}%`, icon: CalendarCheck, tip: 'Clientes com reunião nos últimos 30 dias' },
-            { label: 'Em Risco', value: String(redHealth.length), icon: ShieldAlert, tip: 'Clientes com health vermelho', color: 'text-health-red' },
-            { label: 'NPS Médio', value: avgNps != null ? String(avgNps) : '—', icon: BarChart3, tip: 'NPS médio da carteira (excluindo vazios)' },
+            { label: 'MRR', value: `R$ ${mrr.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`, icon: DollarSign, tip: 'Receita mensal recorrente total', filter: null },
+            { label: 'Variação MRR', value: `${mrrDeltaFormatted}${mrrDeltaPercentStr}`, icon: mrrDelta >= 0 ? ArrowUpRight : ArrowDownRight, tip: 'Variação do MRR total vs mês anterior', color: mrrDelta > 0 ? 'text-health-green' : mrrDelta < 0 ? 'text-health-red' : 'text-muted-foreground', filter: null },
+            { label: 'MRR em Risco', value: `R$ ${mrrAtRisk.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`, icon: ShieldAlert, tip: 'MRR dos clientes com health vermelho', color: 'text-health-red', filter: 'health_vermelho' },
+            { label: 'MRR Expansão', value: `R$ ${mrrExpansion.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`, icon: TrendingUp, tip: 'MRR dos clientes em upsell', color: 'text-health-green', filter: null },
+            { label: 'Clientes Ativos', value: String(ativos.length), icon: Building2, tip: 'Clientes com status ativo, bonus elite ou upsell', filter: 'ativos' },
+            { label: 'Cobertura', value: `${coveragePercent}%`, icon: CalendarCheck, tip: 'Clientes com reunião nos últimos 30 dias', filter: 'sem_reuniao_30d' },
+            { label: 'Em Risco', value: String(redHealth.length), icon: ShieldAlert, tip: 'Clientes com health vermelho', color: 'text-health-red', filter: 'health_vermelho' },
+            { label: 'NPS Médio', value: avgNps != null ? String(avgNps) : '—', icon: BarChart3, tip: 'NPS médio da carteira (excluindo vazios)', filter: 'nps_detratores' },
           ].map((kpi, i) => (
-            <Card key={i} className="p-3">
+            <Card
+              key={i}
+              className={`p-3 ${kpi.filter ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+              onClick={() => kpi.filter && navigate(`/clientes?filter=${kpi.filter}`)}
+            >
               <div className="flex items-start justify-between">
                 <p className="text-label-micro text-muted-foreground">{kpi.label}</p>
                 <Tooltip>

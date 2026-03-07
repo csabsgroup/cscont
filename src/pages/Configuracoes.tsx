@@ -23,6 +23,7 @@ import { PiperunConfig } from '@/components/configuracoes/integrations/PiperunCo
 import { FirefliesConfig } from '@/components/configuracoes/integrations/FirefliesConfig';
 import { WhatsAppConfig } from '@/components/configuracoes/integrations/WhatsAppConfig';
 import { useIntegrationSettings } from '@/hooks/useIntegrationSettings';
+import { PlaybooksTab } from '@/components/configuracoes/PlaybooksTab';
 
 // ─── Inline sub-components (Products, Stages, Users) ─────────
 import { useEffect, useCallback } from 'react';
@@ -610,6 +611,7 @@ const SIDEBAR_SECTIONS: SidebarSection[] = [
   { key: '360_header', label: 'Header do 360', icon: Eye, category: 'Visão 360', adminOnly: true },
   // Automações
   { key: 'auto_regras', label: 'Regras de Automação', icon: Workflow, category: 'Automações', adminOnly: true },
+  { key: 'playbooks', label: 'Playbooks', icon: ClipboardList, category: 'Automações', adminOnly: true },
   // Integrações
   { key: 'int_gcal', label: 'Google Calendar', icon: Calendar, category: 'Integrações', adminOnly: true },
   { key: 'int_slack', label: 'Slack', icon: MessageSquare, category: 'Integrações', adminOnly: true },
@@ -698,6 +700,7 @@ export default function Configuracoes() {
       case '360_custom': return <CustomFieldsConfigTab />;
       case '360_header': return <Visao360ConfigTab mode="header" />;
       case 'auto_regras': return <AutomationRulesTab />;
+      case 'playbooks': return <PlaybooksTab />;
       case 'int_gcal': return <GoogleCalendarConfig setting={settings.find(s => s.provider === 'google_calendar')} onSave={upsertSetting} />;
       case 'int_slack': return <SlackConfig setting={settings.find(s => s.provider === 'slack')} onSave={upsertSetting} />;
       case 'int_asaas': return <AsaasConfig setting={settings.find(s => s.provider === 'asaas')} onSave={upsertSetting} />;
