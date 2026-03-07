@@ -354,8 +354,10 @@ export default function Clientes() {
     if (filters.noMeeting30d) result = result.filter(o => !o.lastMeeting || differenceInDays(new Date(), new Date(o.lastMeeting)) > 30);
     if (filters.overdueInstallments) result = result.filter(o => (o.installmentsOverdue || 0) > 0);
     if (filters.renewal30d) result = result.filter(o => o.daysToRenewal != null && o.daysToRenewal <= 30);
+    // URL preset filters
+    if (activePresetFilter === 'nps_detratores') result = result.filter(o => (o as any).last_nps != null && Number((o as any).last_nps) <= 6);
     return result;
-  }, [offices, debouncedSearch, filters]);
+  }, [offices, debouncedSearch, filters, activePresetFilter]);
 
   // ─── Sorting ────────────────────────────────────────────────
   const sorted = useMemo(() => {
