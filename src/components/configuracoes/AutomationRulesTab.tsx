@@ -63,6 +63,7 @@ const TRIGGERS: TriggerDef[] = [
   { value: 'form.submitted', label: 'Formulário submetido', category: 'Formulários', timing: 'realtime', params: [{ key: 'formulario_id', label: 'Formulário (opcional)', type: 'select_form' }] },
   { value: 'meeting.completed', label: 'Reunião realizada', category: 'Reuniões', timing: 'realtime' },
   { value: 'office.no_meeting', label: 'X dias sem reunião', category: 'Reuniões', timing: 'cron', params: [{ key: 'dias', label: 'Dias sem reunião', type: 'number', placeholder: '30' }] },
+  { value: 'activity.completed', label: '📌 Atividade concluída', category: 'Atividades', timing: 'realtime' },
   { value: 'payment.overdue', label: 'Parcela venceu', category: 'Financeiro', timing: 'realtime', params: [{ key: 'dias_atraso_min', label: 'Dias de atraso mínimo', type: 'number', placeholder: '1' }] },
   { value: 'office.renewal_approaching', label: 'Renovação em X dias', category: 'Financeiro', timing: 'cron', params: [{ key: 'dias', label: 'Dias para renovação', type: 'number', placeholder: '30' }] },
   { value: 'bonus.requested', label: 'Solicitação de bônus criada', category: 'Bônus', timing: 'realtime' },
@@ -1403,6 +1404,73 @@ export function AutomationRulesTab() {
                   <p className="text-xs text-muted-foreground">
                     Esta regra será verificada periodicamente via cron. Todos os clientes que atenderem às condições terão as ações executadas automaticamente.
                   </p>
+                </div>
+              )}
+
+              {/* Activity completed trigger params */}
+              {form.trigger_type === 'activity.completed' && (
+                <div className="mt-4 space-y-4 rounded-lg border border-border p-4 bg-muted/20">
+                  <h4 className="text-sm font-semibold flex items-center gap-2">📌 Filtros de Atividade Concluída</h4>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Filtrar por nome da atividade (opcional)</Label>
+                    <Input
+                      value={form.trigger_params.name_contains || ''}
+                      onChange={e => setForm(f => ({ ...f, trigger_params: { ...f.trigger_params, name_contains: e.target.value || null } }))}
+                      placeholder="Ex: Kickoff (contém...)"
+                    />
+                    <p className="text-[10px] text-muted-foreground">Se vazio, dispara para qualquer atividade concluída</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Filtrar por tipo (opcional)</Label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {Object.entries({ task: 'Tarefa', follow_up: 'Follow-up', onboarding: 'Onboarding', renewal: 'Renovação', ligacao: 'Ligação', check_in: 'Check-in', email: 'E-mail', whatsapp: 'WhatsApp', planejamento: 'Planejamento', other: 'Outro' }).map(([k, v]) => {
+                        const selected = (form.trigger_params.activity_types || []).includes(k);
+                        return (
+                          <Badge
+                            key={k}
+                            variant={selected ? 'default' : 'outline'}
+                            className="cursor-pointer text-xs"
+                            onClick={() => {
+                              const current = form.trigger_params.activity_types || [];
+                              const next = selected ? current.filter((t: string) => t !== k) : [...current, k];
+                              setForm(f => ({ ...f, trigger_params: { ...f.trigger_params, activity_types: next.length > 0 ? next : null } }));
+                            }}
+                          >
+                            {v}
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">Se nenhum selecionado, qualquer tipo</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Filtrar por prazo de conclusão</Label>
+                    <Select
+                      value={form.trigger_params.completion_filter || 'any'}
+                      onValueChange={v => setForm(f => ({ ...f, trigger_params: { ...f.trigger_params, completion_filter: v, late_by_days: v !== 'late_by_days' ? null : f.trigger_params.late_by_days } }))}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="any">Qualquer</SelectItem>
+                        <SelectItem value="on_time">Concluída no prazo</SelectItem>
+                        <SelectItem value="late">Concluída com atraso</SelectItem>
+                        <SelectItem value="late_by_days">Concluída X dias após vencimento</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {form.trigger_params.completion_filter === 'late_by_days' && (
+                    <div className="flex items-center gap-2">
+                      <Label className="text-xs">Mínimo de dias de atraso:</Label>
+                      <Input
+                        type="number"
+                        className="w-24"
+                        value={form.trigger_params.late_by_days || ''}
+                        onChange={e => setForm(f => ({ ...f, trigger_params: { ...f.trigger_params, late_by_days: Number(e.target.value) || null } }))}
+                        placeholder="3"
+                      />
+                      <span className="text-xs text-muted-foreground">dias</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

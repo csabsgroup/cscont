@@ -835,6 +835,52 @@ Deno.serve(async (req) => {
     if (action === "triggerV2") {
       const { trigger_type, context } = body;
       if (!trigger_type || !office_id) throw new Error("trigger_type and office_id required");
+
+      // For activity.completed trigger, pre-filter rules by trigger_params before executing
+      if (trigger_type === 'activity.completed') {
+        const { data: actRules } = await supabase
+          .from('automation_rules_v2')
+          .select('*')
+          .eq('trigger_type', 'activity.completed')
+          .eq('is_active', true);
+
+        const ctx = context || {};
+        const filteredRuleIds: string[] = [];
+
+        for (const rule of (actRules || [])) {
+          const params = rule.trigger_params || {};
+
+          // Filter by name
+          if (params.name_contains && !ctx.activity_name?.toLowerCase().includes(params.name_contains.toLowerCase())) {
+            console.log(`[AUTOMATIONS] activity.completed: skipping rule "${rule.name}" (name mismatch)`);
+            continue;
+          }
+
+          // Filter by type
+          if (params.activity_types?.length > 0 && !params.activity_types.includes(ctx.activity_type)) {
+            console.log(`[AUTOMATIONS] activity.completed: skipping rule "${rule.name}" (type mismatch)`);
+            continue;
+          }
+
+          // Filter by completion timing
+          if (params.completion_filter === 'on_time' && ctx.was_late) continue;
+          if (params.completion_filter === 'late' && !ctx.was_late) continue;
+          if (params.completion_filter === 'late_by_days' && (ctx.days_late || 0) < (params.late_by_days || 0)) continue;
+
+          filteredRuleIds.push(rule.id);
+        }
+
+        // Execute each matching rule
+        const allResults: any[] = [];
+        for (const ruleId of filteredRuleIds) {
+          const result = await executeV2Rules(supabase, trigger_type, office_id, csm_id || null, userId, { ...context, force_rule_id: ruleId });
+          allResults.push(result);
+        }
+
+        return new Response(JSON.stringify({ success: true, rules_checked: (actRules || []).length, rules_matched: filteredRuleIds.length, results: allResults }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       
       const result = await executeV2Rules(supabase, trigger_type, office_id, csm_id || null, userId, context);
       return new Response(JSON.stringify({ success: true, ...result }), {

@@ -1,83 +1,63 @@
 
 
-# Plan: 6 Functional Adjustments
+# Diagnosis and Fix Plan
 
-## Ajuste 1 — Trigger "Atividade concluída"
+## Root Causes Found
 
-### AutomationRulesTab.tsx
-- Add to TRIGGERS array: `{ value: 'activity.completed', label: '📌 Atividade concluída', category: 'Atividades', timing: 'realtime' }`
-- Render config fields when selected: name_contains (Input), activity_types (multi-select from TYPE_LABELS), completion_filter (Select: any/on_time/late/late_by_days), late_by_days (Input number, shown when late_by_days selected)
-- Save to `trigger_params`
+### Problem 1 — Webhook mapping not filling fields
+The webhook_logs table confirms the error: `"supabase.from(...).insert(...).catch is not a function"`. The last two webhooks (March 5 and March 6) both crashed with this error BEFORE reaching office creation. The `.catch()` fix was applied in code but the webhooks arrived before deployment completed. The mapping paths are correct, the company data exists at root level with all expected fields. This problem is already fixed in code — just needs a new webhook to test.
 
-### ActivityEditDrawer.tsx (line ~115-127, handleComplete)
-- After the update succeeds, if `activity.office_id` exists, invoke `execute-automations` with `action: 'triggerV2'`, `trigger_type: 'activity.completed'`, passing context (activity_id, name, type, was_late, days_late, completed_by)
+### Problem 2 — Only 3 of 17 create_activity actions succeeded
+**This is the critical finding.** The `activity_type` database enum has these valid values:
+`task, follow_up, onboarding, renewal, other, ligacao, check_in, email, whatsapp, planejamento`
 
-### execute-automations/index.ts
-- In the `triggerV2` handler, add filter logic for `activity.completed`: check `name_contains`, `activity_types`, and `completion_filter` against the context before executing actions
+It does NOT include `"meeting"`. The automation rule "[ELT] Delegação automática" has 14 actions with `activity_type: "meeting"` — every one of those fails silently because the INSERT violates the enum constraint. The `handleAction` function doesn't capture the error from `supabase.from("activities").insert(...)`.
 
-## Ajuste 2 — Corrigir Variação de MRR
+Evidence: automation_logs shows 19 `actions_executed` entries, but only 3 `create_activity` have an `id` (the ones with type "task" or "email"). The other 14 have no `id` — they failed silently.
 
-### Dashboard.tsx (lines 90-95)
-- Current `mrrDelta` compares new client COUNTS (wrong). Replace with actual MRR difference.
-- Since there's no monthly MRR snapshot table readily usable, compute: `mrrDelta = sum of mrr for offices created this month` (new MRR gained) minus `sum of mrr for offices that churned this month` (MRR lost). Or simpler: just show absolute MRR value and note "vs mês anterior" as unavailable without snapshots.
-- Better approach: query `office_metrics_history` for previous month's total faturamento_mensal sum as proxy for previous MRR, compare to current MRR sum.
-- Update the KPI card (line 216) to show R$ formatted value with % change.
+### Problem 3 — Webhook doesn't trigger automations
+Same root cause as Problem 1 — the webhook crashed before reaching the automation invocation lines (419-430). Once the webhook stops crashing, automations will be invoked via `supabase.functions.invoke()`.
 
-## Ajuste 3 — Gráficos de evolução na aba Métricas
+## Fixes
 
-### ClienteMetricas.tsx
-- Fetch `office_metrics_history` for the officeId, ordered by year/month
-- Add 4 charts in a 2x2 grid using Recharts (already installed):
-  1. Faturamento Mensal (LineChart)
-  2. Clientes Ativos (LineChart)
-  3. Funcionários (LineChart)
-  4. Contratos/Ciclos (BarChart from contracts count by year)
-- Each in a Card with title, 280px height
-- Empty state message when no data
+### Fix A — Add "meeting" to activity_type enum (database migration)
+```sql
+ALTER TYPE activity_type ADD VALUE IF NOT EXISTS 'meeting';
+```
+This is the correct fix because:
+- The automation builder UI offers "meeting" as an option
+- Users have configured rules with this type
+- 14 activities are waiting to be created with this type
 
-## Ajuste 4 — Filtro de produto no Dashboard
+### Fix B — Add error handling in handleAction (execute-automations)
+In the `create_activity` case (line 46-47), capture and log the error:
+```javascript
+const { data: act, error: actErr } = await supabase.from("activities").insert(payload).select("id").single();
+if (actErr) {
+  console.error('[AUTOMATIONS] Activity insert error:', actErr.message, 'payload:', JSON.stringify(payload));
+  return { type: "create_activity", error: actErr.message };
+}
+```
+Apply similar error capture to ALL action types that do database inserts (send_notification, add_note, create_action_plan, etc.).
 
-### Dashboard.tsx
-- Add `selectedProductId` state
-- Show product dropdown next to CSM filter (only for Admin/Manager)
-- Apply `.eq('active_product_id', selectedProductId)` filter to `filteredOffices` memo when set
-- All downstream KPIs automatically filter since they derive from `filteredOffices`
+### Fix C — Ensure webhook deployment is current
+The piperun-webhook code already has the `.catch()` fix from the previous iteration. Verify the edge function redeploys by checking logs after saving. No code change needed — just confirmation.
 
-## Ajuste 5 — Avatares nas telas
-
-### Atividades.tsx (ActivityCard component, line 324)
-- Add `<UserAvatar userId={activity.user_id} size="xs" />` next to the activity title/metadata
-- The `user_id` is already available on the activity object
-
-### Dashboard.tsx (activity table, line 296)
-- Already has UserAvatar — verify it's showing correctly. Currently uses `csm?.full_name` from profileMap which should work.
-
-## Ajuste 6 — Revalidar KPIs da Minha Carteira
-
-### Dashboard.tsx
-- **MRR Total** (line 88): Currently `ativos.reduce(mrr)` — correct but should include `upsell` status too. Fix: include all non-churned active statuses.
-- **Variação MRR** (line 95): Fixed in Ajuste 2.
-- **MRR em Risco** (line 98): Uses `redHealth` filtered by band. Need to ensure we get latest health per office (not duplicates). Currently `health_scores` query doesn't deduplicate — should use latest per office.
-- **Churn**: Add churn count and rate KPIs (currently missing from dashboard).
-- **NPS médio**: Add `AVG(last_nps)` from filtered offices where not null.
-- **Cobertura**: Calculate % of offices with `last_meeting_date` within 30 days.
-- **Health médio** (line 110): Already computed correctly.
-- **Activities pending/overdue** (lines 114-118): Already computed. Verify CSM filtering works via RLS.
-
-Fix health deduplication: get latest health score per office using a client-side dedup (group by office_id, keep latest calculated_at).
-
----
+### Fix D — Add company fallback in webhook (safety)
+In `piperun-webhook/index.ts` line 341, add fallback to `person.company`:
+```javascript
+let companyData = deal.company || deal.person?.company;
+```
+This handles edge cases where the Piperun payload structure varies.
 
 ## Files Modified
+- `supabase/functions/execute-automations/index.ts` — error handling in handleAction
+- `supabase/functions/piperun-webhook/index.ts` — company fallback
+- Database migration: add `meeting` to `activity_type` enum
 
-| File | Changes |
-|------|---------|
-| `AutomationRulesTab.tsx` | Add `activity.completed` trigger + config UI |
-| `ActivityEditDrawer.tsx` | Fire automation trigger on completion |
-| `execute-automations/index.ts` | Handle `activity.completed` trigger filtering |
-| `Dashboard.tsx` | Fix MRR variation, add product filter, add missing KPIs (NPS, churn, cobertura), dedup health scores |
-| `ClienteMetricas.tsx` | Add 4 evolution charts from office_metrics_history |
-| `Atividades.tsx` | Add UserAvatar to ActivityCard |
-
-No database migrations needed.
+## Expected Result After Fix
+- All 17 `create_activity` actions succeed (activities created with correct types)
+- Webhook creates office with all mapped fields populated
+- Webhook triggers automations that execute all 19 actions
+- automation_logs show complete execution with all action IDs
 

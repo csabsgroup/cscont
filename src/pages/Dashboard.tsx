@@ -9,11 +9,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Building2, TrendingDown, TrendingUp, Heart, Info,
   Users, ShieldAlert, DollarSign, Plus, Filter,
-  ArrowUpRight, ArrowDownRight, Minus
+  ArrowUpRight, ArrowDownRight, Minus, BarChart3, CalendarCheck
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { format, isToday, isFuture, isPast, differenceInDays, subMonths, startOfMonth } from 'date-fns';
@@ -32,14 +31,18 @@ export default function Dashboard() {
   const [products, setProducts] = useState<any[]>([]);
   const [csmProfiles, setCsmProfiles] = useState<any[]>([]);
   const [selectedCsms, setSelectedCsms] = useState<string[]>([]);
+  const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [activityFilter, setActivityFilter] = useState('todas');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [page, setPage] = useState(1);
+  const [metricsHistory, setMetricsHistory] = useState<any[]>([]);
+  const [meetings, setMeetings] = useState<any[]>([]);
   const PAGE_SIZE = 10;
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
-    const [officesRes, contractsRes, activitiesRes, healthRes, productsRes, profilesRes, rolesRes] = await Promise.all([
+    const lastMonth = subMonths(new Date(), 1);
+    const [officesRes, contractsRes, activitiesRes, healthRes, productsRes, profilesRes, rolesRes, metricsRes, meetingsRes] = await Promise.all([
       supabase.from('offices').select('*, products:active_product_id(name)'),
       supabase.from('contracts').select('*'),
       supabase.from('activities').select('*, offices(name)').order('due_date', { ascending: true, nullsFirst: false }),
@@ -47,12 +50,19 @@ export default function Dashboard() {
       supabase.from('products').select('id, name').eq('is_active', true),
       supabase.from('profiles').select('id, full_name, avatar_url'),
       supabase.from('user_roles').select('user_id, role'),
+      supabase.from('office_metrics_history').select('office_id, faturamento_mensal')
+        .eq('period_month', lastMonth.getMonth() + 1)
+        .eq('period_year', lastMonth.getFullYear()),
+      supabase.from('meetings').select('office_id, scheduled_at')
+        .gte('scheduled_at', subMonths(new Date(), 1).toISOString()),
     ]);
     setOffices(officesRes.data || []);
     setContracts(contractsRes.data || []);
     setActivities(activitiesRes.data || []);
     setHealthScores(healthRes.data || []);
     setProducts(productsRes.data || []);
+    setMetricsHistory(metricsRes.data || []);
+    setMeetings(meetingsRes.data || []);
 
     const roles = rolesRes.data || [];
     const profiles = profilesRes.data || [];
@@ -65,34 +75,51 @@ export default function Dashboard() {
 
   // === FILTERED DATA ===
   const filteredOffices = useMemo(() => {
-    if (selectedCsms.length === 0) return offices;
-    return offices.filter(o => selectedCsms.includes(o.csm_id));
-  }, [offices, selectedCsms]);
+    let result = offices;
+    if (selectedCsms.length > 0) {
+      result = result.filter(o => selectedCsms.includes(o.csm_id));
+    }
+    if (selectedProductId) {
+      result = result.filter(o => o.active_product_id === selectedProductId);
+    }
+    return result;
+  }, [offices, selectedCsms, selectedProductId]);
+
+  // Deduplicate health scores: keep latest per office_id
+  const dedupedHealthScores = useMemo(() => {
+    const map = new Map<string, any>();
+    for (const h of healthScores) {
+      const existing = map.get(h.office_id);
+      if (!existing || new Date(h.calculated_at) > new Date(existing.calculated_at)) {
+        map.set(h.office_id, h);
+      }
+    }
+    return Array.from(map.values());
+  }, [healthScores]);
 
   const filteredHealthScores = useMemo(() => {
-    if (selectedCsms.length === 0) return healthScores;
     const ids = new Set(filteredOffices.map(o => o.id));
-    return healthScores.filter(h => ids.has(h.office_id));
-  }, [healthScores, filteredOffices, selectedCsms]);
+    return dedupedHealthScores.filter(h => ids.has(h.office_id));
+  }, [dedupedHealthScores, filteredOffices]);
 
   const filteredContracts = useMemo(() => {
-    if (selectedCsms.length === 0) return contracts;
     const ids = new Set(filteredOffices.map(o => o.id));
     return contracts.filter(c => ids.has(c.office_id));
-  }, [contracts, filteredOffices, selectedCsms]);
+  }, [contracts, filteredOffices]);
 
   // === KPI COMPUTATIONS ===
   const today = new Date();
-  const ativos = filteredOffices.filter(o => o.status === 'ativo' || o.status === 'bonus_elite');
+  const ativos = filteredOffices.filter(o => ['ativo', 'bonus_elite', 'upsell'].includes(o.status));
   const activeContracts = filteredContracts.filter(c => c.status === 'ativo');
   const mrr = ativos.reduce((s, o) => s + (Number(o.mrr) || 0), 0);
 
-  const newClientsThisMonth = filteredOffices.filter(o => new Date(o.created_at) >= startOfMonth(today));
-  const newClientsPrev = filteredOffices.filter(o => {
-    const d = new Date(o.created_at);
-    return d >= startOfMonth(subMonths(today, 1)) && d < startOfMonth(today);
-  });
-  const mrrDelta = newClientsThisMonth.length - newClientsPrev.length;
+  // MRR Variation: compare current total vs previous month from office_metrics_history
+  const filteredOfficeIds = new Set(filteredOffices.map(o => o.id));
+  const previousMRR = metricsHistory
+    .filter(m => filteredOfficeIds.has(m.office_id))
+    .reduce((s, m) => s + (Number(m.faturamento_mensal) || 0), 0);
+  const mrrDelta = previousMRR > 0 ? mrr - previousMRR : 0;
+  const mrrDeltaPercent = previousMRR > 0 ? ((mrrDelta / previousMRR) * 100) : 0;
 
   const redHealth = filteredHealthScores.filter(h => h.band === 'red');
   const mrrAtRisk = redHealth.reduce((s, h) => {
@@ -109,6 +136,28 @@ export default function Dashboard() {
   const healthTotal = greenCount + yellowCount + redCount;
   const avgHealth = filteredHealthScores.length > 0 ? Math.round(filteredHealthScores.reduce((s, h) => s + h.score, 0) / filteredHealthScores.length) : 0;
   const healthBand = avgHealth >= 70 ? 'green' : avgHealth >= 40 ? 'yellow' : 'red';
+
+  // NPS médio
+  const officesWithNps = filteredOffices.filter(o => o.last_nps != null);
+  const avgNps = officesWithNps.length > 0 ? Math.round(officesWithNps.reduce((s, o) => s + Number(o.last_nps), 0) / officesWithNps.length) : null;
+
+  // Cobertura (% offices with meeting in last 30 days)
+  const officesWithRecentMeeting = useMemo(() => {
+    const thirtyDaysAgo = subMonths(new Date(), 1);
+    const officeIdsWithMeeting = new Set(
+      meetings
+        .filter(m => new Date(m.scheduled_at) >= thirtyDaysAgo && filteredOfficeIds.has(m.office_id))
+        .map(m => m.office_id)
+    );
+    return officeIdsWithMeeting.size;
+  }, [meetings, filteredOfficeIds]);
+  const coveragePercent = ativos.length > 0 ? Math.round((officesWithRecentMeeting / ativos.length) * 100) : 0;
+
+  // Churn
+  const churnedThisMonth = filteredOffices.filter(o =>
+    ['churn', 'nao_renovado'].includes(o.status) &&
+    o.churn_date && new Date(o.churn_date) >= startOfMonth(today)
+  );
 
   // === ACTIVITY COUNTS ===
   const pendingActivities = activities.filter(a => !a.completed_at);
@@ -166,23 +215,39 @@ export default function Dashboard() {
     );
   }
 
+  const mrrDeltaFormatted = mrrDelta >= 0
+    ? `+R$ ${mrrDelta.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`
+    : `-R$ ${Math.abs(mrrDelta).toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`;
+  const mrrDeltaPercentStr = previousMRR > 0 ? ` (${mrrDeltaPercent >= 0 ? '+' : ''}${mrrDeltaPercent.toFixed(1)}%)` : '';
+
   return (
     <div className="space-y-6">
-      {/* Header + CSM Filter */}
+      {/* Header + Filters */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-page-title text-foreground">Minha Carteira</h1>
           <p className="text-sm text-muted-foreground">Visão geral da sua carteira</p>
         </div>
-        {(isAdmin || isManager) && csmProfiles.length > 0 && (
-          <Select value={selectedCsms.length === 0 ? 'all' : selectedCsms[0]} onValueChange={(v) => setSelectedCsms(v === 'all' ? [] : [v])}>
-            <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Consolidado do time" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Consolidado do time</SelectItem>
-              {csmProfiles.map(c => <SelectItem key={c.id} value={c.id}>{c.full_name || 'Sem nome'}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        )}
+        <div className="flex items-center gap-2">
+          {(isAdmin || isManager) && products.length > 0 && (
+            <Select value={selectedProductId || 'all'} onValueChange={(v) => setSelectedProductId(v === 'all' ? '' : v)}>
+              <SelectTrigger className="w-[180px] h-9"><SelectValue placeholder="Todos os produtos" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os produtos</SelectItem>
+                {products.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+          {(isAdmin || isManager) && csmProfiles.length > 0 && (
+            <Select value={selectedCsms.length === 0 ? 'all' : selectedCsms[0]} onValueChange={(v) => setSelectedCsms(v === 'all' ? [] : [v])}>
+              <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Consolidado do time" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Consolidado do time</SelectItem>
+                {csmProfiles.map(c => <SelectItem key={c.id} value={c.id}>{c.full_name || 'Sem nome'}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
       </div>
 
       {/* === SEÇÃO 1: Principais Indicadores === */}
@@ -209,17 +274,17 @@ export default function Dashboard() {
           <p className="text-xs text-muted-foreground mt-2">CLIENTES: {redCount} {yellowCount} {greenCount}</p>
         </Card>
 
-        {/* KPIs Grid 2x4 */}
+        {/* KPIs Grid */}
         <div className="lg:col-span-2 grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
             { label: 'MRR', value: `R$ ${mrr.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`, icon: DollarSign, tip: 'Receita mensal recorrente total' },
-            { label: 'Variação MRR', value: `${mrrDelta >= 0 ? '+' : ''}${mrrDelta}`, icon: mrrDelta >= 0 ? ArrowUpRight : ArrowDownRight, tip: 'Novos clientes mês vs anterior', color: mrrDelta >= 0 ? 'text-health-green' : 'text-health-red' },
+            { label: 'Variação MRR', value: `${mrrDeltaFormatted}${mrrDeltaPercentStr}`, icon: mrrDelta >= 0 ? ArrowUpRight : ArrowDownRight, tip: 'Variação do MRR total vs mês anterior', color: mrrDelta > 0 ? 'text-health-green' : mrrDelta < 0 ? 'text-health-red' : 'text-muted-foreground' },
             { label: 'MRR em Risco', value: `R$ ${mrrAtRisk.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`, icon: ShieldAlert, tip: 'MRR dos clientes com health vermelho', color: 'text-health-red' },
             { label: 'MRR Expansão', value: `R$ ${mrrExpansion.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`, icon: TrendingUp, tip: 'MRR dos clientes em upsell', color: 'text-health-green' },
-            { label: 'Clientes Ativos', value: String(ativos.length), icon: Building2, tip: 'Clientes com status ativo ou bonus elite' },
-            { label: 'Novos Clientes', value: String(newClientsThisMonth.length), icon: Users, tip: 'Clientes criados este mês' },
+            { label: 'Clientes Ativos', value: String(ativos.length), icon: Building2, tip: 'Clientes com status ativo, bonus elite ou upsell' },
+            { label: 'Cobertura', value: `${coveragePercent}%`, icon: CalendarCheck, tip: 'Clientes com reunião nos últimos 30 dias' },
             { label: 'Em Risco', value: String(redHealth.length), icon: ShieldAlert, tip: 'Clientes com health vermelho', color: 'text-health-red' },
-            { label: 'Expansão', value: String(upsellOffices.length), icon: TrendingUp, tip: 'Clientes marcados como upsell', color: 'text-health-green' },
+            { label: 'NPS Médio', value: avgNps != null ? String(avgNps) : '—', icon: BarChart3, tip: 'NPS médio da carteira (excluindo vazios)' },
           ].map((kpi, i) => (
             <Card key={i} className="p-3">
               <div className="flex items-start justify-between">
@@ -282,7 +347,6 @@ export default function Dashboard() {
               ) : pagedActivities.map(a => {
                 const isOverdue = a.due_date && isPast(new Date(a.due_date)) && !isToday(new Date(a.due_date)) && !a.completed_at;
                 const csm = profileMap.get(a.user_id);
-                const initials = csm?.full_name?.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase() || '?';
                 return (
                   <TableRow key={a.id} className="cursor-pointer" onClick={() => a.office_id && navigate(`/clientes/${a.office_id}`)}>
                     <TableCell><Checkbox checked={!!a.completed_at} disabled /></TableCell>

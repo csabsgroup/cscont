@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { ActivityPopup } from '@/components/atividades/ActivityPopup';
 import { ActivityEditDrawer } from '@/components/atividades/ActivityEditDrawer';
+import { UserAvatar } from '@/components/shared/UserAvatar';
 
 interface Activity {
   id: string;
@@ -329,6 +330,7 @@ function ActivityCard({ activity, onRefresh, isViewer, navigate, onEdit }: { act
       <CardContent className="flex items-start gap-3 py-3 px-4">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
+            <UserAvatar userId={activity.user_id} size="xs" />
             <span className={`text-sm font-medium ${activity.completed_at ? 'line-through' : ''}`}>
               {activity.title}
             </span>
