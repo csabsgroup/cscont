@@ -269,11 +269,17 @@ export default function Clientes() {
     setCsmList(csms);
     setStages(stagesData as JourneyStage[]);
 
-    // Next step per office (first pending activity)
+    // Next step per office (first pending activity) + overdue tracking
     const nextStepMap = new Map<string, string>();
+    const overdueOfficeIds = new Set<string>();
+    const todayDate = new Date(); todayDate.setHours(0,0,0,0);
     (activitiesRes.data || []).forEach(a => {
       if (a.office_id && !nextStepMap.has(a.office_id)) {
         nextStepMap.set(a.office_id, a.title);
+      }
+      if (a.office_id && a.due_date) {
+        const d = new Date(a.due_date); d.setHours(0,0,0,0);
+        if (d < todayDate) overdueOfficeIds.add(a.office_id);
       }
     });
 
@@ -315,6 +321,7 @@ export default function Clientes() {
         csmName: o.csm_id ? profileMap.get(o.csm_id) || null : null,
         nextStep: nextStepMap.get(o.id) || null,
         churnReasonName: o.churn_reason_id ? churnReasonMap.get(o.churn_reason_id) || null : null,
+        hasOverdueActivities: overdueOfficeIds.has(o.id),
       };
     }));
     setLoading(false);
@@ -360,18 +367,7 @@ export default function Clientes() {
     if (filters.renewal30d) result = result.filter(o => o.daysToRenewal != null && o.daysToRenewal <= 30);
     // URL preset filters
     if (activePresetFilter === 'nps_detratores') result = result.filter(o => (o as any).last_nps != null && Number((o as any).last_nps) <= 6);
-    if (activePresetFilter === 'atividades_atrasadas') {
-      const officesWithOverdue = new Set<string>();
-      const today = new Date(); today.setHours(0,0,0,0);
-      // activitiesRes.data was used to build nextStepMap, but we need overdue check
-      // Use the nextStep presence + daysToRenewal logic as proxy, or re-filter from offices
-      // Actually we can check if office has a nextStep with past due_date from the raw activities data
-      result = result.filter(o => {
-        // An office has overdue activities if it has pending activities with past due dates
-        // Since we don't store all activities on the office object, we check via the fetched data
-        return true; // We'll enhance this below
-      });
-    }
+    if (activePresetFilter === 'atividades_atrasadas') result = result.filter(o => (o as any).hasOverdueActivities);
     return result;
   }, [offices, debouncedSearch, filters, activePresetFilter]);
 
