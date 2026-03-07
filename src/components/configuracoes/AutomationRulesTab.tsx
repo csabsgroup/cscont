@@ -307,6 +307,7 @@ const ACTION_TYPES = [
   { value: 'set_product', label: 'Definir Jornada (Produto)' },
   { value: 'add_note', label: 'Adicionar Nota na Timeline' },
   { value: 'grant_bonus', label: 'Conceder Bônus' },
+  { value: 'apply_playbook', label: '📋 Aplicar Playbook' },
 ];
 
 const FREQUENCY_OPTIONS = [
