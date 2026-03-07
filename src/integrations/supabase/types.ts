@@ -814,6 +814,54 @@ export type Database = {
           },
         ]
       }
+      custom_indicators: {
+        Row: {
+          config: Json
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          is_predefined: boolean | null
+          name: string
+          pinned_to_dashboard: boolean | null
+          product_filter: string | null
+          sort_order: number | null
+          updated_at: string | null
+          visualization_type: string | null
+        }
+        Insert: {
+          config?: Json
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_predefined?: boolean | null
+          name: string
+          pinned_to_dashboard?: boolean | null
+          product_filter?: string | null
+          sort_order?: number | null
+          updated_at?: string | null
+          visualization_type?: string | null
+        }
+        Update: {
+          config?: Json
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_predefined?: boolean | null
+          name?: string
+          pinned_to_dashboard?: boolean | null
+          product_filter?: string | null
+          sort_order?: number | null
+          updated_at?: string | null
+          visualization_type?: string | null
+        }
+        Relationships: []
+      }
       event_participants: {
         Row: {
           confirmed: boolean

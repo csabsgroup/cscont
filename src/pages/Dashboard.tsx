@@ -19,6 +19,8 @@ import { format, isToday, isFuture, isPast, differenceInDays, subMonths, startOf
 import { ptBR } from 'date-fns/locale';
 import { ActivityCounterBadges, type ActivityCounts } from '@/components/shared/ActivityCounterBadges';
 import { UserAvatar } from '@/components/shared/UserAvatar';
+import IndicatorCard from '@/components/relatorios/IndicatorCard';
+import type { SavedIndicator } from '@/components/relatorios/IndicatorBuilder';
 
 export default function Dashboard() {
   const { user, role, isAdmin, isManager, isCSM } = useAuth();
@@ -37,12 +39,13 @@ export default function Dashboard() {
   const [page, setPage] = useState(1);
   const [metricsHistory, setMetricsHistory] = useState<any[]>([]);
   const [meetings, setMeetings] = useState<any[]>([]);
+  const [pinnedIndicators, setPinnedIndicators] = useState<SavedIndicator[]>([]);
   const PAGE_SIZE = 10;
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
     const lastMonth = subMonths(new Date(), 1);
-    const [officesRes, contractsRes, activitiesRes, healthRes, productsRes, profilesRes, rolesRes, metricsRes, meetingsRes] = await Promise.all([
+    const [officesRes, contractsRes, activitiesRes, healthRes, productsRes, profilesRes, rolesRes, metricsRes, meetingsRes, pinnedRes] = await Promise.all([
       supabase.from('offices').select('*, products:active_product_id(name)'),
       supabase.from('contracts').select('*'),
       supabase.from('activities').select('*, offices(name)').order('due_date', { ascending: true, nullsFirst: false }),
@@ -55,6 +58,8 @@ export default function Dashboard() {
         .eq('period_year', lastMonth.getFullYear()),
       supabase.from('meetings').select('office_id, scheduled_at')
         .gte('scheduled_at', subMonths(new Date(), 1).toISOString()),
+      supabase.from('custom_indicators').select('*')
+        .eq('pinned_to_dashboard', true).eq('is_active', true),
     ]);
     setOffices(officesRes.data || []);
     setContracts(contractsRes.data || []);
@@ -63,6 +68,7 @@ export default function Dashboard() {
     setProducts(productsRes.data || []);
     setMetricsHistory(metricsRes.data || []);
     setMeetings(meetingsRes.data || []);
+    setPinnedIndicators((pinnedRes.data || []) as unknown as SavedIndicator[]);
 
     const roles = rolesRes.data || [];
     const profiles = profilesRes.data || [];
@@ -299,6 +305,32 @@ export default function Dashboard() {
           ))}
         </div>
       </div>
+
+      {/* === Indicadores Fixados === */}
+      {(isAdmin || isManager) && pinnedIndicators.length > 0 && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {pinnedIndicators.map(ind => (
+            <IndicatorCard
+              key={ind.id}
+              indicator={ind}
+              dataContext={{
+                offices: filteredOffices,
+                contracts,
+                activities,
+                meetings,
+                healthScores: filteredHealthScores,
+                metricsHistory: [],
+                formSubmissions: [],
+                events: [],
+                bonusGrants: [],
+                products,
+                csmUsers: csmProfiles,
+                profileMap,
+              }}
+            />
+          ))}
+        </div>
+      )}
 
       {/* === SEÇÃO 2: Contadores de Atividades === */}
       <ActivityCounterBadges

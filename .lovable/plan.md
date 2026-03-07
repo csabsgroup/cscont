@@ -1,105 +1,63 @@
 
 
-# Plan: Indicator Builder, Cohort Analysis & Enhanced Reports
+# Diagnosis and Fix Plan
 
-## Overview
+## Root Causes Found
 
-Add two major features to the Reports page: (1) an Indicator Builder with predefined metric library + custom builder, and (2) a Cohort Analysis heatmap. The product filter already exists — just needs to be verified it applies everywhere.
+### Problem 1 — Webhook mapping not filling fields
+The webhook_logs table confirms the error: `"supabase.from(...).insert(...).catch is not a function"`. The last two webhooks (March 5 and March 6) both crashed with this error BEFORE reaching office creation. The `.catch()` fix was applied in code but the webhooks arrived before deployment completed. The mapping paths are correct, the company data exists at root level with all expected fields. This problem is already fixed in code — just needs a new webhook to test.
 
-## Database Migration
+### Problem 2 — Only 3 of 17 create_activity actions succeeded
+**This is the critical finding.** The `activity_type` database enum has these valid values:
+`task, follow_up, onboarding, renewal, other, ligacao, check_in, email, whatsapp, planejamento`
 
-Create `custom_indicators` table:
+It does NOT include `"meeting"`. The automation rule "[ELT] Delegação automática" has 14 actions with `activity_type: "meeting"` — every one of those fails silently because the INSERT violates the enum constraint. The `handleAction` function doesn't capture the error from `supabase.from("activities").insert(...)`.
 
+Evidence: automation_logs shows 19 `actions_executed` entries, but only 3 `create_activity` have an `id` (the ones with type "task" or "email"). The other 14 have no `id` — they failed silently.
+
+### Problem 3 — Webhook doesn't trigger automations
+Same root cause as Problem 1 — the webhook crashed before reaching the automation invocation lines (419-430). Once the webhook stops crashing, automations will be invoked via `supabase.functions.invoke()`.
+
+## Fixes
+
+### Fix A — Add "meeting" to activity_type enum (database migration)
 ```sql
-CREATE TABLE public.custom_indicators (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name text NOT NULL,
-  description text,
-  config jsonb NOT NULL DEFAULT '{}',
-  visualization_type text DEFAULT 'number',
-  is_predefined boolean DEFAULT false,
-  pinned_to_dashboard boolean DEFAULT false,
-  created_by uuid,
-  product_filter uuid,
-  is_active boolean DEFAULT true,
-  sort_order integer DEFAULT 0,
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now()
-);
-
-ALTER TABLE public.custom_indicators ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Admin can manage indicators" ON public.custom_indicators FOR ALL
-  USING (public.has_role(auth.uid(), 'admin'));
-
-CREATE POLICY "Manager can manage own indicators" ON public.custom_indicators FOR ALL
-  USING (public.has_role(auth.uid(), 'manager') AND created_by = auth.uid())
-  WITH CHECK (public.has_role(auth.uid(), 'manager') AND created_by = auth.uid());
-
-CREATE POLICY "Authenticated can read active indicators" ON public.custom_indicators FOR SELECT
-  USING (is_active = true);
+ALTER TYPE activity_type ADD VALUE IF NOT EXISTS 'meeting';
 ```
+This is the correct fix because:
+- The automation builder UI offers "meeting" as an option
+- Users have configured rules with this type
+- 14 activities are waiting to be created with this type
 
-## File Changes
+### Fix B — Add error handling in handleAction (execute-automations)
+In the `create_activity` case (line 46-47), capture and log the error:
+```javascript
+const { data: act, error: actErr } = await supabase.from("activities").insert(payload).select("id").single();
+if (actErr) {
+  console.error('[AUTOMATIONS] Activity insert error:', actErr.message, 'payload:', JSON.stringify(payload));
+  return { type: "create_activity", error: actErr.message };
+}
+```
+Apply similar error capture to ALL action types that do database inserts (send_notification, add_note, create_action_plan, etc.).
 
-### New File: `src/components/relatorios/IndicatorBuilder.tsx`
+### Fix C — Ensure webhook deployment is current
+The piperun-webhook code already has the `.catch()` fix from the previous iteration. Verify the edge function redeploys by checking logs after saving. No code change needed — just confirmation.
 
-Component with two sub-views:
+### Fix D — Add company fallback in webhook (safety)
+In `piperun-webhook/index.ts` line 341, add fallback to `person.company`:
+```javascript
+let companyData = deal.company || deal.person?.company;
+```
+This handles edge cases where the Piperun payload structure varies.
 
-**A) Predefined Metrics Library** — Categorized list (Retenção, Receita, Engajamento, Satisfação, Saúde, Jornada, Financeiro, Crescimento) with 35+ toggleable metrics. Each opens a config dialog: period, product filter, CSM filter, visualization type. "Salvar indicador" persists to `custom_indicators`.
+## Files Modified
+- `supabase/functions/execute-automations/index.ts` — error handling in handleAction
+- `supabase/functions/piperun-webhook/index.ts` — company fallback
+- Database migration: add `meeting` to `activity_type` enum
 
-**B) Advanced Builder** — Form with: name input, data source dropdown (offices, contracts, activities, meetings, health_scores, office_metrics_history, form_submissions, events, bonus_grants), metric type (COUNT, SUM, AVG, MIN, MAX, %), numeric field dropdown (dynamic per source), filters (add/remove rows with field/operator/value), group_by (none, product, CSM, status, month, stage), period selector, visualization picker (number, line, bar, pie, table), live preview rendering.
-
-Config saved as JSON to `custom_indicators.config`.
-
-### New File: `src/components/relatorios/CohortAnalysis.tsx`
-
-Component with:
-- Type selector: Retenção mensal, Churn acumulado, Evolução MRR
-- Group by: Mês/Trimestre de ativação
-- Product filter (uses parent's `filterProduct`)
-- Period: últimos 6/12/18 meses
-
-Renders an HTML table heatmap:
-- Rows = cohort months (activation month)
-- Columns = Month 0, Month 1, ... Month 12
-- Cell values = retention % (or MRR $)
-- Background color gradient: green (100-80%) → yellow (79-50%) → red (49-0%)
-- Hover tooltip shows absolute count
-
-Calculation: groups offices by `activation_date` month, for each subsequent month checks if `churn_date` is null or after that month. All client-side from already-fetched `offices` data.
-
-### New File: `src/components/relatorios/IndicatorCard.tsx`
-
-Renders a saved indicator based on its `config` and `visualization_type`. Used both in Reports tab and when `pinned_to_dashboard = true` in Dashboard.
-
-### Modified: `src/pages/Relatorios.tsx`
-
-- Add two new tabs to the TabsList: "📊 Indicadores" and "📈 Cohort"
-- Import and render `IndicatorBuilder` and `CohortAnalysis` components
-- Pass `filteredOffices`, `filteredContracts`, `filteredMeetings`, `filteredHealth`, `products`, `csmUsers`, `profileMap`, `filterProduct`, `filterCsm` as props
-- Both components receive already-filtered data so product/CSM filter applies automatically
-
-### Modified: `src/pages/Dashboard.tsx`
-
-- After existing KPI cards, query `custom_indicators` where `pinned_to_dashboard = true`
-- Render each using `IndicatorCard` component
-- Only show for Admin/Manager
-
-## Architecture Decisions
-
-- **Client-side computation**: All metric calculations happen client-side using already-fetched data (offices, contracts, meetings, etc.) — no new edge functions needed. The data is already loaded in Relatorios.tsx.
-- **Product filter**: Already implemented at line 93/454 of Relatorios.tsx and applies to all filtered data. The new components receive `filteredOffices` so they inherit the filter.
-- **Permissions**: Builder UI hidden for CSM/Viewer (they only see saved indicators). Cohort visible to all but CSM sees only their portfolio (already filtered by RLS).
-
-## Summary
-
-| Component | Change |
-|-----------|--------|
-| Database | Create `custom_indicators` table with RLS |
-| `IndicatorBuilder.tsx` | New — predefined library + advanced builder |
-| `CohortAnalysis.tsx` | New — cohort heatmap with 3 types |
-| `IndicatorCard.tsx` | New — renders saved indicator |
-| `Relatorios.tsx` | Add 2 tabs, import new components |
-| `Dashboard.tsx` | Show pinned indicators |
+## Expected Result After Fix
+- All 17 `create_activity` actions succeed (activities created with correct types)
+- Webhook creates office with all mapped fields populated
+- Webhook triggers automations that execute all 19 actions
+- automation_logs show complete execution with all action IDs
 

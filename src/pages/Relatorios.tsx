@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   Loader2, BarChart3, TrendingDown, DollarSign, Heart, Users, Route,
-  AlertTriangle, TrendingUp, ArrowUp, ArrowDown, Minus, X,
+  AlertTriangle, TrendingUp, ArrowUp, ArrowDown, Minus, X, Layers, GitBranch,
 } from 'lucide-react';
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -21,6 +21,8 @@ import {
   startOfQuarter, endOfQuarter, startOfYear, endOfYear, subQuarters, subYears, parseISO,
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import IndicatorBuilder from '@/components/relatorios/IndicatorBuilder';
+import CohortAnalysis from '@/components/relatorios/CohortAnalysis';
 
 // ─── Constants ───
 const COLORS = {
@@ -477,6 +479,8 @@ export default function Relatorios() {
           <TabsTrigger value="jornada" className="gap-1.5"><Route className="h-4 w-4" />Jornada</TabsTrigger>
           <TabsTrigger value="inadimplencia" className="gap-1.5"><AlertTriangle className="h-4 w-4" />Inadimplência</TabsTrigger>
           <TabsTrigger value="evolucao" className="gap-1.5"><TrendingUp className="h-4 w-4" />Evolução</TabsTrigger>
+          <TabsTrigger value="indicadores" className="gap-1.5"><Layers className="h-4 w-4" />📊 Indicadores</TabsTrigger>
+          <TabsTrigger value="cohort" className="gap-1.5"><GitBranch className="h-4 w-4" />📈 Cohort</TabsTrigger>
         </TabsList>
 
         {/* ═══ VISÃO EXECUTIVA ═══ */}
@@ -776,6 +780,31 @@ export default function Relatorios() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ═══ INDICADORES ═══ */}
+        <TabsContent value="indicadores" className="space-y-6">
+          <IndicatorBuilder
+            offices={filteredOffices}
+            contracts={filteredContracts}
+            meetings={filteredMeetings}
+            healthScores={filteredHealth}
+            activities={[]}
+            formSubmissions={formSubmissions}
+            products={products}
+            csmUsers={csmUsers}
+            profileMap={profileMap}
+            filterProduct={filterProduct}
+            filterCsm={filterCsm}
+          />
+        </TabsContent>
+
+        {/* ═══ COHORT ═══ */}
+        <TabsContent value="cohort" className="space-y-6">
+          <CohortAnalysis
+            offices={filteredOffices}
+            filterProduct={filterProduct}
+          />
         </TabsContent>
       </Tabs>
     </div>
