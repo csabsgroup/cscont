@@ -306,6 +306,32 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* === Indicadores Fixados === */}
+      {(isAdmin || isManager) && pinnedIndicators.length > 0 && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {pinnedIndicators.map(ind => (
+            <IndicatorCard
+              key={ind.id}
+              indicator={ind}
+              dataContext={{
+                offices: filteredOffices,
+                contracts,
+                activities,
+                meetings,
+                healthScores: filteredHealthScores,
+                metricsHistory: [],
+                formSubmissions: [],
+                events: [],
+                bonusGrants: [],
+                products,
+                csmUsers: csmProfiles,
+                profileMap,
+              }}
+            />
+          ))}
+        </div>
+      )}
+
       {/* === SEÇÃO 2: Contadores de Atividades === */}
       <ActivityCounterBadges
         counts={actCounts}
