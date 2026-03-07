@@ -35,7 +35,6 @@ import { Constants } from '@/integrations/supabase/types';
 import { cn } from '@/lib/utils';
 import { applyPlaybook } from '@/lib/playbook-helpers';
 import { Progress } from '@/components/ui/progress';
-import { toast } from 'sonner';
 
 export default function Cliente360() {
   const { id } = useParams<{ id: string }>();
