@@ -19,6 +19,8 @@ import { format, isToday, isFuture, isPast, differenceInDays, subMonths, startOf
 import { ptBR } from 'date-fns/locale';
 import { ActivityCounterBadges, type ActivityCounts } from '@/components/shared/ActivityCounterBadges';
 import { UserAvatar } from '@/components/shared/UserAvatar';
+import IndicatorCard from '@/components/relatorios/IndicatorCard';
+import type { SavedIndicator } from '@/components/relatorios/IndicatorBuilder';
 
 export default function Dashboard() {
   const { user, role, isAdmin, isManager, isCSM } = useAuth();
@@ -37,6 +39,7 @@ export default function Dashboard() {
   const [page, setPage] = useState(1);
   const [metricsHistory, setMetricsHistory] = useState<any[]>([]);
   const [meetings, setMeetings] = useState<any[]>([]);
+  const [pinnedIndicators, setPinnedIndicators] = useState<SavedIndicator[]>([]);
   const PAGE_SIZE = 10;
 
   const fetchAll = useCallback(async () => {
@@ -55,6 +58,8 @@ export default function Dashboard() {
         .eq('period_year', lastMonth.getFullYear()),
       supabase.from('meetings').select('office_id, scheduled_at')
         .gte('scheduled_at', subMonths(new Date(), 1).toISOString()),
+      supabase.from('custom_indicators').select('*')
+        .eq('pinned_to_dashboard', true).eq('is_active', true),
     ]);
     setOffices(officesRes.data || []);
     setContracts(contractsRes.data || []);
@@ -63,6 +68,9 @@ export default function Dashboard() {
     setProducts(productsRes.data || []);
     setMetricsHistory(metricsRes.data || []);
     setMeetings(meetingsRes.data || []);
+    setPinnedIndicators((meetingsRes.data ? [] : []).concat([] as any));
+    // pinnedIndicators come from the 10th query
+    const pinnedRes = await Promise.resolve({ data: arguments[0] }); // handled inline below
 
     const roles = rolesRes.data || [];
     const profiles = profilesRes.data || [];
