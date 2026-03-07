@@ -366,7 +366,10 @@ export default function Clientes() {
     if (filters.tags.length > 0) result = result.filter(o => o.tags && filters.tags.some(t => o.tags!.includes(t)));
     if (filters.noMeeting30d) result = result.filter(o => !o.lastMeeting || differenceInDays(new Date(), new Date(o.lastMeeting)) > 30);
     if (filters.overdueInstallments) result = result.filter(o => (o.installmentsOverdue || 0) > 0);
-    if (filters.renewal30d) result = result.filter(o => o.daysToRenewal != null && o.daysToRenewal <= 30);
+    if (filters.renewal30d) {
+      const renewalDays = activePresetFilter === 'renovam_90d' ? 90 : activePresetFilter === 'renovam_60d' ? 60 : 30;
+      result = result.filter(o => o.daysToRenewal != null && o.daysToRenewal <= renewalDays);
+    }
     // URL preset filters
     if (activePresetFilter === 'nps_detratores') result = result.filter(o => (o as any).last_nps != null && Number((o as any).last_nps) <= 6);
     if (activePresetFilter === 'atividades_atrasadas') result = result.filter(o => (o as any).hasOverdueActivities);
