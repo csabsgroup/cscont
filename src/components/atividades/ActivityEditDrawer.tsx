@@ -115,10 +115,38 @@ export function ActivityEditDrawer({ activityId, isOpen, onClose, onSave, readOn
   const handleComplete = async () => {
     if (!completeObs.trim()) { toast.error('Observações são obrigatórias.'); return; }
     setSaving(true);
+    const completedAt = new Date().toISOString();
     await supabase.from('activities').update({
-      completed_at: new Date().toISOString(),
+      completed_at: completedAt,
       observations: completeObs,
     }).eq('id', activityId!);
+
+    // Fire automation trigger for activity completion
+    if (activity?.office_id) {
+      try {
+        const wasLate = activity.due_date && new Date(activity.due_date) < new Date(completedAt);
+        const daysLate = wasLate ? Math.ceil((new Date(completedAt).getTime() - new Date(activity.due_date).getTime()) / 86400000) : 0;
+        await supabase.functions.invoke('execute-automations', {
+          body: {
+            action: 'triggerV2',
+            trigger_type: 'activity.completed',
+            office_id: activity.office_id,
+            context: {
+              activity_id: activity.id,
+              activity_name: activity.title,
+              activity_type: activity.type,
+              was_late: !!wasLate,
+              days_late: daysLate,
+              completed_by: activity.user_id,
+              suffix: `activity_${activity.id}`,
+            },
+          },
+        });
+      } catch (e) {
+        console.error('Failed to trigger activity.completed automation:', e);
+      }
+    }
+
     toast.success('Atividade concluída!');
     setSaving(false);
     setCompleteOpen(false);
