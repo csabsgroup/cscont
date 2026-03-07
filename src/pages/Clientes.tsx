@@ -224,6 +224,8 @@ export default function Clientes() {
       case 'health_verde': setFilters({ ...emptyFilters, health: ['green'] }); break;
       case 'churn': setFilters({ ...emptyFilters, statuses: ['churn', 'nao_renovado'] }); break;
       case 'renovam_30d': setFilters({ ...emptyFilters, renewal30d: true }); break;
+      case 'renovam_60d': setFilters({ ...emptyFilters, renewal30d: true }); break; // reuses renewal filter with 60d logic in filtered
+      case 'renovam_90d': setFilters({ ...emptyFilters, renewal30d: true }); break; // reuses renewal filter with 90d logic in filtered
       case 'sem_reuniao_30d': setFilters({ ...emptyFilters, noMeeting30d: true }); break;
       case 'nps_detratores': setFilters({ ...emptyFilters }); break; // handled in filtered
       case 'atividades_atrasadas': setFilters({ ...emptyFilters }); break; // handled in filtered
@@ -714,6 +716,8 @@ export default function Clientes() {
     health_verde: 'Health Verde',
     churn: 'Churn / Não Renovado',
     renovam_30d: 'Renovam em 30 dias',
+    renovam_60d: 'Renovam em 60 dias',
+    renovam_90d: 'Renovam em 90 dias',
     sem_reuniao_30d: 'Sem reunião há +30 dias',
     nps_detratores: 'NPS Detratores',
     atividades_atrasadas: 'Com Atividades Atrasadas',
@@ -858,29 +862,6 @@ export default function Clientes() {
         )}
       </div>
 
-      {/* Preset filter banner from URL */}
-      {activePresetFilter && (
-        <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/10 border border-primary/20">
-          <span className="text-sm font-medium text-primary">
-            🔍 Filtro ativo: {
-              ({
-                ativos: 'Clientes Ativos',
-                health_vermelho: 'Clientes em Risco (Health Vermelho)',
-                health_amarelo: 'Health Amarelo',
-                health_verde: 'Health Verde',
-                churn: 'Churn / Não Renovado',
-                renovam_30d: 'Renovam em 30 dias',
-                sem_reuniao_30d: 'Sem reunião > 30 dias',
-                nps_detratores: 'NPS Detratores',
-                atividades_atrasadas: 'Atividades Atrasadas',
-              } as Record<string, string>)[activePresetFilter] || activePresetFilter
-            }
-          </span>
-          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => { setSearchParams({}); setFilters(emptyFilters); }}>
-            <X className="h-3 w-3 mr-1" />Remover
-          </Button>
-        </div>
-      )}
 
       {activeChips.length > 0 && (
         <div className="flex gap-1.5 flex-wrap">
