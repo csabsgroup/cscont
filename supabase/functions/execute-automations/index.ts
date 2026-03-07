@@ -368,12 +368,12 @@ async function handleAction(supabase: any, action: any, office_id: string, offic
 
     case "force_health_band": {
       if (c.band && !dryRun) {
-        const { error: hsErr } = await supabase.from("health_scores").insert({
+        const { error: hsErr } = await supabase.from("health_scores").upsert({
           office_id,
           band: c.band,
           score: c.band === 'red' ? 0 : c.band === 'yellow' ? 50 : 100,
           calculated_at: new Date().toISOString(),
-        });
+        }, { onConflict: "office_id" });
         if (hsErr) {
           console.error('[AUTOMATIONS] force_health_band error:', hsErr.message);
           return { type: "force_health_band", error: hsErr.message };
