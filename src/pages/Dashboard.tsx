@@ -45,7 +45,7 @@ export default function Dashboard() {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     const lastMonth = subMonths(new Date(), 1);
-    const [officesRes, contractsRes, activitiesRes, healthRes, productsRes, profilesRes, rolesRes, metricsRes, meetingsRes] = await Promise.all([
+    const [officesRes, contractsRes, activitiesRes, healthRes, productsRes, profilesRes, rolesRes, metricsRes, meetingsRes, pinnedRes] = await Promise.all([
       supabase.from('offices').select('*, products:active_product_id(name)'),
       supabase.from('contracts').select('*'),
       supabase.from('activities').select('*, offices(name)').order('due_date', { ascending: true, nullsFirst: false }),
@@ -68,9 +68,7 @@ export default function Dashboard() {
     setProducts(productsRes.data || []);
     setMetricsHistory(metricsRes.data || []);
     setMeetings(meetingsRes.data || []);
-    setPinnedIndicators((meetingsRes.data ? [] : []).concat([] as any));
-    // pinnedIndicators come from the 10th query
-    const pinnedRes = await Promise.resolve({ data: arguments[0] }); // handled inline below
+    setPinnedIndicators((pinnedRes.data || []) as unknown as SavedIndicator[]);
 
     const roles = rolesRes.data || [];
     const profiles = profilesRes.data || [];
