@@ -178,6 +178,7 @@ export default function Clientes() {
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
   const [renameViewId, setRenameViewId] = useState<string | null>(null);
   const [renameViewName, setRenameViewName] = useState('');
+  const defaultViewLoadedRef = useRef(false);
   const [deleteViewId, setDeleteViewId] = useState<string | null>(null);
 
   // Create office
