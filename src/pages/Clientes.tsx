@@ -856,7 +856,7 @@ export default function Clientes() {
             <Building2 className="mb-3 h-10 w-10 text-muted-foreground/40" />
             <p className="text-sm text-muted-foreground">{debouncedSearch || hasActiveFilters ? 'Nenhum escritório encontrado.' : 'Nenhum escritório cadastrado.'}</p>
             {!debouncedSearch && !hasActiveFilters && !isViewer && (
-              <Button variant="outline" className="mt-4" onClick={() => setDialogOpen(true)}><Plus className="mr-2 h-4 w-4" />Cadastrar</Button>
+              <Button variant="outline" className="mt-4" onClick={() => setWizardOpen(true)}><Plus className="mr-2 h-4 w-4" />Cadastrar</Button>
             )}
           </CardContent>
         ) : (
