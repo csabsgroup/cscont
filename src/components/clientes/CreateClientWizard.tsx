@@ -97,57 +97,59 @@ export function CreateClientWizard({ open, onOpenChange, products, csmList, onCr
     setContacts(p => p.map((c, j) => j === i ? { ...c, [field]: value } : c));
   };
 
-  const handleCreate = async () => {
+  const handleCreate = async (skipContract = false) => {
     if (!empresa.name.trim()) { toast.error('Nome do escritório é obrigatório.'); return; }
     if (!empresa.product_id) { toast.error('Produto é obrigatório.'); return; }
 
     setSaving(true);
     try {
-      // 1. Generate office code
-      const officeCode = await generateNextOfficeCode(empresa.product_id);
+      // BUG 3 fix: Retry loop with re-query on race condition (up to 3 attempts)
+      let office: { id: string; active_product_id: string | null } | null = null;
+      let finalCode: string | null = null;
 
-      // 2. Insert office
-      const { data: office, error: offErr } = await supabase.from('offices').insert({
-        name: empresa.name,
-        cnpj: empresa.cnpj || null,
-        email: empresa.email || null,
-        whatsapp: empresa.whatsapp || null,
-        phone: empresa.phone || null,
-        address: empresa.address || null,
-        city: empresa.city || null,
-        state: empresa.state || null,
-        cep: empresa.cep || null,
-        segment: empresa.segment || null,
-        active_product_id: empresa.product_id,
-        csm_id: empresa.csm_id || null,
-        status: empresa.status as any,
-        notes: empresa.notes || null,
-        office_code: officeCode,
-      }).select('id, active_product_id').single();
-
-      if (offErr) {
-        // Retry with incremented code on unique violation
-        if (offErr.code === '23505' && officeCode) {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const officeCode = await generateNextOfficeCode(empresa.product_id);
+        // On retry, increment by attempt to avoid same collision
+        let codeToUse = officeCode;
+        if (attempt > 0 && officeCode) {
           const match = officeCode.match(/^(.+) - (\d+)$/);
           if (match) {
-            const retryCode = `${match[1]} - ${String(parseInt(match[2], 10) + 1).padStart(3, '0')}`;
-            const { data: office2, error: offErr2 } = await supabase.from('offices').insert({
-              name: empresa.name, cnpj: empresa.cnpj || null, email: empresa.email || null,
-              whatsapp: empresa.whatsapp || null, phone: empresa.phone || null,
-              address: empresa.address || null, city: empresa.city || null, state: empresa.state || null,
-              cep: empresa.cep || null, segment: empresa.segment || null,
-              active_product_id: empresa.product_id, csm_id: empresa.csm_id || null,
-              status: empresa.status as any, notes: empresa.notes || null, office_code: retryCode,
-            }).select('id, active_product_id').single();
-            if (offErr2) throw offErr2;
-            await finishCreation(office2!, retryCode);
-            return;
+            codeToUse = `${match[1]} - ${String(parseInt(match[2], 10) + attempt).padStart(3, '0')}`;
           }
         }
-        throw offErr;
+
+        const { data, error } = await supabase.from('offices').insert({
+          name: empresa.name,
+          cnpj: empresa.cnpj || null,
+          email: empresa.email || null,
+          whatsapp: empresa.whatsapp || null,
+          phone: empresa.phone || null,
+          address: empresa.address || null,
+          city: empresa.city || null,
+          state: empresa.state || null,
+          cep: empresa.cep || null,
+          segment: empresa.segment || null,
+          active_product_id: empresa.product_id,
+          csm_id: empresa.csm_id || null,
+          status: empresa.status as any,
+          notes: empresa.notes || null,
+          office_code: codeToUse,
+        }).select('id, active_product_id').single();
+
+        if (!error) {
+          office = data;
+          finalCode = codeToUse;
+          break;
+        }
+
+        // Only retry on unique violation
+        if (error.code !== '23505' || attempt === 2) throw error;
+        console.warn(`Office code collision (attempt ${attempt + 1}), retrying...`);
       }
 
-      await finishCreation(office!, officeCode);
+      if (!office) throw new Error('Falha ao criar escritório após 3 tentativas.');
+
+      await finishCreation(office, finalCode, skipContract);
     } catch (e: any) {
       toast.error('Erro ao criar cliente: ' + (e.message || e));
     } finally {
