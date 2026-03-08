@@ -121,6 +121,21 @@ export function PlaybooksTab() {
     toast.success('Playbook excluído'); fetchAll();
   };
 
+  const handleDuplicate = (pb: any) => {
+    setEditingId(null);
+    setName(`Cópia de ${pb.name}`);
+    setDescription(pb.description || '');
+    setProductId(pb.product_id || '');
+    setIsActive(true);
+    setAutoAdvance(pb.auto_advance_journey || false);
+    setAdvanceToStageId(pb.advance_to_stage_id || '');
+    const acts = Array.isArray(pb.activities)
+      ? pb.activities.map((a: any) => ({ ...a, id: genId() }))
+      : [emptyActivity()];
+    setActivities(acts);
+    setEditorOpen(true);
+  };
+
   const updateActivity = (actId: string, patch: Partial<PlaybookActivity>) => {
     setActivities(prev => prev.map(a => a.id === actId ? { ...a, ...patch } : a));
   };
