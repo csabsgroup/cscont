@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 import { differenceInDays, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { UserAvatar } from '@/components/shared/UserAvatar';
+import { CreateClientWizard } from '@/components/clientes/CreateClientWizard';
 
 // ─── Types ───────────────────────────────────────────────────────
 interface Office {
