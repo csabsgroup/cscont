@@ -489,6 +489,11 @@ export function FormTemplatesTab() {
                 <Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Descrição opcional do formulário" rows={2} />
               </div>
             </div>
+            {formType === 'internal' && (
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">ℹ️ Campos automáticos:</span> CSM (usuário logado) e Cliente (selecionado na reunião ou 360) são vinculados automaticamente ao submeter.
+              </div>
+            )}
 
             {/* Tabs */}
             <Tabs value={activeTab} onValueChange={setActiveTab}>

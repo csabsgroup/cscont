@@ -104,7 +104,7 @@ export const importTemplates: EntityTemplate[] = [
       { key: 'notes', label: 'observacoes', required: false, type: 'text', example: 'Cliente VIP', dbColumn: 'notes',
         aliases: ['observacoes', 'observações', 'obs', 'notas', 'notes', 'anotacoes', 'anotações', 'comentarios', 'comentários', 'observação', 'observacao'] },
       { key: 'office_code', label: 'codigo_escritorio', required: false, type: 'text', example: 'ELT-001', dbColumn: 'office_code',
-        aliases: ['codigo', 'código', 'codigo_escritorio', 'código_escritório', 'code', 'office_code', 'id_externo'] },
+        aliases: ['codigo', 'código', 'codigo_escritorio', 'código_escritório', 'code', 'office_code', 'id_externo', 'id', 'id do cliente', 'id original', 'identificador'] },
 
       // ── Contact fields (auto-create linked contact) ──
       { key: 'contact_name', label: 'nome_socio', required: false, type: 'text', example: 'João Silva',

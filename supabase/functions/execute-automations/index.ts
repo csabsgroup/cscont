@@ -19,7 +19,10 @@ function resolveVariables(template: string, office: any, csm: any, extra?: Recor
     .replace(/\{\{etapa\}\}/g, extra?.stage_name || '--')
     .replace(/\{\{parcelas_vencidas\}\}/g, extra?.installments_overdue?.toString() || '0')
     .replace(/\{\{dias_renovacao\}\}/g, extra?.days_to_renewal?.toString() || '--')
-    .replace(/\{\{data_hoje\}\}/g, new Date().toLocaleDateString('pt-BR'));
+    .replace(/\{\{data_hoje\}\}/g, new Date().toLocaleDateString('pt-BR'))
+    .replace(/\{\{mrr\}\}/g, office?.mrr?.toString() || office?.faturamento_mensal?.toString() || '0')
+    .replace(/\{\{nps\}\}/g, office?.last_nps?.toString() || '--')
+    .replace(/\{\{ltv\}\}/g, extra?.ltv?.toString() || '0');
 }
 
 // ─── Action Handlers ─────────────────────────────────────────
@@ -1180,11 +1183,12 @@ Deno.serve(async (req) => {
     if (action === "runPeriodicRules") {
       console.log('[PERIODIC] Starting periodic rules check');
 
+      const periodicTriggerTypes = ['client_contains', 'office.no_meeting', 'office.renewal_approaching', 'activity.overdue', 'payment.overdue'];
       const { data: periodicRules, error: rulesError } = await supabase
         .from('automation_rules_v2')
         .select('*')
         .eq('is_active', true)
-        .eq('trigger_type', 'client_contains');
+        .in('trigger_type', periodicTriggerTypes);
 
       if (rulesError) {
         console.error('[PERIODIC] Error fetching rules:', rulesError.message);
@@ -1316,7 +1320,7 @@ Deno.serve(async (req) => {
               rule_id: rule.id,
               rule_name: rule.name,
               office_id: office.id,
-              trigger_type: 'client_contains',
+              trigger_type: rule.trigger_type,
               conditions_met: true,
               actions_executed: executedActions,
               execution_time_ms: Date.now() - ruleStart,

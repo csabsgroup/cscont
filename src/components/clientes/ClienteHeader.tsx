@@ -167,7 +167,9 @@ export function ClienteHeader({
         )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            {(office as any).office_code && <Badge variant="secondary" className="text-xs font-mono">{(office as any).office_code}</Badge>}
+            <Badge variant="secondary" className="text-xs font-mono">
+              {(office as any).office_code || office.id.slice(0, 8).toUpperCase()}
+            </Badge>
             <h1 className="text-xl font-bold truncate">{office.name}</h1>
           </div>
           {/* Line 2: Configurable badges */}
