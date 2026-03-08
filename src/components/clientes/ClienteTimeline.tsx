@@ -329,33 +329,54 @@ export function ClienteTimeline({ officeId, readOnly = false }: Props) {
 
               {/* Expanded activities */}
               {isExpanded && (
-                <div className="border-t border-border">
-                  {acts.map((act: any, idx: number) => (
-                    <div
-                      key={act.id}
-                      className="flex items-center gap-3 px-4 py-2.5 pl-12 hover:bg-muted/20 cursor-pointer transition-colors border-b border-border/50 last:border-b-0"
-                      onClick={() => setEditActivityId(act.id)}
-                    >
-                      <div className="flex items-center gap-1 text-muted-foreground text-xs w-4">
-                        {idx < acts.length - 1 ? '├─' : '└─'}
-                      </div>
-                      {act.completed_at
-                        ? <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
-                        : <Circle className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
-                      <span className="text-xs text-muted-foreground w-5">{(act.playbook_order || idx + 1)}.</span>
-                      <span className={`text-sm flex-1 min-w-0 truncate ${act.completed_at ? 'line-through text-muted-foreground' : ''}`}>
-                        {act.title}
-                      </span>
-                      {act.due_date && (
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">
-                          {format(new Date(act.due_date), 'dd/MM', { locale: ptBR })}
-                        </span>
-                      )}
-                      <span className="text-xs text-muted-foreground truncate max-w-[100px]">
-                        {getUserName(act.user_id)}
-                      </span>
-                    </div>
-                  ))}
+                <div className="border-t border-border space-y-1 p-3 pl-10">
+                  {acts.map((act: any, idx: number) => {
+                    const actDone = !!act.completed_at;
+                    return (
+                      <Card
+                        key={act.id}
+                        className="p-3 flex items-start gap-3 cursor-pointer hover:bg-muted/30 transition-colors border-l-4 border-l-primary/30"
+                        onClick={() => setEditActivityId(act.id)}
+                      >
+                        {actDone
+                          ? <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0 mt-0.5" />
+                          : <Circle className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs text-muted-foreground">{(act.playbook_order || idx + 1)}.</span>
+                            <span className={`text-sm font-medium ${actDone ? 'line-through text-muted-foreground' : ''}`}>{act.title}</span>
+                            <Badge variant="outline" className="text-xs">
+                              <FileText className="h-3 w-3 mr-1" />{ACTIVITY_TYPE_LABELS[act.type] || act.type}
+                            </Badge>
+                            {act.priority !== 'medium' && (
+                              <Badge variant={act.priority === 'high' || act.priority === 'urgent' ? 'destructive' : 'secondary'} className="text-xs">
+                                {PRIORITY_LABELS[act.priority]}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {act.due_date ? formatDistanceToNow(new Date(act.due_date), { addSuffix: true, locale: ptBR }) : 'Sem data'}
+                            {' · '}{getUserName(act.user_id)}
+                          </p>
+                        </div>
+                        {!readOnly && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
+                              <Button size="sm" variant="ghost" className="h-7 w-7 p-0"><MoreVertical className="h-4 w-4" /></Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" onClick={e => e.stopPropagation()}>
+                              {actDone ? (
+                                <DropdownMenuItem onClick={() => handleReopen('activity', act.id)}><RotateCcw className="mr-2 h-4 w-4" />Reabrir</DropdownMenuItem>
+                              ) : (
+                                <DropdownMenuItem onClick={() => { setCompleteItem(act); setCompleteObs(''); }}><CheckCircle2 className="mr-2 h-4 w-4" />Concluir</DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem className="text-destructive" onClick={() => handleDelete('activity', act.id)}><Trash2 className="mr-2 h-4 w-4" />Excluir</DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
+                      </Card>
+                    );
+                  })}
                 </div>
               )}
             </Card>

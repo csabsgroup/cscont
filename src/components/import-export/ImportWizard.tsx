@@ -8,6 +8,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Upload, Download, CheckCircle2, AlertCircle, AlertTriangle, Loader2, Undo2, Eye, ChevronDown, FileDown, RotateCcw, XCircle } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -121,11 +123,12 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<{ success: number; errors: number; skipped: number; batchId?: string; warnings?: string[]; rowResults?: ImportRowResult[] } | null>(null);
   const [filteredEmptyCount, setFilteredEmptyCount] = useState(0);
+  const [enableAutomations, setEnableAutomations] = useState(false);
 
   const reset = () => {
     setStep('upload'); setFileHeaders([]); setRows([]); setMapping({});
     setAutoMapping({}); setErrors([]); setValidCount(0); setImporting(false); setProgress(0); setResult(null);
-    setFilteredEmptyCount(0);
+    setFilteredEmptyCount(0); setEnableAutomations(false);
   };
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -310,6 +313,17 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
         toast.error(`Nenhum registro importado. ${errorCount} erros encontrados.`);
       }
 
+      // Trigger automations if enabled (only for offices)
+      if (enableAutomations && template.key === 'offices' && insertedIds.length > 0) {
+        toast.info('Disparando automações...');
+        for (const officeId of insertedIds) {
+          supabase.functions.invoke('execute-automations', {
+            body: { action: 'triggerV2', trigger_type: 'office.created', office_id: officeId },
+          }).catch(e => console.error('Automation failed for', officeId, e));
+        }
+        toast.success(`Automações disparadas para ${insertedIds.length} registros.`);
+      }
+
       setResult({ success: successCount + warningCount, errors: errorCount, skipped: 0, batchId, rowResults });
       setStep('execute');
     } catch (err: any) {
@@ -421,6 +435,19 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
                 );
               })}
             </div>
+            {template.key === 'offices' && (
+              <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30">
+                <Switch id="enable-automations" checked={enableAutomations} onCheckedChange={setEnableAutomations} />
+                <div className="flex-1">
+                  <Label htmlFor="enable-automations" className="text-sm font-medium cursor-pointer">
+                    🔄 Ativar regras de automação para esta importação
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Se ativado, as regras de automação serão disparadas para cada registro importado após a conclusão.
+                  </p>
+                </div>
+              </div>
+            )}
             <div className="flex justify-between">
               <Button variant="outline" onClick={() => setStep('upload')}>Voltar</Button>
               <Button onClick={handlePreview} disabled={requiredUnmapped.length > 0}>
