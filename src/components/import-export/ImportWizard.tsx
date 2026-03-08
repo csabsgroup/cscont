@@ -121,6 +121,7 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<{ success: number; errors: number; skipped: number; batchId?: string; warnings?: string[]; rowResults?: ImportRowResult[] } | null>(null);
   const [filteredEmptyCount, setFilteredEmptyCount] = useState(0);
+  const [enableAutomations, setEnableAutomations] = useState(false);
 
   const reset = () => {
     setStep('upload'); setFileHeaders([]); setRows([]); setMapping({});
