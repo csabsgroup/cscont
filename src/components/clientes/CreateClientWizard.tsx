@@ -170,7 +170,7 @@ export function CreateClientWizard({ open, onOpenChange, products, csmList, onCr
           office_id: office.id,
           name: c.name,
           email: c.email || null,
-          phone: c.phone || null,
+          phone: null,
           whatsapp: c.phone || null,
           cpf: c.cpf || null,
           role_title: c.role_title || null,
