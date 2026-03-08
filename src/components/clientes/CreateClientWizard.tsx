@@ -372,7 +372,7 @@ export function CreateClientWizard({ open, onOpenChange, products, csmList, onCr
                   </Button>
                 )}
                 <div className="space-y-1">
-                  <Label className="text-xs">Nome do sócio/contato {i === 0 ? '*' : ''}</Label>
+                  <Label className="text-xs">Nome do sócio/contato</Label>
                   <Input value={c.name} onChange={e => updateContact(i, 'name', e.target.value)} />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
