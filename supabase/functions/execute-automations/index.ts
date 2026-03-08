@@ -1320,7 +1320,7 @@ Deno.serve(async (req) => {
               rule_id: rule.id,
               rule_name: rule.name,
               office_id: office.id,
-              trigger_type: 'client_contains',
+              trigger_type: rule.trigger_type,
               conditions_met: true,
               actions_executed: executedActions,
               execution_time_ms: Date.now() - ruleStart,
