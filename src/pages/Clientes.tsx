@@ -380,7 +380,8 @@ export default function Clientes() {
     if (s) {
       result = result.filter(o =>
         o.name.toLowerCase().includes(s) || o.city?.toLowerCase().includes(s) ||
-        o.mainContact?.toLowerCase().includes(s) || o.csmName?.toLowerCase().includes(s)
+        o.mainContact?.toLowerCase().includes(s) || o.csmName?.toLowerCase().includes(s) ||
+        o.office_code?.toLowerCase().includes(s)
       );
     }
     if (filters.csms.length > 0) result = result.filter(o => o.csm_id && filters.csms.includes(o.csm_id));
