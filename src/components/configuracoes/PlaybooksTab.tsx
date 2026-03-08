@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Plus, Loader2, Trash2, Edit2, GripVertical } from 'lucide-react';
+import { Plus, Loader2, Trash2, Edit2, GripVertical, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 
@@ -121,6 +121,21 @@ export function PlaybooksTab() {
     toast.success('Playbook excluído'); fetchAll();
   };
 
+  const handleDuplicate = (pb: any) => {
+    setEditingId(null);
+    setName(`Cópia de ${pb.name}`);
+    setDescription(pb.description || '');
+    setProductId(pb.product_id || '');
+    setIsActive(true);
+    setAutoAdvance(pb.auto_advance_journey || false);
+    setAdvanceToStageId(pb.advance_to_stage_id || '');
+    const acts = Array.isArray(pb.activities)
+      ? pb.activities.map((a: any) => ({ ...a, id: genId() }))
+      : [emptyActivity()];
+    setActivities(acts);
+    setEditorOpen(true);
+  };
+
   const updateActivity = (actId: string, patch: Partial<PlaybookActivity>) => {
     setActivities(prev => prev.map(a => a.id === actId ? { ...a, ...patch } : a));
   };
@@ -173,6 +188,7 @@ export function PlaybooksTab() {
                 <TableCell>
                   <div className="flex gap-1">
                     <Button size="sm" variant="ghost" onClick={() => openEdit(pb)}><Edit2 className="h-4 w-4" /></Button>
+                    <Button size="sm" variant="ghost" onClick={() => handleDuplicate(pb)}><Copy className="h-4 w-4" /></Button>
                     <Button size="sm" variant="ghost" onClick={() => handleDelete(pb.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                   </div>
                 </TableCell>
