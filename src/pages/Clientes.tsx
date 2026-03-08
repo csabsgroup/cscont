@@ -422,9 +422,17 @@ export default function Clientes() {
         case 'installments': va = a.installmentsOverdue || 0; vb = b.installmentsOverdue || 0; break;
         case 'renewal': va = a.daysToRenewal ?? 9999; vb = b.daysToRenewal ?? 9999; break;
         case 'sponsor': va = a.mainContact || ''; vb = b.mainContact || ''; break;
+        case 'officeCode': va = a.office_code || ''; vb = b.office_code || ''; break;
+        case 'contact': va = a.mainContact || ''; vb = b.mainContact || ''; break;
+        case 'activationDate': va = a.activation_date || ''; vb = b.activation_date || ''; break;
+        case 'cycleStart': va = a.cycle_start_date || ''; vb = b.cycle_start_date || ''; break;
+        case 'cycleEnd': va = a.cycle_end_date || ''; vb = b.cycle_end_date || ''; break;
+        case 'nextStep': va = a.nextStep || ''; vb = b.nextStep || ''; break;
+        case 'churnDate': va = a.churn_date || ''; vb = b.churn_date || ''; break;
+        case 'churnReason': va = a.churnReasonName || ''; vb = b.churnReasonName || ''; break;
         default: va = ''; vb = ''; break;
       }
-      if (typeof va === 'string') return dir * va.localeCompare(vb);
+      if (typeof va === 'string') return dir * va.localeCompare(vb, undefined, sortColumn === 'officeCode' ? { numeric: true, sensitivity: 'base' } : undefined);
       return dir * ((va as number) - (vb as number));
     });
     return arr;
