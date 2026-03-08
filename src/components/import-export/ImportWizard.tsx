@@ -424,6 +424,19 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
                 );
               })}
             </div>
+            {template.key === 'offices' && (
+              <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30">
+                <Switch id="enable-automations" checked={enableAutomations} onCheckedChange={setEnableAutomations} />
+                <div className="flex-1">
+                  <Label htmlFor="enable-automations" className="text-sm font-medium cursor-pointer">
+                    🔄 Ativar regras de automação para esta importação
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Se ativado, as regras de automação serão disparadas para cada registro importado após a conclusão.
+                  </p>
+                </div>
+              </div>
+            )}
             <div className="flex justify-between">
               <Button variant="outline" onClick={() => setStep('upload')}>Voltar</Button>
               <Button onClick={handlePreview} disabled={requiredUnmapped.length > 0}>
