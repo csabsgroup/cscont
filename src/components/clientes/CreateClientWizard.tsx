@@ -184,36 +184,38 @@ export function CreateClientWizard({ open, onOpenChange, products, csmList, onCr
       contactName = validContacts[0].name;
     }
 
-    // 4. Create contract
-    const totalValue = parseFloat(contrato.value) || 0;
-    const monthlyValue = parseFloat(contrato.monthly_value) || 0;
-    if (totalValue > 0 || monthlyValue > 0) {
-      const endDate = contrato.end_date || (contrato.start_date ? format(addMonths(new Date(contrato.start_date), 12), 'yyyy-MM-dd') : null);
+    // 4. Create contract (skip if explicitly told to)
+    if (!skipContract) {
+      const totalValue = parseFloat(contrato.value) || 0;
+      const monthlyValue = parseFloat(contrato.monthly_value) || 0;
+      if (totalValue > 0 || monthlyValue > 0) {
+        const endDate = contrato.end_date || (contrato.start_date ? format(addMonths(new Date(contrato.start_date), 12), 'yyyy-MM-dd') : null);
 
-      const { error: ctErr } = await supabase.from('contracts').insert({
-        office_id: office.id,
-        product_id: office.active_product_id!,
-        value: totalValue || null,
-        monthly_value: monthlyValue || null,
-        installments_total: parseInt(contrato.installments) || 12,
-        start_date: contrato.start_date || null,
-        end_date: endDate,
-        status: 'ativo' as any,
-        asaas_link: contrato.asaas_link || null,
-        negotiation_notes: contrato.notes || null,
-      });
-      if (ctErr) console.error('Contract insert error:', ctErr.message);
+        const { error: ctErr } = await supabase.from('contracts').insert({
+          office_id: office.id,
+          product_id: office.active_product_id!,
+          value: totalValue || null,
+          monthly_value: monthlyValue || null,
+          installments_total: parseInt(contrato.installments) || 12,
+          start_date: contrato.start_date || null,
+          end_date: endDate,
+          status: 'ativo' as any,
+          asaas_link: contrato.asaas_link || null,
+          negotiation_notes: contrato.notes || null,
+        });
+        if (ctErr) console.error('Contract insert error:', ctErr.message);
 
-      // Update office MRR and cycle dates
-      const mrr = monthlyValue || (totalValue / 12);
-      await supabase.from('offices').update({
-        mrr,
-        cycle_start_date: contrato.start_date || null,
-        cycle_end_date: endDate,
-        activation_date: contrato.start_date || null,
-      }).eq('id', office.id);
+        // Update office MRR and cycle dates
+        const mrr = monthlyValue || (totalValue / 12);
+        await supabase.from('offices').update({
+          mrr,
+          cycle_start_date: contrato.start_date || null,
+          cycle_end_date: endDate,
+          activation_date: contrato.start_date || null,
+        }).eq('id', office.id);
 
-      contratoValue = totalValue > 0 ? `R$ ${totalValue.toLocaleString('pt-BR')}` : `R$ ${(monthlyValue * 12).toLocaleString('pt-BR')}`;
+        contratoValue = totalValue > 0 ? `R$ ${totalValue.toLocaleString('pt-BR')}` : `R$ ${(monthlyValue * 12).toLocaleString('pt-BR')}`;
+      }
     }
 
     // 5. Trigger automations
