@@ -190,7 +190,45 @@ export function ClienteTimeline({ officeId, readOnly = false }: Props) {
   const confirmComplete = async () => {
     if (!completeObs.trim()) { toast.error('Observações são obrigatórias para concluir.'); return; }
     setSaving(true);
-    await supabase.from('activities').update({ completed_at: new Date().toISOString(), observations: completeObs }).eq('id', completeItem.id);
+    const completedAt = new Date().toISOString();
+    await supabase.from('activities').update({ completed_at: completedAt, observations: completeObs }).eq('id', completeItem.id);
+
+    // BUG 1 fix: Trigger automation for activity completion (mirrors ActivityEditDrawer logic)
+    if (completeItem.office_id) {
+      try {
+        const wasLate = completeItem.due_date && new Date(completeItem.due_date) < new Date(completedAt);
+        const daysLate = wasLate ? Math.ceil((new Date(completedAt).getTime() - new Date(completeItem.due_date).getTime()) / 86400000) : 0;
+        await supabase.functions.invoke('execute-automations', {
+          body: {
+            action: 'triggerV2',
+            trigger_type: 'activity.completed',
+            office_id: completeItem.office_id,
+            context: {
+              activity_id: completeItem.id,
+              activity_name: completeItem.title,
+              activity_type: completeItem.type,
+              was_late: !!wasLate,
+              days_late: daysLate,
+              completed_by: completeItem.user_id,
+              suffix: `activity_${completeItem.id}`,
+            },
+          },
+        });
+      } catch (e) {
+        console.error('Failed to trigger activity.completed automation:', e);
+      }
+    }
+
+    // Check playbook completion if activity belongs to a playbook
+    if (completeItem.playbook_instance_id) {
+      try {
+        const { checkPlaybookCompletion } = await import('@/lib/playbook-helpers');
+        await checkPlaybookCompletion(completeItem.playbook_instance_id, completeItem.user_id);
+      } catch (e) {
+        console.error('Failed to check playbook completion:', e);
+      }
+    }
+
     toast.success('Atividade concluída!');
     setSaving(false); setCompleteItem(null); fetchData();
   };
