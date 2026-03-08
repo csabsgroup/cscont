@@ -347,8 +347,9 @@ export function ClienteTimeline({ officeId, readOnly = false }: Props) {
             <Card key={`playbook-${instanceId}`} className="overflow-hidden">
               {/* Playbook header */}
               <button
-                className="w-full p-4 flex items-center gap-3 hover:bg-muted/30 transition-colors text-left"
+                className="w-full p-4 flex items-center gap-3 hover:bg-muted/30 transition-colors text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 onClick={() => togglePlaybook(instanceId)}
+                aria-expanded={isExpanded}
               >
                 {isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" /> : <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
                 <ClipboardList className="h-5 w-5 text-primary flex-shrink-0" />
