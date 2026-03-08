@@ -343,6 +343,25 @@ export default function Clientes() {
 
   useEffect(() => { fetchData(); fetchProducts(); fetchViews(); }, [fetchData, fetchProducts, fetchViews]);
 
+  // Auto-load global default view on initial mount
+  useEffect(() => {
+    if (defaultViewLoadedRef.current || savedViews.length === 0) return;
+    const defaultView = savedViews.find((v: any) => v.is_default);
+    if (defaultView) {
+      const cols = Array.isArray(defaultView.columns) ? defaultView.columns as ColumnKey[] : DEFAULT_COLUMNS;
+      setVisibleColumns(cols);
+      if (defaultView.filters?.filters) {
+        setFilters(defaultView.filters.filters);
+      }
+      if (defaultView.filters?.sort) {
+        setSortColumn(defaultView.filters.sort.column || null);
+        setSortDir(defaultView.filters.sort.dir || null);
+      }
+      setActiveViewId(defaultView.id);
+    }
+    defaultViewLoadedRef.current = true;
+  }, [savedViews]);
+
   // ─── Filtering ──────────────────────────────────────────────
   const hasActiveFilters = useMemo(() =>
     filters.csms.length > 0 || filters.products.length > 0 || filters.statuses.length > 0 ||
