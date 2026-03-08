@@ -48,6 +48,11 @@ interface Office {
   journeyStageId?: string | null;
   csmName?: string | null;
   nextStep?: string | null;
+  office_code?: string | null;
+  cycle_start_date?: string | null;
+  cycle_end_date?: string | null;
+  churn_date?: string | null;
+  churnReasonName?: string | null;
 }
 
 interface Product { id: string; name: string; }
@@ -375,7 +380,8 @@ export default function Clientes() {
     if (s) {
       result = result.filter(o =>
         o.name.toLowerCase().includes(s) || o.city?.toLowerCase().includes(s) ||
-        o.mainContact?.toLowerCase().includes(s) || o.csmName?.toLowerCase().includes(s)
+        o.mainContact?.toLowerCase().includes(s) || o.csmName?.toLowerCase().includes(s) ||
+        o.office_code?.toLowerCase().includes(s)
       );
     }
     if (filters.csms.length > 0) result = result.filter(o => o.csm_id && filters.csms.includes(o.csm_id));
@@ -416,9 +422,17 @@ export default function Clientes() {
         case 'installments': va = a.installmentsOverdue || 0; vb = b.installmentsOverdue || 0; break;
         case 'renewal': va = a.daysToRenewal ?? 9999; vb = b.daysToRenewal ?? 9999; break;
         case 'sponsor': va = a.mainContact || ''; vb = b.mainContact || ''; break;
+        case 'officeCode': va = a.office_code || ''; vb = b.office_code || ''; break;
+        case 'contact': va = a.mainContact || ''; vb = b.mainContact || ''; break;
+        case 'activationDate': va = a.activation_date || ''; vb = b.activation_date || ''; break;
+        case 'cycleStart': va = a.cycle_start_date || ''; vb = b.cycle_start_date || ''; break;
+        case 'cycleEnd': va = a.cycle_end_date || ''; vb = b.cycle_end_date || ''; break;
+        case 'nextStep': va = a.nextStep || ''; vb = b.nextStep || ''; break;
+        case 'churnDate': va = a.churn_date || ''; vb = b.churn_date || ''; break;
+        case 'churnReason': va = a.churnReasonName || ''; vb = b.churnReasonName || ''; break;
         default: va = ''; vb = ''; break;
       }
-      if (typeof va === 'string') return dir * va.localeCompare(vb);
+      if (typeof va === 'string') return dir * va.localeCompare(vb, undefined, sortColumn === 'officeCode' ? { numeric: true, sensitivity: 'base' } : undefined);
       return dir * ((va as number) - (vb as number));
     });
     return arr;
