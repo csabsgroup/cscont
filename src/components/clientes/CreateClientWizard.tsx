@@ -157,7 +157,7 @@ export function CreateClientWizard({ open, onOpenChange, products, csmList, onCr
     }
   };
 
-  const finishCreation = async (office: { id: string; active_product_id: string | null }, officeCode: string | null) => {
+  const finishCreation = async (office: { id: string; active_product_id: string | null }, officeCode: string | null, skipContract = false) => {
     let contactName = '';
     let contratoValue = '';
 
