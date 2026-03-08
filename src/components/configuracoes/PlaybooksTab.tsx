@@ -188,6 +188,7 @@ export function PlaybooksTab() {
                 <TableCell>
                   <div className="flex gap-1">
                     <Button size="sm" variant="ghost" onClick={() => openEdit(pb)}><Edit2 className="h-4 w-4" /></Button>
+                    <Button size="sm" variant="ghost" onClick={() => handleDuplicate(pb)}><Copy className="h-4 w-4" /></Button>
                     <Button size="sm" variant="ghost" onClick={() => handleDelete(pb.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                   </div>
                 </TableCell>
