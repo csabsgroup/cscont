@@ -483,7 +483,7 @@ export function CreateClientWizard({ open, onOpenChange, products, csmList, onCr
               }}>Próximo →</Button>
             )}
             {step === 3 && (
-              <Button onClick={handleCreate} disabled={saving}>
+              <Button onClick={() => handleCreate()} disabled={saving}>
                 {saving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Criando...</> : 'Criar Cliente'}
               </Button>
             )}
