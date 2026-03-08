@@ -372,6 +372,7 @@ export function AutomationRulesTab() {
   const [formTemplates, setFormTemplates] = useState<any[]>([]);
   const [bonusCatalog, setBonusCatalog] = useState<any[]>([]);
   const [customFields, setCustomFields] = useState<any[]>([]);
+  const [playbookTemplates, setPlaybookTemplates] = useState<any[]>([]);
 
   // Computed: merge static + dynamic custom field conditions
   const CONDITION_FIELDS: ConditionFieldDef[] = [
@@ -388,13 +389,14 @@ export function AutomationRulesTab() {
   }, []);
 
   const fetchRefData = useCallback(async () => {
-    const [pRes, sRes, cRes, fRes, bRes, cfRes] = await Promise.all([
+    const [pRes, sRes, cRes, fRes, bRes, cfRes, pbRes] = await Promise.all([
       supabase.from('products').select('id, name').eq('is_active', true).order('name'),
       supabase.from('journey_stages').select('id, name, product_id').order('position'),
       supabase.from('profiles').select('id, full_name'),
       supabase.from('form_templates').select('id, name').order('name'),
       supabase.from('bonus_catalog').select('id, name, unit, default_validity_days'),
       supabase.from('custom_fields').select('id, name, slug, field_type, options'),
+      supabase.from('playbook_templates' as any).select('id, name, activities, product_id').eq('is_active', true).order('name'),
     ]);
     setProducts(pRes.data || []);
     setStages(sRes.data || []);
@@ -402,6 +404,7 @@ export function AutomationRulesTab() {
     setFormTemplates(fRes.data || []);
     setBonusCatalog(bRes.data || []);
     setCustomFields(cfRes.data || []);
+    setPlaybookTemplates((pbRes.data as any[]) || []);
   }, []);
 
   useEffect(() => { fetchRules(); fetchRefData(); }, [fetchRules, fetchRefData]);
@@ -1120,6 +1123,31 @@ export function AutomationRulesTab() {
             )}
           </div>
         );
+
+      case 'apply_playbook': {
+        const filteredPbs = form.product_id
+          ? playbookTemplates.filter(pb => pb.product_id === form.product_id || !pb.product_id)
+          : playbookTemplates;
+        return (
+          <div className="space-y-1">
+            <Label className="text-xs">Playbook *</Label>
+            {filteredPbs.length === 0 ? (
+              <p className="text-xs text-muted-foreground border rounded-md p-3">Nenhum playbook ativo para este produto. Crie playbooks em Configurações &gt; Playbooks.</p>
+            ) : (
+              <Select value={action.config.playbook_id || ''} onValueChange={v => updateConfig({ playbook_id: v })}>
+                <SelectTrigger><SelectValue placeholder="Selecione o playbook" /></SelectTrigger>
+                <SelectContent>
+                  {filteredPbs.map(pb => (
+                    <SelectItem key={pb.id} value={pb.id}>
+                      📋 {pb.name} ({Array.isArray(pb.activities) ? pb.activities.length : 0} atividades)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+        );
+      }
 
       default:
         return <p className="text-xs text-muted-foreground">Selecione o tipo de ação acima.</p>;
