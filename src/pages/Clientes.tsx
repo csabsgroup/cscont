@@ -422,7 +422,11 @@ export default function Clientes() {
         case 'installments': va = a.installmentsOverdue || 0; vb = b.installmentsOverdue || 0; break;
         case 'renewal': va = a.daysToRenewal ?? 9999; vb = b.daysToRenewal ?? 9999; break;
         case 'sponsor': va = a.mainContact || ''; vb = b.mainContact || ''; break;
-        case 'officeCode': va = a.office_code || ''; vb = b.office_code || ''; break;
+        case 'officeCode': {
+          const numA = parseInt((a.office_code || '').replace(/\D/g, '').slice(-3) || '0', 10);
+          const numB = parseInt((b.office_code || '').replace(/\D/g, '').slice(-3) || '0', 10);
+          va = numA; vb = numB; break;
+        }
         case 'contact': va = a.mainContact || ''; vb = b.mainContact || ''; break;
         case 'activationDate': va = a.activation_date || ''; vb = b.activation_date || ''; break;
         case 'cycleStart': va = a.cycle_start_date || ''; vb = b.cycle_start_date || ''; break;
