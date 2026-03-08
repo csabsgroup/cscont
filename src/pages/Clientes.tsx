@@ -48,6 +48,11 @@ interface Office {
   journeyStageId?: string | null;
   csmName?: string | null;
   nextStep?: string | null;
+  office_code?: string | null;
+  cycle_start_date?: string | null;
+  cycle_end_date?: string | null;
+  churn_date?: string | null;
+  churnReasonName?: string | null;
 }
 
 interface Product { id: string; name: string; }
