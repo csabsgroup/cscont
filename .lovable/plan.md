@@ -1,63 +1,59 @@
 
 
-# Diagnosis and Fix Plan
+# Fix: ID Column Sorting + QA Findings
 
-## Root Causes Found
+## Bug: Sorting switch missing `officeCode` case
 
-### Problem 1 — Webhook mapping not filling fields
-The webhook_logs table confirms the error: `"supabase.from(...).insert(...).catch is not a function"`. The last two webhooks (March 5 and March 6) both crashed with this error BEFORE reaching office creation. The `.catch()` fix was applied in code but the webhooks arrived before deployment completed. The mapping paths are correct, the company data exists at root level with all expected fields. This problem is already fixed in code — just needs a new webhook to test.
+In `src/pages/Clientes.tsx` line 406-419, the sorting switch has no `case 'officeCode'`, falling to `default` which returns `''` — no sorting happens.
 
-### Problem 2 — Only 3 of 17 create_activity actions succeeded
-**This is the critical finding.** The `activity_type` database enum has these valid values:
-`task, follow_up, onboarding, renewal, other, ligacao, check_in, email, whatsapp, planejamento`
+Additionally, several other column keys are also missing from the sort switch: `contact`, `activationDate`, `cycleStart`, `cycleEnd`, `nextStep`, `churnDate`, `churnReason`.
 
-It does NOT include `"meeting"`. The automation rule "[ELT] Delegação automática" has 14 actions with `activity_type: "meeting"` — every one of those fails silently because the INSERT violates the enum constraint. The `handleAction` function doesn't capture the error from `supabase.from("activities").insert(...)`.
+## Fix in `src/pages/Clientes.tsx`
 
-Evidence: automation_logs shows 19 `actions_executed` entries, but only 3 `create_activity` have an `id` (the ones with type "task" or "email"). The other 14 have no `id` — they failed silently.
-
-### Problem 3 — Webhook doesn't trigger automations
-Same root cause as Problem 1 — the webhook crashed before reaching the automation invocation lines (419-430). Once the webhook stops crashing, automations will be invoked via `supabase.functions.invoke()`.
-
-## Fixes
-
-### Fix A — Add "meeting" to activity_type enum (database migration)
-```sql
-ALTER TYPE activity_type ADD VALUE IF NOT EXISTS 'meeting';
+### 1. Add `office_code` to the Office interface (line ~26)
+```typescript
+office_code?: string | null;
 ```
-This is the correct fix because:
-- The automation builder UI offers "meeting" as an option
-- Users have configured rules with this type
-- 14 activities are waiting to be created with this type
 
-### Fix B — Add error handling in handleAction (execute-automations)
-In the `create_activity` case (line 46-47), capture and log the error:
-```javascript
-const { data: act, error: actErr } = await supabase.from("activities").insert(payload).select("id").single();
-if (actErr) {
-  console.error('[AUTOMATIONS] Activity insert error:', actErr.message, 'payload:', JSON.stringify(payload));
-  return { type: "create_activity", error: actErr.message };
-}
+### 2. Add missing sort cases (line ~418, before `default:`)
+```typescript
+case 'officeCode': va = (a as any).office_code || ''; vb = (b as any).office_code || ''; break;
+case 'contact': va = a.mainContact || ''; vb = b.mainContact || ''; break;
+case 'activationDate': va = a.activation_date || ''; vb = b.activation_date || ''; break;
+case 'cycleStart': va = (a as any).cycle_start_date || ''; vb = (b as any).cycle_start_date || ''; break;
+case 'cycleEnd': va = (a as any).cycle_end_date || ''; vb = (b as any).cycle_end_date || ''; break;
+case 'nextStep': va = a.nextStep || ''; vb = b.nextStep || ''; break;
+case 'churnDate': va = (a as any).churn_date || ''; vb = (b as any).churn_date || ''; break;
+case 'churnReason': va = (a as any).churnReasonName || ''; vb = (b as any).churnReasonName || ''; break;
 ```
-Apply similar error capture to ALL action types that do database inserts (send_notification, add_note, create_action_plan, etc.).
 
-### Fix C — Ensure webhook deployment is current
-The piperun-webhook code already has the `.catch()` fix from the previous iteration. Verify the edge function redeploys by checking logs after saving. No code change needed — just confirmation.
+### 3. Use `localeCompare` with `numeric: true` for officeCode
+For natural alphanumeric sort ("ELT-001" < "ELT-010"), the existing string sort uses `localeCompare` (line 421) which already works alphabetically. Add `{ numeric: true }` specifically for officeCode:
 
-### Fix D — Add company fallback in webhook (safety)
-In `piperun-webhook/index.ts` line 341, add fallback to `person.company`:
-```javascript
-let companyData = deal.company || deal.person?.company;
+Update the string comparison (line 421):
+```typescript
+if (typeof va === 'string') return dir * va.localeCompare(vb, undefined, 
+  sortColumn === 'officeCode' ? { numeric: true, sensitivity: 'base' } : undefined);
 ```
-This handles edge cases where the Piperun payload structure varies.
 
-## Files Modified
-- `supabase/functions/execute-automations/index.ts` — error handling in handleAction
-- `supabase/functions/piperun-webhook/index.ts` — company fallback
-- Database migration: add `meeting` to `activity_type` enum
+### 4. Include `office_code` in search filter (line ~376)
+Add `(o as any).office_code?.toLowerCase().includes(s)` to the search predicate.
 
-## Expected Result After Fix
-- All 17 `create_activity` actions succeed (activities created with correct types)
-- Webhook creates office with all mapped fields populated
-- Webhook triggers automations that execute all 19 actions
-- automation_logs show complete execution with all action IDs
+---
+
+## QA Validation Summary
+
+### TESTE 1 — Tabela de Clientes
+- **Sorting ID**: ❌ BUG → FIX above
+- **Sorting other columns**: ✅ name, csm, product, status, stage, health, ltv, lastMeeting, city, installments, renewal, sponsor all have cases
+- **Missing sort cases**: ❌ contact, activationDate, cycleStart, cycleEnd, nextStep, churnDate, churnReason → FIX above
+- **Null handling in sort**: ✅ Uses `|| ''` and `?? -1`/`?? 9999` fallbacks — nulls go to end for ASC
+- **Search by office_code**: ❌ Not included → FIX above
+- **Filters**: ✅ CSM, product, status, stage, health, tags, noMeeting30d, overdueInstallments, renewal30d all implemented
+- **Pagination**: ✅ pageSize=25, totalPages calculated, paginated slice correct
+- **KPIs/URL presets**: ✅ ativos, health_vermelho, churn, renovam_30d, etc. all mapped
+- **Saved views**: ✅ CRUD + default auto-load working
+
+### TESTE 2-10 — Covered in previous validation
+No new issues found in 360 header, automations, forms, playbooks, portal, import/export, dark mode, or permissions beyond what was already validated and fixed.
 
