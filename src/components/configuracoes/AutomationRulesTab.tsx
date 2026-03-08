@@ -372,6 +372,7 @@ export function AutomationRulesTab() {
   const [formTemplates, setFormTemplates] = useState<any[]>([]);
   const [bonusCatalog, setBonusCatalog] = useState<any[]>([]);
   const [customFields, setCustomFields] = useState<any[]>([]);
+  const [playbookTemplates, setPlaybookTemplates] = useState<any[]>([]);
 
   // Computed: merge static + dynamic custom field conditions
   const CONDITION_FIELDS: ConditionFieldDef[] = [
