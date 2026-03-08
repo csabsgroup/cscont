@@ -186,16 +186,8 @@ export default function Clientes() {
   const defaultViewLoadedRef = useRef(false);
   const [deleteViewId, setDeleteViewId] = useState<string | null>(null);
 
-  // Create office
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newCnpj, setNewCnpj] = useState('');
-  const [newCity, setNewCity] = useState('');
-  const [newState, setNewState] = useState('');
-  const [newEmail, setNewEmail] = useState('');
-  const [newPhone, setNewPhone] = useState('');
-  const [newProductId, setNewProductId] = useState('');
-  const [creating, setCreating] = useState(false);
+  // Create office wizard
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   // Bulk actions
   const [bulkCsmOpen, setBulkCsmOpen] = useState(false);

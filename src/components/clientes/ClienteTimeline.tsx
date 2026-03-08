@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { ActivityEditDrawer } from '@/components/atividades/ActivityEditDrawer';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -9,9 +9,10 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { CheckCircle2, Circle, Calendar, FileText, MoreVertical, RotateCcw, Trash2, Loader2, Plus, X, Filter, ArrowUpDown } from 'lucide-react';
+import { CheckCircle2, Circle, Calendar, FileText, MoreVertical, RotateCcw, Trash2, Loader2, Plus, X, Filter, ArrowUpDown, ChevronRight, ChevronDown, ClipboardList } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -24,7 +25,7 @@ interface Props { officeId: string; readOnly?: boolean; }
 const ACTIVITY_TYPE_LABELS: Record<string, string> = {
   task: 'Tarefa', follow_up: 'Follow-up', onboarding: 'Onboarding', renewal: 'Renovação',
   other: 'Outra', ligacao: 'Ligação', check_in: 'Check-in', email: 'E-mail',
-  whatsapp: 'WhatsApp', planejamento: 'Planejamento',
+  whatsapp: 'WhatsApp', planejamento: 'Planejamento', meeting: 'Reunião',
 };
 const PRIORITY_LABELS: Record<string, string> = { low: 'Baixa', medium: 'Média', high: 'Alta', urgent: 'Urgente' };
 
@@ -35,6 +36,8 @@ export function ClienteTimeline({ officeId, readOnly = false }: Props) {
   const [checklists, setChecklists] = useState<Record<string, any[]>>({});
   const [loading, setLoading] = useState(true);
   const [internalUsers, setInternalUsers] = useState<any[]>([]);
+  const [playbookInstances, setPlaybookInstances] = useState<any[]>([]);
+  const [expandedPlaybooks, setExpandedPlaybooks] = useState<Set<string>>(new Set());
 
   // Filters
   const [filterType, setFilterType] = useState<'all' | 'activity' | 'meeting'>('all');
@@ -63,15 +66,17 @@ export function ClienteTimeline({ officeId, readOnly = false }: Props) {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [actRes, meetRes, usersRes] = await Promise.all([
+    const [actRes, meetRes, usersRes, pbRes] = await Promise.all([
       supabase.from('activities').select('*').eq('office_id', officeId).order('created_at', { ascending: false }),
       supabase.from('meetings').select('*').eq('office_id', officeId).order('scheduled_at', { ascending: false }),
       supabase.from('profiles').select('id, full_name, avatar_url').order('full_name'),
+      supabase.from('playbook_instances').select('*, playbook_templates(name)').eq('office_id', officeId),
     ]);
     const acts = actRes.data || [];
     setActivities(acts);
     setMeetings(meetRes.data || []);
     setInternalUsers(usersRes.data || []);
+    setPlaybookInstances(pbRes.data || []);
 
     // Fetch checklists for all activities
     if (acts.length > 0) {
@@ -86,14 +91,91 @@ export function ClienteTimeline({ officeId, readOnly = false }: Props) {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Build unified timeline
-  const items = [
-    ...activities.map(a => ({ type: 'activity' as const, data: a, date: a.due_date || a.created_at, done: !!a.completed_at })),
-    ...meetings.map(m => ({ type: 'meeting' as const, data: m, date: m.scheduled_at, done: m.status === 'completed' })),
-  ]
-    .filter(i => filterType === 'all' || i.type === filterType)
-    .filter(i => filterStatus === 'all' || (filterStatus === 'done' ? i.done : !i.done))
-    .sort((a, b) => sortAsc ? new Date(a.date).getTime() - new Date(b.date).getTime() : new Date(b.date).getTime() - new Date(a.date).getTime());
+  // Group activities: playbook vs standalone
+  const { playbookGroups, standaloneActivities } = useMemo(() => {
+    const groups: Record<string, any[]> = {};
+    const standalone: any[] = [];
+
+    for (const act of activities) {
+      if (act.playbook_instance_id) {
+        if (!groups[act.playbook_instance_id]) groups[act.playbook_instance_id] = [];
+        groups[act.playbook_instance_id].push(act);
+      } else {
+        standalone.push(act);
+      }
+    }
+
+    // Sort activities within each playbook by playbook_order
+    for (const key in groups) {
+      groups[key].sort((a: any, b: any) => (a.playbook_order || 0) - (b.playbook_order || 0));
+    }
+
+    return { playbookGroups: groups, standaloneActivities: standalone };
+  }, [activities]);
+
+  // Build unified timeline items
+  const items = useMemo(() => {
+    const result: Array<{ type: 'activity' | 'meeting' | 'playbook'; data: any; date: string; done: boolean; instanceId?: string }> = [];
+
+    // Standalone activities
+    standaloneActivities.forEach(a => {
+      result.push({ type: 'activity', data: a, date: a.due_date || a.created_at, done: !!a.completed_at });
+    });
+
+    // Meetings
+    meetings.forEach(m => {
+      result.push({ type: 'meeting', data: m, date: m.scheduled_at, done: m.status === 'completed' });
+    });
+
+    // Playbook groups as single items
+    for (const instanceId in playbookGroups) {
+      const acts = playbookGroups[instanceId];
+      const instance = playbookInstances.find(pi => pi.id === instanceId);
+      const completedCount = acts.filter((a: any) => !!a.completed_at).length;
+      const allDone = completedCount === acts.length;
+
+      // Sort date = earliest pending due_date, or latest completed
+      const pendingActs = acts.filter((a: any) => !a.completed_at);
+      const sortDate = pendingActs.length > 0
+        ? pendingActs.reduce((min: string, a: any) => (!min || (a.due_date && a.due_date < min) ? a.due_date : min), '')
+        : acts[acts.length - 1]?.due_date || acts[acts.length - 1]?.created_at;
+
+      result.push({
+        type: 'playbook',
+        data: { instance, acts, completedCount, totalCount: acts.length },
+        date: sortDate || acts[0]?.created_at,
+        done: allDone,
+        instanceId,
+      });
+    }
+
+    // Apply filters
+    return result
+      .filter(i => {
+        if (filterType === 'meeting') return i.type === 'meeting';
+        if (filterType === 'activity') return i.type === 'activity' || i.type === 'playbook';
+        return true;
+      })
+      .filter(i => {
+        if (filterStatus === 'all') return true;
+        if (filterStatus === 'done') return i.done;
+        return !i.done;
+      })
+      .sort((a, b) => {
+        const da = new Date(a.date).getTime() || 0;
+        const db = new Date(b.date).getTime() || 0;
+        return sortAsc ? da - db : db - da;
+      });
+  }, [standaloneActivities, meetings, playbookGroups, playbookInstances, filterType, filterStatus, sortAsc]);
+
+  const togglePlaybook = (instanceId: string) => {
+    setExpandedPlaybooks(prev => {
+      const next = new Set(prev);
+      if (next.has(instanceId)) next.delete(instanceId);
+      else next.add(instanceId);
+      return next;
+    });
+  };
 
   const handleComplete = async (item: any) => {
     if (item.type === 'activity') {
@@ -213,10 +295,78 @@ export function ClienteTimeline({ officeId, readOnly = false }: Props) {
       {items.length === 0 && <div className="text-center py-12 text-sm text-muted-foreground">Nenhum item encontrado.</div>}
 
       {items.map(item => {
+        // Playbook group card
+        if (item.type === 'playbook') {
+          const { instance, acts, completedCount, totalCount } = item.data;
+          const instanceId = item.instanceId!;
+          const isExpanded = expandedPlaybooks.has(instanceId);
+          const templateName = instance?.playbook_templates?.name || 'Playbook';
+          const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+          const allDone = completedCount === totalCount;
+
+          return (
+            <Card key={`playbook-${instanceId}`} className="overflow-hidden">
+              {/* Playbook header */}
+              <button
+                className="w-full p-4 flex items-center gap-3 hover:bg-muted/30 transition-colors text-left"
+                onClick={() => togglePlaybook(instanceId)}
+              >
+                {isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" /> : <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
+                <ClipboardList className="h-5 w-5 text-primary flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium">{templateName}</span>
+                    <Badge variant={allDone ? 'default' : 'outline'} className="text-xs">
+                      {allDone ? '✅ Concluído' : '⏳ Em progresso'}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-3 mt-1.5">
+                    <Progress value={pct} className="h-2 flex-1 max-w-[200px]" />
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">{completedCount}/{totalCount} ({pct}%)</span>
+                  </div>
+                </div>
+              </button>
+
+              {/* Expanded activities */}
+              {isExpanded && (
+                <div className="border-t border-border">
+                  {acts.map((act: any, idx: number) => (
+                    <div
+                      key={act.id}
+                      className="flex items-center gap-3 px-4 py-2.5 pl-12 hover:bg-muted/20 cursor-pointer transition-colors border-b border-border/50 last:border-b-0"
+                      onClick={() => setEditActivityId(act.id)}
+                    >
+                      <div className="flex items-center gap-1 text-muted-foreground text-xs w-4">
+                        {idx < acts.length - 1 ? '├─' : '└─'}
+                      </div>
+                      {act.completed_at
+                        ? <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                        : <Circle className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
+                      <span className="text-xs text-muted-foreground w-5">{(act.playbook_order || idx + 1)}.</span>
+                      <span className={`text-sm flex-1 min-w-0 truncate ${act.completed_at ? 'line-through text-muted-foreground' : ''}`}>
+                        {act.title}
+                      </span>
+                      {act.due_date && (
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          {format(new Date(act.due_date), 'dd/MM', { locale: ptBR })}
+                        </span>
+                      )}
+                      <span className="text-xs text-muted-foreground truncate max-w-[100px]">
+                        {getUserName(act.user_id)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          );
+        }
+
+        // Regular activity or meeting card
         const d = item.data;
         const title = d.title;
         return (
-          <Card key={`${item.type}-${d.id}`} className="p-4 flex items-start gap-3 cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => item.type === 'activity' ? setEditActivityId(d.id) : setDetailItem(item)}>
+          <Card key={`${item.type}-${d.id}`} className="p-4 flex items-start gap-3 cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => item.type === 'activity' ? setEditActivityId(d.id) : setDetailItem(item as any)}>
             {item.done ? <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" /> : <Circle className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
@@ -243,7 +393,7 @@ export function ClienteTimeline({ officeId, readOnly = false }: Props) {
                   {item.done ? (
                     <DropdownMenuItem onClick={() => handleReopen(item.type, d.id)}><RotateCcw className="mr-2 h-4 w-4" />Reabrir</DropdownMenuItem>
                   ) : (
-                    <DropdownMenuItem onClick={() => handleComplete(item)}><CheckCircle2 className="mr-2 h-4 w-4" />Concluir</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleComplete(item as any)}><CheckCircle2 className="mr-2 h-4 w-4" />Concluir</DropdownMenuItem>
                   )}
                   <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(item.type, d.id)}><Trash2 className="mr-2 h-4 w-4" />Excluir</DropdownMenuItem>
                 </DropdownMenuContent>
