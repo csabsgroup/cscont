@@ -1001,6 +1001,15 @@ export default function Clientes() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Create Client Wizard */}
+      <CreateClientWizard
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        products={products}
+        csmList={csmList}
+        onCreated={fetchData}
+      />
     </div>
   );
 }
