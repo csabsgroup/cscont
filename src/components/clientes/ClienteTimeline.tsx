@@ -240,6 +240,7 @@ export function ClienteTimeline({ officeId, readOnly = false }: Props) {
   };
 
   const handleDelete = async (type: string, id: string) => {
+    if (!window.confirm(`Deseja realmente excluir ${type === 'activity' ? 'esta atividade' : 'esta reunião'}?`)) return;
     if (type === 'activity') await supabase.from('activities').delete().eq('id', id);
     else await supabase.from('meetings').delete().eq('id', id);
     toast.success('Removido!'); fetchData(); setDetailItem(null);
