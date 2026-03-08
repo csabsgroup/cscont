@@ -1183,11 +1183,12 @@ Deno.serve(async (req) => {
     if (action === "runPeriodicRules") {
       console.log('[PERIODIC] Starting periodic rules check');
 
+      const periodicTriggerTypes = ['client_contains', 'office.no_meeting', 'office.renewal_approaching', 'activity.overdue', 'payment.overdue'];
       const { data: periodicRules, error: rulesError } = await supabase
         .from('automation_rules_v2')
         .select('*')
         .eq('is_active', true)
-        .eq('trigger_type', 'client_contains');
+        .in('trigger_type', periodicTriggerTypes);
 
       if (rulesError) {
         console.error('[PERIODIC] Error fetching rules:', rulesError.message);
