@@ -787,33 +787,7 @@ export default function Clientes() {
           </Popover>
 
           {!isViewer && (
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-              <DialogTrigger asChild><Button><Plus className="mr-2 h-4 w-4" />Novo Escritório</Button></DialogTrigger>
-              <DialogContent>
-                <DialogHeader><DialogTitle>Novo Escritório</DialogTitle></DialogHeader>
-                <form onSubmit={handleCreate} className="space-y-4">
-                  <div className="space-y-2"><Label>Nome *</Label><Input value={newName} onChange={e => setNewName(e.target.value)} required /></div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2"><Label>CNPJ</Label><Input value={newCnpj} onChange={e => setNewCnpj(e.target.value)} /></div>
-                    <div className="space-y-2"><Label>Produto</Label>
-                      <Select value={newProductId} onValueChange={setNewProductId}>
-                        <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                        <SelectContent>{products.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2"><Label>Cidade</Label><Input value={newCity} onChange={e => setNewCity(e.target.value)} /></div>
-                    <div className="space-y-2"><Label>Estado</Label><Input value={newState} onChange={e => setNewState(e.target.value)} /></div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2"><Label>E-mail</Label><Input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} /></div>
-                    <div className="space-y-2"><Label>Telefone</Label><Input value={newPhone} onChange={e => setNewPhone(e.target.value)} /></div>
-                  </div>
-                  <Button type="submit" className="w-full" disabled={creating}>{creating ? 'Criando...' : 'Criar Escritório'}</Button>
-                </form>
-              </DialogContent>
-            </Dialog>
+            <Button onClick={() => setWizardOpen(true)}><Plus className="mr-2 h-4 w-4" />Novo Cliente</Button>
           )}
         </div>
       </div>
