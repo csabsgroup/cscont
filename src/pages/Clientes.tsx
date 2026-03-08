@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Building2, Plus, Search, Filter, X, Save, Eye, ChevronUp, ChevronDown, ChevronsUpDown, GripVertical, Trash2, Pencil, Check as CheckIcon } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 import { differenceInDays, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { UserAvatar } from '@/components/shared/UserAvatar';
+import { CreateClientWizard } from '@/components/clientes/CreateClientWizard';
 
 // ─── Types ───────────────────────────────────────────────────────
 interface Office {
@@ -186,16 +187,8 @@ export default function Clientes() {
   const defaultViewLoadedRef = useRef(false);
   const [deleteViewId, setDeleteViewId] = useState<string | null>(null);
 
-  // Create office
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newCnpj, setNewCnpj] = useState('');
-  const [newCity, setNewCity] = useState('');
-  const [newState, setNewState] = useState('');
-  const [newEmail, setNewEmail] = useState('');
-  const [newPhone, setNewPhone] = useState('');
-  const [newProductId, setNewProductId] = useState('');
-  const [creating, setCreating] = useState(false);
+  // Create office wizard
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   // Bulk actions
   const [bulkCsmOpen, setBulkCsmOpen] = useState(false);
@@ -580,59 +573,7 @@ export default function Clientes() {
     setVisibleColumns(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
   };
 
-  // ─── Create office ─────────────────────────────────────────
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setCreating(true);
-
-    // Auto-generate office_code from product prefix
-    let officeCode: string | null = null;
-    if (newProductId) {
-      const { data: prod } = await supabase.from('products').select('code_prefix').eq('id', newProductId).maybeSingle();
-      const prefix = prod?.code_prefix;
-      if (prefix) {
-        // Find max existing code for this prefix
-        const { data: existing } = await supabase.from('offices').select('office_code').ilike('office_code', `${prefix}-%`).order('office_code', { ascending: false }).limit(1);
-        let seq = 1;
-        if (existing && existing.length > 0 && existing[0].office_code) {
-          const parts = existing[0].office_code.split('-');
-          const lastNum = parseInt(parts[parts.length - 1], 10);
-          if (!isNaN(lastNum)) seq = lastNum + 1;
-        }
-        officeCode = `${prefix}-${String(seq).padStart(3, '0')}`;
-      }
-    }
-
-    const { data: newOffice, error: err } = await supabase.from('offices').insert({
-      name: newName, cnpj: newCnpj || null, city: newCity || null,
-      state: newState || null, email: newEmail || null, phone: newPhone || null,
-      active_product_id: newProductId || null, status: 'ativo',
-      office_code: officeCode,
-    }).select('id, active_product_id').single();
-    if (err) toast.error('Erro ao criar escritório: ' + err.message);
-    else {
-      toast.success(`Escritório criado!${officeCode ? ` Código: ${officeCode}` : ''}`);
-      // Trigger automations
-      if (newOffice?.id) {
-        try {
-          if (newOffice.active_product_id) {
-            await supabase.functions.invoke('execute-automations', {
-              body: { action: 'onNewOffice', office_id: newOffice.id, product_id: newOffice.active_product_id },
-            });
-          } else {
-            await supabase.functions.invoke('execute-automations', {
-              body: { action: 'triggerV2', trigger_type: 'office.registered', office_id: newOffice.id },
-            });
-          }
-        } catch (autoErr) {
-          console.error('Automation trigger failed:', autoErr);
-        }
-      }
-      setDialogOpen(false); setNewName(''); setNewCnpj(''); setNewCity(''); setNewState(''); setNewEmail(''); setNewPhone(''); setNewProductId('');
-      fetchData();
-    }
-    setCreating(false);
-  };
+  // ─── Create office (via wizard) ─────────────────────────────
 
   // ─── Bulk actions ──────────────────────────────────────────
   const handleBulkCsm = async () => {
@@ -847,33 +788,7 @@ export default function Clientes() {
           </Popover>
 
           {!isViewer && (
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-              <DialogTrigger asChild><Button><Plus className="mr-2 h-4 w-4" />Novo Escritório</Button></DialogTrigger>
-              <DialogContent>
-                <DialogHeader><DialogTitle>Novo Escritório</DialogTitle></DialogHeader>
-                <form onSubmit={handleCreate} className="space-y-4">
-                  <div className="space-y-2"><Label>Nome *</Label><Input value={newName} onChange={e => setNewName(e.target.value)} required /></div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2"><Label>CNPJ</Label><Input value={newCnpj} onChange={e => setNewCnpj(e.target.value)} /></div>
-                    <div className="space-y-2"><Label>Produto</Label>
-                      <Select value={newProductId} onValueChange={setNewProductId}>
-                        <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                        <SelectContent>{products.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2"><Label>Cidade</Label><Input value={newCity} onChange={e => setNewCity(e.target.value)} /></div>
-                    <div className="space-y-2"><Label>Estado</Label><Input value={newState} onChange={e => setNewState(e.target.value)} /></div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2"><Label>E-mail</Label><Input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} /></div>
-                    <div className="space-y-2"><Label>Telefone</Label><Input value={newPhone} onChange={e => setNewPhone(e.target.value)} /></div>
-                  </div>
-                  <Button type="submit" className="w-full" disabled={creating}>{creating ? 'Criando...' : 'Criar Escritório'}</Button>
-                </form>
-              </DialogContent>
-            </Dialog>
+            <Button onClick={() => setWizardOpen(true)}><Plus className="mr-2 h-4 w-4" />Novo Cliente</Button>
           )}
         </div>
       </div>
@@ -942,7 +857,7 @@ export default function Clientes() {
             <Building2 className="mb-3 h-10 w-10 text-muted-foreground/40" />
             <p className="text-sm text-muted-foreground">{debouncedSearch || hasActiveFilters ? 'Nenhum escritório encontrado.' : 'Nenhum escritório cadastrado.'}</p>
             {!debouncedSearch && !hasActiveFilters && !isViewer && (
-              <Button variant="outline" className="mt-4" onClick={() => setDialogOpen(true)}><Plus className="mr-2 h-4 w-4" />Cadastrar</Button>
+              <Button variant="outline" className="mt-4" onClick={() => setWizardOpen(true)}><Plus className="mr-2 h-4 w-4" />Cadastrar</Button>
             )}
           </CardContent>
         ) : (
@@ -1086,6 +1001,15 @@ export default function Clientes() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Create Client Wizard */}
+      <CreateClientWizard
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        products={products}
+        csmList={csmList}
+        onCreated={fetchData}
+      />
     </div>
   );
 }
