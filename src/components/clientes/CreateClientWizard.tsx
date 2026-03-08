@@ -471,7 +471,7 @@ export function CreateClientWizard({ open, onOpenChange, products, csmList, onCr
               <Button variant="ghost" onClick={() => { setContacts([emptyContact()]); setStep(3); }}>Pular</Button>
             )}
             {step === 3 && (
-              <Button variant="ghost" onClick={() => { setContrato({ value: '', monthly_value: '', installments: '12', start_date: '', end_date: '', status: 'ativo', asaas_link: '', notes: '' }); handleCreate(); }}>Pular</Button>
+              <Button variant="ghost" onClick={() => handleCreate(true)}>Pular</Button>
             )}
             {step < 3 && (
               <Button onClick={() => {

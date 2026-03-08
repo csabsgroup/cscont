@@ -130,6 +130,7 @@ export function ClienteTimeline({ officeId, readOnly = false }: Props) {
     // Playbook groups as single items
     for (const instanceId in playbookGroups) {
       const acts = playbookGroups[instanceId];
+      if (acts.length === 0) continue; // BUG 9 fix: skip empty playbook groups
       const instance = playbookInstances.find(pi => pi.id === instanceId);
       const completedCount = acts.filter((a: any) => !!a.completed_at).length;
       const allDone = completedCount === acts.length;
