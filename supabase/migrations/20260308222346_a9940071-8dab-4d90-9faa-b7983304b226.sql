@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS offices_office_code_unique ON public.offices (office_code) WHERE office_code IS NOT NULL;
