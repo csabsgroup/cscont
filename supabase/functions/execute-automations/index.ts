@@ -19,7 +19,10 @@ function resolveVariables(template: string, office: any, csm: any, extra?: Recor
     .replace(/\{\{etapa\}\}/g, extra?.stage_name || '--')
     .replace(/\{\{parcelas_vencidas\}\}/g, extra?.installments_overdue?.toString() || '0')
     .replace(/\{\{dias_renovacao\}\}/g, extra?.days_to_renewal?.toString() || '--')
-    .replace(/\{\{data_hoje\}\}/g, new Date().toLocaleDateString('pt-BR'));
+    .replace(/\{\{data_hoje\}\}/g, new Date().toLocaleDateString('pt-BR'))
+    .replace(/\{\{mrr\}\}/g, office?.mrr?.toString() || office?.faturamento_mensal?.toString() || '0')
+    .replace(/\{\{nps\}\}/g, office?.last_nps?.toString() || '--')
+    .replace(/\{\{ltv\}\}/g, extra?.ltv?.toString() || '0');
 }
 
 // ─── Action Handlers ─────────────────────────────────────────
