@@ -97,57 +97,59 @@ export function CreateClientWizard({ open, onOpenChange, products, csmList, onCr
     setContacts(p => p.map((c, j) => j === i ? { ...c, [field]: value } : c));
   };
 
-  const handleCreate = async () => {
+  const handleCreate = async (skipContract = false) => {
     if (!empresa.name.trim()) { toast.error('Nome do escritório é obrigatório.'); return; }
     if (!empresa.product_id) { toast.error('Produto é obrigatório.'); return; }
 
     setSaving(true);
     try {
-      // 1. Generate office code
-      const officeCode = await generateNextOfficeCode(empresa.product_id);
+      // BUG 3 fix: Retry loop with re-query on race condition (up to 3 attempts)
+      let office: { id: string; active_product_id: string | null } | null = null;
+      let finalCode: string | null = null;
 
-      // 2. Insert office
-      const { data: office, error: offErr } = await supabase.from('offices').insert({
-        name: empresa.name,
-        cnpj: empresa.cnpj || null,
-        email: empresa.email || null,
-        whatsapp: empresa.whatsapp || null,
-        phone: empresa.phone || null,
-        address: empresa.address || null,
-        city: empresa.city || null,
-        state: empresa.state || null,
-        cep: empresa.cep || null,
-        segment: empresa.segment || null,
-        active_product_id: empresa.product_id,
-        csm_id: empresa.csm_id || null,
-        status: empresa.status as any,
-        notes: empresa.notes || null,
-        office_code: officeCode,
-      }).select('id, active_product_id').single();
-
-      if (offErr) {
-        // Retry with incremented code on unique violation
-        if (offErr.code === '23505' && officeCode) {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const officeCode = await generateNextOfficeCode(empresa.product_id);
+        // On retry, increment by attempt to avoid same collision
+        let codeToUse = officeCode;
+        if (attempt > 0 && officeCode) {
           const match = officeCode.match(/^(.+) - (\d+)$/);
           if (match) {
-            const retryCode = `${match[1]} - ${String(parseInt(match[2], 10) + 1).padStart(3, '0')}`;
-            const { data: office2, error: offErr2 } = await supabase.from('offices').insert({
-              name: empresa.name, cnpj: empresa.cnpj || null, email: empresa.email || null,
-              whatsapp: empresa.whatsapp || null, phone: empresa.phone || null,
-              address: empresa.address || null, city: empresa.city || null, state: empresa.state || null,
-              cep: empresa.cep || null, segment: empresa.segment || null,
-              active_product_id: empresa.product_id, csm_id: empresa.csm_id || null,
-              status: empresa.status as any, notes: empresa.notes || null, office_code: retryCode,
-            }).select('id, active_product_id').single();
-            if (offErr2) throw offErr2;
-            await finishCreation(office2!, retryCode);
-            return;
+            codeToUse = `${match[1]} - ${String(parseInt(match[2], 10) + attempt).padStart(3, '0')}`;
           }
         }
-        throw offErr;
+
+        const { data, error } = await supabase.from('offices').insert({
+          name: empresa.name,
+          cnpj: empresa.cnpj || null,
+          email: empresa.email || null,
+          whatsapp: empresa.whatsapp || null,
+          phone: empresa.phone || null,
+          address: empresa.address || null,
+          city: empresa.city || null,
+          state: empresa.state || null,
+          cep: empresa.cep || null,
+          segment: empresa.segment || null,
+          active_product_id: empresa.product_id,
+          csm_id: empresa.csm_id || null,
+          status: empresa.status as any,
+          notes: empresa.notes || null,
+          office_code: codeToUse,
+        }).select('id, active_product_id').single();
+
+        if (!error) {
+          office = data;
+          finalCode = codeToUse;
+          break;
+        }
+
+        // Only retry on unique violation
+        if (error.code !== '23505' || attempt === 2) throw error;
+        console.warn(`Office code collision (attempt ${attempt + 1}), retrying...`);
       }
 
-      await finishCreation(office!, officeCode);
+      if (!office) throw new Error('Falha ao criar escritório após 3 tentativas.');
+
+      await finishCreation(office, finalCode, skipContract);
     } catch (e: any) {
       toast.error('Erro ao criar cliente: ' + (e.message || e));
     } finally {
@@ -155,7 +157,7 @@ export function CreateClientWizard({ open, onOpenChange, products, csmList, onCr
     }
   };
 
-  const finishCreation = async (office: { id: string; active_product_id: string | null }, officeCode: string | null) => {
+  const finishCreation = async (office: { id: string; active_product_id: string | null }, officeCode: string | null, skipContract = false) => {
     let contactName = '';
     let contratoValue = '';
 
@@ -168,7 +170,7 @@ export function CreateClientWizard({ open, onOpenChange, products, csmList, onCr
           office_id: office.id,
           name: c.name,
           email: c.email || null,
-          phone: c.phone || null,
+          phone: null,
           whatsapp: c.phone || null,
           cpf: c.cpf || null,
           role_title: c.role_title || null,
@@ -182,36 +184,38 @@ export function CreateClientWizard({ open, onOpenChange, products, csmList, onCr
       contactName = validContacts[0].name;
     }
 
-    // 4. Create contract
-    const totalValue = parseFloat(contrato.value) || 0;
-    const monthlyValue = parseFloat(contrato.monthly_value) || 0;
-    if (totalValue > 0 || monthlyValue > 0) {
-      const endDate = contrato.end_date || (contrato.start_date ? format(addMonths(new Date(contrato.start_date), 12), 'yyyy-MM-dd') : null);
+    // 4. Create contract (skip if explicitly told to)
+    if (!skipContract) {
+      const totalValue = parseFloat(contrato.value) || 0;
+      const monthlyValue = parseFloat(contrato.monthly_value) || 0;
+      if (totalValue > 0 || monthlyValue > 0) {
+        const endDate = contrato.end_date || (contrato.start_date ? format(addMonths(new Date(contrato.start_date), 12), 'yyyy-MM-dd') : null);
 
-      const { error: ctErr } = await supabase.from('contracts').insert({
-        office_id: office.id,
-        product_id: office.active_product_id!,
-        value: totalValue || null,
-        monthly_value: monthlyValue || null,
-        installments_total: parseInt(contrato.installments) || 12,
-        start_date: contrato.start_date || null,
-        end_date: endDate,
-        status: 'ativo' as any,
-        asaas_link: contrato.asaas_link || null,
-        negotiation_notes: contrato.notes || null,
-      });
-      if (ctErr) console.error('Contract insert error:', ctErr.message);
+        const { error: ctErr } = await supabase.from('contracts').insert({
+          office_id: office.id,
+          product_id: office.active_product_id!,
+          value: totalValue || null,
+          monthly_value: monthlyValue || null,
+          installments_total: parseInt(contrato.installments) || 12,
+          start_date: contrato.start_date || null,
+          end_date: endDate,
+          status: 'ativo' as any,
+          asaas_link: contrato.asaas_link || null,
+          negotiation_notes: contrato.notes || null,
+        });
+        if (ctErr) console.error('Contract insert error:', ctErr.message);
 
-      // Update office MRR and cycle dates
-      const mrr = monthlyValue || (totalValue / 12);
-      await supabase.from('offices').update({
-        mrr,
-        cycle_start_date: contrato.start_date || null,
-        cycle_end_date: endDate,
-        activation_date: contrato.start_date || null,
-      }).eq('id', office.id);
+        // Update office MRR and cycle dates
+        const mrr = monthlyValue || (totalValue / 12);
+        await supabase.from('offices').update({
+          mrr,
+          cycle_start_date: contrato.start_date || null,
+          cycle_end_date: endDate,
+          activation_date: contrato.start_date || null,
+        }).eq('id', office.id);
 
-      contratoValue = totalValue > 0 ? `R$ ${totalValue.toLocaleString('pt-BR')}` : `R$ ${(monthlyValue * 12).toLocaleString('pt-BR')}`;
+        contratoValue = totalValue > 0 ? `R$ ${totalValue.toLocaleString('pt-BR')}` : `R$ ${(monthlyValue * 12).toLocaleString('pt-BR')}`;
+      }
     }
 
     // 5. Trigger automations
@@ -368,7 +372,7 @@ export function CreateClientWizard({ open, onOpenChange, products, csmList, onCr
                   </Button>
                 )}
                 <div className="space-y-1">
-                  <Label className="text-xs">Nome do sócio/contato {i === 0 ? '*' : ''}</Label>
+                  <Label className="text-xs">Nome do sócio/contato</Label>
                   <Input value={c.name} onChange={e => updateContact(i, 'name', e.target.value)} />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -467,7 +471,7 @@ export function CreateClientWizard({ open, onOpenChange, products, csmList, onCr
               <Button variant="ghost" onClick={() => { setContacts([emptyContact()]); setStep(3); }}>Pular</Button>
             )}
             {step === 3 && (
-              <Button variant="ghost" onClick={() => { setContrato({ value: '', monthly_value: '', installments: '12', start_date: '', end_date: '', status: 'ativo', asaas_link: '', notes: '' }); handleCreate(); }}>Pular</Button>
+              <Button variant="ghost" onClick={() => handleCreate(true)}>Pular</Button>
             )}
             {step < 3 && (
               <Button onClick={() => {
@@ -479,7 +483,7 @@ export function CreateClientWizard({ open, onOpenChange, products, csmList, onCr
               }}>Próximo →</Button>
             )}
             {step === 3 && (
-              <Button onClick={handleCreate} disabled={saving}>
+              <Button onClick={() => handleCreate()} disabled={saving}>
                 {saving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Criando...</> : 'Criar Cliente'}
               </Button>
             )}

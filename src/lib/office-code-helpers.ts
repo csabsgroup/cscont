@@ -28,22 +28,3 @@ export async function generateNextOfficeCode(productId: string): Promise<string 
   const paddedNumber = String(nextNumber).padStart(3, '0');
   return `${prefix} - ${paddedNumber}`;
 }
-
-export async function generateNextOfficeCodeSafe(productId: string, maxRetries = 3): Promise<string | null> {
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    const code = await generateNextOfficeCode(productId);
-    if (!code) return null;
-
-    // On retry, increment the number
-    if (attempt > 0) {
-      const match = code.match(/^(.+) - (\d+)$/);
-      if (match) {
-        const num = parseInt(match[2], 10) + attempt;
-        return `${match[1]} - ${String(num).padStart(3, '0')}`;
-      }
-    }
-
-    return code;
-  }
-  return null;
-}

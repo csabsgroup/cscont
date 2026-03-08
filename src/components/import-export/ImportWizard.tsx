@@ -313,15 +313,23 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
         toast.error(`Nenhum registro importado. ${errorCount} erros encontrados.`);
       }
 
-      // Trigger automations if enabled (only for offices)
+      // BUG 14 fix: Trigger automations with Promise.allSettled for proper reporting
       if (enableAutomations && template.key === 'offices' && insertedIds.length > 0) {
         toast.info('Disparando automações...');
-        for (const officeId of insertedIds) {
-          supabase.functions.invoke('execute-automations', {
-            body: { action: 'triggerV2', trigger_type: 'office.created', office_id: officeId },
-          }).catch(e => console.error('Automation failed for', officeId, e));
+        const automationResults = await Promise.allSettled(
+          insertedIds.map(officeId =>
+            supabase.functions.invoke('execute-automations', {
+              body: { action: 'triggerV2', trigger_type: 'office.created', office_id: officeId },
+            })
+          )
+        );
+        const fulfilled = automationResults.filter(r => r.status === 'fulfilled').length;
+        const rejected = automationResults.filter(r => r.status === 'rejected').length;
+        if (rejected > 0) {
+          toast.warning(`Automações: ${fulfilled} disparadas, ${rejected} falharam.`);
+        } else {
+          toast.success(`Automações disparadas para ${fulfilled} registros.`);
         }
-        toast.success(`Automações disparadas para ${insertedIds.length} registros.`);
       }
 
       setResult({ success: successCount + warningCount, errors: errorCount, skipped: 0, batchId, rowResults });

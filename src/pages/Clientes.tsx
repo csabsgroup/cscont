@@ -429,7 +429,7 @@ export default function Clientes() {
         case 'churnReason': va = a.churnReasonName || ''; vb = b.churnReasonName || ''; break;
         default: va = ''; vb = ''; break;
       }
-      if (typeof va === 'string') return dir * va.localeCompare(vb, undefined, sortColumn === 'officeCode' ? { numeric: true, sensitivity: 'base' } : undefined);
+      if (typeof va === 'string') return dir * va.localeCompare(vb);
       return dir * ((va as number) - (vb as number));
     });
     return arr;

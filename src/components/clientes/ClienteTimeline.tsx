@@ -130,6 +130,7 @@ export function ClienteTimeline({ officeId, readOnly = false }: Props) {
     // Playbook groups as single items
     for (const instanceId in playbookGroups) {
       const acts = playbookGroups[instanceId];
+      if (acts.length === 0) continue; // BUG 9 fix: skip empty playbook groups
       const instance = playbookInstances.find(pi => pi.id === instanceId);
       const completedCount = acts.filter((a: any) => !!a.completed_at).length;
       const allDone = completedCount === acts.length;
@@ -190,7 +191,45 @@ export function ClienteTimeline({ officeId, readOnly = false }: Props) {
   const confirmComplete = async () => {
     if (!completeObs.trim()) { toast.error('Observações são obrigatórias para concluir.'); return; }
     setSaving(true);
-    await supabase.from('activities').update({ completed_at: new Date().toISOString(), observations: completeObs }).eq('id', completeItem.id);
+    const completedAt = new Date().toISOString();
+    await supabase.from('activities').update({ completed_at: completedAt, observations: completeObs }).eq('id', completeItem.id);
+
+    // BUG 1 fix: Trigger automation for activity completion (mirrors ActivityEditDrawer logic)
+    if (completeItem.office_id) {
+      try {
+        const wasLate = completeItem.due_date && new Date(completeItem.due_date) < new Date(completedAt);
+        const daysLate = wasLate ? Math.ceil((new Date(completedAt).getTime() - new Date(completeItem.due_date).getTime()) / 86400000) : 0;
+        await supabase.functions.invoke('execute-automations', {
+          body: {
+            action: 'triggerV2',
+            trigger_type: 'activity.completed',
+            office_id: completeItem.office_id,
+            context: {
+              activity_id: completeItem.id,
+              activity_name: completeItem.title,
+              activity_type: completeItem.type,
+              was_late: !!wasLate,
+              days_late: daysLate,
+              completed_by: completeItem.user_id,
+              suffix: `activity_${completeItem.id}`,
+            },
+          },
+        });
+      } catch (e) {
+        console.error('Failed to trigger activity.completed automation:', e);
+      }
+    }
+
+    // Check playbook completion if activity belongs to a playbook
+    if (completeItem.playbook_instance_id) {
+      try {
+        const { checkPlaybookCompletion } = await import('@/lib/playbook-helpers');
+        await checkPlaybookCompletion(completeItem.playbook_instance_id, completeItem.user_id);
+      } catch (e) {
+        console.error('Failed to check playbook completion:', e);
+      }
+    }
+
     toast.success('Atividade concluída!');
     setSaving(false); setCompleteItem(null); fetchData();
   };
@@ -202,6 +241,7 @@ export function ClienteTimeline({ officeId, readOnly = false }: Props) {
   };
 
   const handleDelete = async (type: string, id: string) => {
+    if (!window.confirm(`Deseja realmente excluir ${type === 'activity' ? 'esta atividade' : 'esta reunião'}?`)) return;
     if (type === 'activity') await supabase.from('activities').delete().eq('id', id);
     else await supabase.from('meetings').delete().eq('id', id);
     toast.success('Removido!'); fetchData(); setDetailItem(null);
@@ -308,8 +348,9 @@ export function ClienteTimeline({ officeId, readOnly = false }: Props) {
             <Card key={`playbook-${instanceId}`} className="overflow-hidden">
               {/* Playbook header */}
               <button
-                className="w-full p-4 flex items-center gap-3 hover:bg-muted/30 transition-colors text-left"
+                className="w-full p-4 flex items-center gap-3 hover:bg-muted/30 transition-colors text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 onClick={() => togglePlaybook(instanceId)}
+                aria-expanded={isExpanded}
               >
                 {isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" /> : <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
                 <ClipboardList className="h-5 w-5 text-primary flex-shrink-0" />
