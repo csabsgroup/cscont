@@ -313,6 +313,17 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
         toast.error(`Nenhum registro importado. ${errorCount} erros encontrados.`);
       }
 
+      // Trigger automations if enabled (only for offices)
+      if (enableAutomations && template.key === 'offices' && insertedIds.length > 0) {
+        toast.info('Disparando automações...');
+        for (const officeId of insertedIds) {
+          supabase.functions.invoke('execute-automations', {
+            body: { action: 'triggerV2', trigger_type: 'office.created', office_id: officeId },
+          }).catch(e => console.error('Automation failed for', officeId, e));
+        }
+        toast.success(`Automações disparadas para ${insertedIds.length} registros.`);
+      }
+
       setResult({ success: successCount + warningCount, errors: errorCount, skipped: 0, batchId, rowResults });
       setStep('execute');
     } catch (err: any) {
