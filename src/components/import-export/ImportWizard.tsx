@@ -126,7 +126,7 @@ export function ImportWizard({ open, onOpenChange, template }: ImportWizardProps
   const reset = () => {
     setStep('upload'); setFileHeaders([]); setRows([]); setMapping({});
     setAutoMapping({}); setErrors([]); setValidCount(0); setImporting(false); setProgress(0); setResult(null);
-    setFilteredEmptyCount(0);
+    setFilteredEmptyCount(0); setEnableAutomations(false);
   };
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
