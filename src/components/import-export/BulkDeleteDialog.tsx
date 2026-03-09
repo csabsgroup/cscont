@@ -83,7 +83,7 @@ export function BulkDeleteDialog({ open, onOpenChange, entity }: Props) {
 
   const handleFilterChange = (key: string, value: string) => {
     const newFilters = { ...filters, [key]: value };
-    if (!value) delete newFilters[key];
+    if (!value || value === '__all__') delete newFilters[key];
     setFilters(newFilters);
     fetchCount(newFilters);
   };
