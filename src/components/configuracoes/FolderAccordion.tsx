@@ -137,7 +137,7 @@ export function FolderAccordion<T extends { id: string; folder_id?: string | nul
                       onKeyDown={e => { if (e.key === 'Enter') handleRenameFolder(folder!.id); if (e.key === 'Escape') setEditingFolderId(null); }}
                     />
                     <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleRenameFolder(folder!.id)} disabled={saving}>
-                      <Check className="h-3 w-3 text-green-600" />
+                      <Check className="h-3 w-3 text-primary" />
                     </Button>
                     <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingFolderId(null)}>
                       <X className="h-3 w-3" />
