@@ -59,6 +59,7 @@ interface ClienteHeaderProps {
   onLogoUpdated?: () => void;
   onPreviewOpen?: () => void;
   onWhatsApp?: () => void;
+  onManageAccess?: () => void;
   contracts?: any[];
 }
 
