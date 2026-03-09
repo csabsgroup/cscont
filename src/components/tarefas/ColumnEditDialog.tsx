@@ -163,13 +163,13 @@ export function ColumnEditDialog({ open, onOpenChange, column, onSave }: ColumnE
           {/* Icon */}
           <div className="space-y-1.5">
             <Label>Ícone (opcional)</Label>
-            <Select value={icon} onValueChange={setIcon}>
+            <Select value={icon || '_none'} onValueChange={v => setIcon(v === '_none' ? '' : v)}>
               <SelectTrigger className="h-8 text-xs">
                 <SelectValue placeholder="Nenhum ícone" />
               </SelectTrigger>
               <SelectContent>
                 {ICON_OPTIONS.map(opt => (
-                  <SelectItem key={opt.value} value={opt.value || '_none'}>{opt.label}</SelectItem>
+                  <SelectItem key={opt.value || '_none'} value={opt.value || '_none'}>{opt.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
