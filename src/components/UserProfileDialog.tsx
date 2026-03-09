@@ -126,6 +126,18 @@ export function UserProfileDialog({ open, onOpenChange }: Props) {
             <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
           </div>
 
+          {/* WhatsApp */}
+          <div className="space-y-2">
+            <Label>WhatsApp</Label>
+            <Input
+              value={whatsapp}
+              onChange={(e) => setWhatsapp(e.target.value.replace(/\D/g, ''))}
+              placeholder="5511999999999"
+              maxLength={15}
+            />
+            <p className="text-xs text-muted-foreground">Número completo com DDD (ex: 11999999999). O sistema adiciona o 55.</p>
+          </div>
+
           {/* Email (read-only) */}
           <div className="space-y-2">
             <Label>E-mail</Label>

@@ -187,10 +187,14 @@ Deno.serve(async (req) => {
 
     // ─── UPDATE PROFILE ─────────────────────────────────────
     if (action === "update_profile") {
-      const { full_name, role, product_id } = body;
+      const { full_name, role, product_id, whatsapp } = body;
 
-      if (full_name !== undefined) {
-        await adminClient.from("profiles").update({ full_name }).eq("id", user_id);
+      const profileUpdate: Record<string, any> = {};
+      if (full_name !== undefined) profileUpdate.full_name = full_name;
+      if (whatsapp !== undefined) profileUpdate.whatsapp = whatsapp || null;
+
+      if (Object.keys(profileUpdate).length > 0) {
+        await adminClient.from("profiles").update(profileUpdate).eq("id", user_id);
       }
 
       if (role) {

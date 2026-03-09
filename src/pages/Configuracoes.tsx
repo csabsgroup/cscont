@@ -24,6 +24,7 @@ import { FirefliesConfig } from '@/components/configuracoes/integrations/Firefli
 import { WhatsAppConfig } from '@/components/configuracoes/integrations/WhatsAppConfig';
 import { useIntegrationSettings } from '@/hooks/useIntegrationSettings';
 import { PlaybooksTab } from '@/components/configuracoes/PlaybooksTab';
+import { HierarchyTab } from '@/components/configuracoes/HierarchyTab';
 
 // ─── Inline sub-components (Products, Stages, Users) ─────────
 import { useEffect, useCallback } from 'react';
