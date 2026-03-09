@@ -5,9 +5,9 @@ import { Loader2, TrendingUp, DollarSign, BarChart3, Heart, Users, Briefcase } f
 import { HealthBadge } from './HealthBadge';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-interface Props { officeId: string; officeOverdue?: number; }
+interface Props { officeId: string; officeOverdue?: number; officeOverdue?: number; }
 
-export function ClienteMetricas({ officeId }: Props) {
+export function Cl, officeOverdueienteMetricas({ officeId }: Props) {
   const [contracts, setContracts] = useState<any[]>([]);
   const [health, setHealth] = useState<any>(null);
   const [loading, setLoading] = useState(true);
