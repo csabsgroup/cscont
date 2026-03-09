@@ -324,6 +324,7 @@ export type Database = {
           created_at: string
           created_by: string
           description: string | null
+          folder_id: string | null
           id: string
           is_active: boolean
           name: string
@@ -341,6 +342,7 @@ export type Database = {
           created_at?: string
           created_by: string
           description?: string | null
+          folder_id?: string | null
           id?: string
           is_active?: boolean
           name: string
@@ -358,6 +360,7 @@ export type Database = {
           created_at?: string
           created_by?: string
           description?: string | null
+          folder_id?: string | null
           id?: string
           is_active?: boolean
           name?: string
@@ -368,7 +371,15 @@ export type Database = {
           trigger_type?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "automation_rules_v2_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "config_folders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       bonus_catalog: {
         Row: {
@@ -557,6 +568,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      config_folders: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          name: string
+          scope: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          name: string
+          scope: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          name?: string
+          scope?: string
+          sort_order?: number
+        }
+        Relationships: []
       }
       contacts: {
         Row: {
@@ -2106,6 +2144,7 @@ export type Database = {
           created_at: string | null
           created_by: string | null
           description: string | null
+          folder_id: string | null
           id: string
           is_active: boolean | null
           name: string
@@ -2119,6 +2158,7 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           description?: string | null
+          folder_id?: string | null
           id?: string
           is_active?: boolean | null
           name: string
@@ -2132,13 +2172,22 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           description?: string | null
+          folder_id?: string | null
           id?: string
           is_active?: boolean | null
           name?: string
           product_id?: string | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "playbook_templates_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "config_folders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       portal_settings: {
         Row: {
