@@ -262,7 +262,7 @@ export default function Eventos() {
                     event={ev}
                     confirmedCount={participantCounts[ev.id]?.confirmed || 0}
                     totalCount={participantCounts[ev.id]?.total || 0}
-                    onClick={() => setDetailEvent(ev)}
+                    onClick={() => navigate(`/eventos/${ev.id}`)}
                   />
                 ))}
               </div>
@@ -286,7 +286,7 @@ export default function Eventos() {
                       event={ev}
                       confirmedCount={participantCounts[ev.id]?.confirmed || 0}
                       totalCount={participantCounts[ev.id]?.total || 0}
-                      onClick={() => setDetailEvent(ev)}
+                      onClick={() => navigate(`/eventos/${ev.id}`)}
                       isPast
                     />
                   ))}
@@ -296,16 +296,6 @@ export default function Eventos() {
           )}
         </div>
       )}
-
-      {/* Detail drawer */}
-      <EventDetailDrawer
-        event={detailEvent}
-        open={!!detailEvent}
-        onOpenChange={(open) => !open && setDetailEvent(null)}
-        products={products}
-        onSaved={() => { fetchEvents(); setDetailEvent(null); }}
-        readOnly={isViewer}
-      />
     </div>
   );
 }
