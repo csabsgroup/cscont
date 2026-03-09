@@ -15,7 +15,7 @@ const CONFIRMATION_OPTIONS = [
 ];
 
 const ATTENDANCE_OPTIONS = [
-  { value: '', label: '—' },
+  { value: 'pendente', label: '—' },
   { value: 'compareceu', label: 'Compareceu', color: 'bg-emerald-500/10 text-emerald-600' },
   { value: 'nao_compareceu', label: 'Não Compareceu', color: 'bg-destructive/10 text-destructive' },
 ];
