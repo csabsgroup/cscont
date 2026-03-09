@@ -304,6 +304,28 @@ export function ClienteOKR({ officeId }: Props) {
           </form>
         </DialogContent>
       </Dialog>
+      {/* Delete confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={open => { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget?.type === 'obj'
+                ? `Tem certeza que deseja excluir o objetivo "${deleteTarget.label}" e todas as suas KRs? Esta ação não pode ser desfeita.`
+                : `Tem certeza que deseja excluir a KR "${deleteTarget?.label}"? Esta ação não pode ser desfeita.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteTarget?.type === 'obj' ? removeObj(deleteTarget.id) : removeKr(deleteTarget!.id)}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
