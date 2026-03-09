@@ -242,6 +242,7 @@ function UsersTab() {
   const [editName, setEditName] = useState('');
   const [editRole, setEditRole] = useState('');
   const [editProductId, setEditProductId] = useState('');
+  const [editWhatsapp, setEditWhatsapp] = useState('');
   const [editPassword, setEditPassword] = useState('');
   const [editPasswordConfirm, setEditPasswordConfirm] = useState('');
   const [saving, setSaving] = useState(false);
