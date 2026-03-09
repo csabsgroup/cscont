@@ -304,8 +304,9 @@ export default function Dashboard() {
         </Card>
 
         {/* KPIs Grid */}
-        <div className="lg:col-span-2 grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="lg:col-span-2 grid grid-cols-2 md:grid-cols-3 gap-3">
           {[
+            { label: 'Faturamento Total', value: `R$ ${faturamentoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`, icon: DollarSign, tip: 'Soma do valor total dos contratos ativos', filter: null },
             { label: 'MRR', value: `R$ ${mrr.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`, icon: DollarSign, tip: 'Receita mensal recorrente total', filter: null },
             { label: 'Variação MRR', value: `${mrrDeltaFormatted}${mrrDeltaPercentStr}`, icon: mrrDelta >= 0 ? ArrowUpRight : ArrowDownRight, tip: 'Variação do MRR total vs mês anterior', color: mrrDelta > 0 ? 'text-health-green' : mrrDelta < 0 ? 'text-health-red' : 'text-muted-foreground', filter: null },
             { label: 'MRR em Risco', value: `R$ ${mrrAtRisk.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`, icon: ShieldAlert, tip: 'MRR dos clientes com health vermelho', color: 'text-health-red', filter: 'health_vermelho' },
