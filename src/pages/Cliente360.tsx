@@ -386,6 +386,9 @@ export default function Cliente360() {
         <Card className="p-6"><ClienteContratos officeId={office.id} contracts={contracts} onRefresh={fetchAll} /></Card>
       )}
 
+      {activeTab === 'financeiro' && (
+        <ClienteFinanceiro officeId={office.id} cnpj={office.cnpj} />
+      )}
 
       {activeTab === 'contatos' && (
         <Card className="p-6"><ClienteContatos officeId={office.id} contacts={contacts} onRefresh={fetchAll} /></Card>
