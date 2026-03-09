@@ -323,6 +323,7 @@ export default function Cliente360() {
         onQuickNote={() => setShowQuickNote(true)}
         onPreviewOpen={() => setPreviewOpen(true)}
         onWhatsApp={() => setWhatsappOpen(true)}
+        onManageAccess={!isViewer && !isClient ? () => setAccessDialogOpen(true) : undefined}
       />
 
       {/* Horizontal tabs */}
