@@ -11,6 +11,7 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { recalculateHealth } from '@/lib/health-engine';
+import { Lock, Search } from 'lucide-react';
 
 interface FieldDef {
   id: string;
@@ -46,13 +47,22 @@ interface FormTemplate {
   post_actions: any;
 }
 
+interface OfficeOption {
+  id: string;
+  name: string;
+  external_id?: string | null;
+  cnpj?: string | null;
+  office_code?: string | null;
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  meetingId: string;
-  officeId: string;
+  officeId?: string;
+  meetingId?: string;
   meetingType?: string;
   meetingDate?: string;
+  templateId?: string;
   onSubmitted: () => void;
 }
 
@@ -84,16 +94,26 @@ function isFieldVisible(field: FieldDef, formData: Record<string, any>): boolean
   return logic_operator === 'and' ? results.every(Boolean) : results.some(Boolean);
 }
 
-export function FormFillDialog({ open, onOpenChange, meetingId, officeId, meetingType, meetingDate, onSubmitted }: Props) {
+export function FormFillDialog({ open, onOpenChange, officeId, meetingId, meetingType, meetingDate, templateId, onSubmitted }: Props) {
   const { session } = useAuth();
   const [templates, setTemplates] = useState<FormTemplate[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState('');
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [submitting, setSubmitting] = useState(false);
-  const [multiSelections, setMultiSelections] = useState<Record<string, string[]>>({});
+
+  // Client selection state
+  const [offices, setOffices] = useState<OfficeOption[]>([]);
+  const [selectedOfficeId, setSelectedOfficeId] = useState<string>(officeId || '');
+  const [officeSearch, setOfficeSearch] = useState('');
+  const isOfficeLocked = !!officeId;
+
+  // CSM state
+  const [profiles, setProfiles] = useState<{ id: string; full_name: string }[]>([]);
+  const [selectedCsmId, setSelectedCsmId] = useState<string>('');
 
   useEffect(() => {
     if (open) {
+      // Load templates
       supabase.from('form_templates').select('id, name, form_type, fields, sections, post_actions')
         .eq('is_active', true)
         .then(({ data }) => {
@@ -104,21 +124,69 @@ export function FormFillDialog({ open, onOpenChange, meetingId, officeId, meetin
             sections: Array.isArray(t.sections) ? t.sections : [],
           })));
         });
+
+      // Load offices for client selector (if not locked)
+      if (!officeId) {
+        supabase.from('offices').select('id, name, external_id, cnpj, office_code')
+          .eq('status', 'ativo')
+          .order('name')
+          .then(({ data }) => setOffices((data as any[]) || []));
+      }
+
+      // Load profiles for CSM selector
+      supabase.from('profiles').select('id, full_name')
+        .order('full_name')
+        .then(({ data }) => {
+          setProfiles((data as any[]) || []);
+          if (session?.user?.id && !selectedCsmId) {
+            setSelectedCsmId(session.user.id);
+          }
+        });
+
+      // Pre-select template if provided
+      if (templateId) setSelectedTemplate(templateId);
+      if (officeId) setSelectedOfficeId(officeId);
     }
   }, [open]);
 
   const currentTemplate = templates.find(t => t.id === selectedTemplate);
   const fields = useMemo(() => (currentTemplate?.fields || []).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)), [currentTemplate]);
   const sections = currentTemplate?.sections || [];
-
   const visibleFields = useMemo(() => fields.filter(f => isFieldVisible(f, formData)), [fields, formData]);
+
+  const filteredOffices = useMemo(() => {
+    if (!officeSearch.trim()) return offices;
+    const q = officeSearch.toLowerCase();
+    return offices.filter(o =>
+      o.name?.toLowerCase().includes(q) ||
+      o.external_id?.toLowerCase().includes(q) ||
+      o.cnpj?.toLowerCase().includes(q) ||
+      o.office_code?.toLowerCase().includes(q)
+    );
+  }, [offices, officeSearch]);
+
+  const selectedOfficeName = useMemo(() => {
+    if (officeId) {
+      const o = offices.find(o => o.id === officeId);
+      return o ? `${o.office_code ? `[${o.office_code}] ` : ''}${o.name}` : 'Cliente vinculado';
+    }
+    const o = offices.find(o => o.id === selectedOfficeId);
+    return o ? `${o.office_code ? `[${o.office_code}] ` : ''}${o.name}` : '';
+  }, [officeId, selectedOfficeId, offices]);
 
   const setValue = (fieldId: string, value: any) => {
     setFormData(prev => ({ ...prev, [fieldId]: value }));
   };
 
+  const resolvedOfficeId = officeId || selectedOfficeId;
+
   const handleSubmit = async () => {
     if (!session?.user?.id || !selectedTemplate || !currentTemplate) return;
+
+    if (!resolvedOfficeId) {
+      toast.error('Selecione o cliente');
+      return;
+    }
 
     // Validate required visible fields
     for (const field of visibleFields) {
@@ -133,18 +201,16 @@ export function FormFillDialog({ open, onOpenChange, meetingId, officeId, meetin
 
     setSubmitting(true);
 
-    // Build submission data (only visible fields)
     const submissionData: Record<string, any> = {};
     for (const f of visibleFields) {
       submissionData[f.id] = formData[f.id] ?? null;
     }
 
-    // 1. Insert form submission
     const { data: submission, error } = await supabase.from('form_submissions').insert({
       template_id: selectedTemplate,
-      office_id: officeId,
-      meeting_id: meetingId,
-      user_id: session.user.id,
+      office_id: resolvedOfficeId,
+      meeting_id: meetingId || null,
+      user_id: selectedCsmId || session.user.id,
       data: submissionData,
     }).select('id').single();
 
@@ -154,15 +220,13 @@ export function FormFillDialog({ open, onOpenChange, meetingId, officeId, meetin
       return;
     }
 
-    // 2. Apply header mappings
+    // Apply header mappings
     const officeUpdates: Record<string, any> = {};
     const customFieldUpdates: { custom_field_id: string; value: any }[] = [];
 
-    // Check "controls_meeting_date" field
     const meetingControlField = fields.find(f => f.controls_meeting_date);
     const meetingHappened = meetingControlField ? formData[meetingControlField.id] === true || formData[meetingControlField.id] === 'true' : true;
 
-    // Update meeting date if happened
     if (meetingHappened && meetingDate) {
       officeUpdates.last_meeting_date = meetingDate;
       if (meetingType) officeUpdates.last_meeting_type = meetingType;
@@ -175,36 +239,30 @@ export function FormFillDialog({ open, onOpenChange, meetingId, officeId, meetin
 
       const target = field.header_mapping.target_field;
       if (target.startsWith('offices.')) {
-        const col = target.replace('offices.', '');
-        officeUpdates[col] = value;
+        officeUpdates[target.replace('offices.', '')] = value;
       } else if (target.startsWith('custom_field:')) {
-        const cfId = target.replace('custom_field:', '');
-        customFieldUpdates.push({ custom_field_id: cfId, value });
+        customFieldUpdates.push({ custom_field_id: target.replace('custom_field:', ''), value });
       }
     }
 
-    // Apply office updates
     if (Object.keys(officeUpdates).length > 0) {
-      const { error: offErr } = await supabase.from('offices').update(officeUpdates).eq('id', officeId);
-      if (offErr) console.error('Office update error:', offErr);
+      await supabase.from('offices').update(officeUpdates).eq('id', resolvedOfficeId);
     }
 
-    // Apply custom field updates
     for (const cfu of customFieldUpdates) {
-      const { error: cfErr } = await supabase.from('custom_field_values').upsert({
+      await supabase.from('custom_field_values').upsert({
         custom_field_id: cfu.custom_field_id,
-        office_id: officeId,
+        office_id: resolvedOfficeId,
         value_text: String(cfu.value),
         value_number: isNaN(Number(cfu.value)) ? null : Number(cfu.value),
         updated_by: session.user.id,
       }, { onConflict: 'custom_field_id,office_id' });
-      if (cfErr) console.error('Custom field upsert error:', cfErr);
     }
 
-    // 3. Upsert metrics history
+    // Metrics history
     const now = new Date();
     const metricsData: any = {
-      office_id: officeId,
+      office_id: resolvedOfficeId,
       period_month: now.getMonth() + 1,
       period_year: now.getFullYear(),
       form_submission_id: submission?.id,
@@ -217,33 +275,27 @@ export function FormFillDialog({ open, onOpenChange, meetingId, officeId, meetin
     if (officeUpdates.last_csat !== undefined) metricsData.csat_score = officeUpdates.last_csat;
     if (officeUpdates.cs_feeling !== undefined) metricsData.cs_feeling = officeUpdates.cs_feeling;
 
-    const hasMetrics = Object.keys(metricsData).length > 3; // more than office_id, month, year
-    if (hasMetrics) {
-      const { error: mErr } = await supabase.from('office_metrics_history').upsert(metricsData, {
-        onConflict: 'office_id,period_month,period_year',
-      });
-      if (mErr) console.error('Metrics history upsert error:', mErr);
+    if (Object.keys(metricsData).length > 3) {
+      await supabase.from('office_metrics_history').upsert(metricsData, { onConflict: 'office_id,period_month,period_year' });
     }
 
     toast.success('Formulário salvo!');
 
-    // 4. Execute post-actions
+    // Post-actions
     if (submission?.id && currentTemplate.post_actions && Object.keys(currentTemplate.post_actions).length > 0) {
       try {
-        const { error: fnError } = await supabase.functions.invoke('execute-form-post-actions', {
-          body: { submission_id: submission.id, template_id: selectedTemplate, office_id: officeId },
+        await supabase.functions.invoke('execute-form-post-actions', {
+          body: { submission_id: submission.id, template_id: selectedTemplate, office_id: resolvedOfficeId },
         });
-        if (fnError) console.error('Post-actions error:', fnError);
-      } catch (err) { console.error('Post-actions invocation error:', err); }
+      } catch (err) { console.error('Post-actions error:', err); }
     }
 
-    // 5. Recalculate health
-    recalculateHealth(officeId);
+    recalculateHealth(resolvedOfficeId);
 
-    // 6. Trigger automations
+    // Automations
     try {
       await supabase.functions.invoke('execute-automations', {
-        body: { action: 'triggerV2', trigger_type: 'form.submitted', office_id: officeId, context: { form_id: selectedTemplate, suffix: `form_${submission?.id}` } },
+        body: { action: 'triggerV2', trigger_type: 'form.submitted', office_id: resolvedOfficeId, context: { form_id: selectedTemplate, suffix: `form_${submission?.id}` } },
       });
     } catch (autoErr) { console.error('Automation trigger failed:', autoErr); }
 
@@ -344,7 +396,6 @@ export function FormFillDialog({ open, onOpenChange, meetingId, officeId, meetin
     }
   };
 
-  // Group fields by section
   const renderFields = () => {
     if (sections.length === 0) {
       return visibleFields.map(field => (
@@ -393,9 +444,63 @@ export function FormFillDialog({ open, onOpenChange, meetingId, officeId, meetin
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Preencher Formulário da Reunião</DialogTitle>
+          <DialogTitle>Preencher Formulário</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
+          {/* CSM Selector */}
+          <div className="space-y-2">
+            <Label>CSM responsável *</Label>
+            <Select value={selectedCsmId} onValueChange={setSelectedCsmId}>
+              <SelectTrigger><SelectValue placeholder="Selecione o CSM" /></SelectTrigger>
+              <SelectContent>
+                {profiles.map(p => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.full_name}{p.id === session?.user?.id ? ' (você)' : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Client Selector */}
+          <div className="space-y-2">
+            <Label>Cliente *</Label>
+            {isOfficeLocked ? (
+              <div className="flex items-center gap-2 p-2.5 bg-muted rounded-md border">
+                <Lock className="h-4 w-4 text-muted-foreground shrink-0" />
+                <span className="text-sm">{selectedOfficeName || 'Carregando...'}</span>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input
+                    className="pl-8"
+                    placeholder="Buscar por nome, código ou CNPJ..."
+                    value={officeSearch}
+                    onChange={e => setOfficeSearch(e.target.value)}
+                  />
+                </div>
+                <Select value={selectedOfficeId} onValueChange={setSelectedOfficeId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o cliente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {filteredOffices.map(o => (
+                      <SelectItem key={o.id} value={o.id}>
+                        {o.office_code ? `[${o.office_code}] ` : ''}{o.name}{o.cnpj ? ` (${o.cnpj})` : ''}
+                      </SelectItem>
+                    ))}
+                    {filteredOffices.length === 0 && (
+                      <div className="py-2 px-3 text-sm text-muted-foreground">Nenhum cliente encontrado</div>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+
+          {/* Template Selector */}
           <div className="space-y-2">
             <Label>Modelo de formulário</Label>
             <Select value={selectedTemplate} onValueChange={v => { setSelectedTemplate(v); setFormData({}); }}>
@@ -408,7 +513,11 @@ export function FormFillDialog({ open, onOpenChange, meetingId, officeId, meetin
             </Select>
           </div>
 
-          {renderFields()}
+          {selectedTemplate && (
+            <div className="border-t pt-3 space-y-4">
+              {renderFields()}
+            </div>
+          )}
 
           {selectedTemplate && (
             <Button onClick={handleSubmit} className="w-full" disabled={submitting}>

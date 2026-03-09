@@ -26,6 +26,7 @@ import Notificacoes from "@/pages/Notificacoes";
 import ComingSoon from "@/pages/ComingSoon";
 import NotFound from "@/pages/NotFound";
 import TarefasInternas from "@/pages/TarefasInternas";
+import Formularios from "@/pages/Formularios";
 import PortalHome from "@/pages/portal/PortalHome";
 import PortalContrato from "@/pages/portal/PortalContrato";
 import PortalOKR from "@/pages/portal/PortalOKR";

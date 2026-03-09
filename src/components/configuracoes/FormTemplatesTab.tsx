@@ -552,12 +552,42 @@ export function FormTemplatesTab() {
 
                                   {/* Options for dropdown/multi_select */}
                                   {(field.type === 'dropdown' || field.type === 'multi_select') && (
-                                    <Input
-                                      className="h-7 text-xs"
-                                      placeholder="Opções separadas por vírgula"
-                                      value={field.options?.join(', ') || ''}
-                                      onChange={e => updateField(idx, { options: e.target.value.split(',').map(o => o.trim()).filter(Boolean) })}
-                                    />
+                                    <div className="space-y-1.5">
+                                      {(field.options && field.options.length > 0 ? field.options : ['']).map((opt, optIdx) => (
+                                        <div key={optIdx} className="flex items-center gap-2">
+                                          <span className="text-[10px] text-muted-foreground w-14 shrink-0">Opção {optIdx + 1}</span>
+                                          <Input
+                                            className="h-7 text-xs flex-1"
+                                            placeholder={`Opção ${optIdx + 1}`}
+                                            value={opt}
+                                            onChange={e => {
+                                              const newOpts = [...(field.options || [''])];
+                                              newOpts[optIdx] = e.target.value;
+                                              updateField(idx, { options: newOpts });
+                                            }}
+                                          />
+                                          {(field.options || ['']).length > 1 && (
+                                            <Button
+                                              type="button" size="sm" variant="ghost"
+                                              className="h-7 w-7 p-0"
+                                              onClick={() => {
+                                                const newOpts = (field.options || ['']).filter((_, i) => i !== optIdx);
+                                                updateField(idx, { options: newOpts });
+                                              }}
+                                            >
+                                              <Trash2 className="h-3 w-3 text-destructive" />
+                                            </Button>
+                                          )}
+                                        </div>
+                                      ))}
+                                      <Button
+                                        type="button" variant="ghost" size="sm"
+                                        className="h-6 text-xs text-primary"
+                                        onClick={() => updateField(idx, { options: [...(field.options || ['']), ''] })}
+                                      >
+                                        <Plus className="h-3 w-3 mr-1" />Adicionar opção
+                                      </Button>
+                                    </div>
                                   )}
 
                                   {/* Linear scale config */}

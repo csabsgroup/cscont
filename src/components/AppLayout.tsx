@@ -35,6 +35,7 @@ const pageNames: Record<string, string> = {
   '/relatorios': 'Performance',
   '/configuracoes': 'Configurações',
   '/tarefas-internas': 'Tarefas Internas',
+  '/formularios': 'Formulários',
 };
 
 export function AppLayout({ children }: AppLayoutProps) {
