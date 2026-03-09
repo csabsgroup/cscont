@@ -1,119 +1,63 @@
 
 
-# Plano: Redesign da Página de Eventos
+# Diagnosis and Fix Plan
 
-## Resumo
+## Root Causes Found
 
-Redesenhar a página de Eventos com layout em cards visuais (com imagem de capa), filtros por produto e categoria, edição ao clicar no card, gestão de presença com status detalhados, e integração com o portal do cliente para confirmação. As categorias são fixas, observações são visíveis ao cliente, eventos passados ficam colapsados.
+### Problem 1 — Webhook mapping not filling fields
+The webhook_logs table confirms the error: `"supabase.from(...).insert(...).catch is not a function"`. The last two webhooks (March 5 and March 6) both crashed with this error BEFORE reaching office creation. The `.catch()` fix was applied in code but the webhooks arrived before deployment completed. The mapping paths are correct, the company data exists at root level with all expected fields. This problem is already fixed in code — just needs a new webhook to test.
 
----
+### Problem 2 — Only 3 of 17 create_activity actions succeeded
+**This is the critical finding.** The `activity_type` database enum has these valid values:
+`task, follow_up, onboarding, renewal, other, ligacao, check_in, email, whatsapp, planejamento`
 
-## 1. Alterações no Banco de Dados
+It does NOT include `"meeting"`. The automation rule "[ELT] Delegação automática" has 14 actions with `activity_type: "meeting"` — every one of those fails silently because the INSERT violates the enum constraint. The `handleAction` function doesn't capture the error from `supabase.from("activities").insert(...)`.
 
-### Tabela `events` — novos campos:
+Evidence: automation_logs shows 19 `actions_executed` entries, but only 3 `create_activity` have an `id` (the ones with type "task" or "email"). The other 14 have no `id` — they failed silently.
+
+### Problem 3 — Webhook doesn't trigger automations
+Same root cause as Problem 1 — the webhook crashed before reaching the automation invocation lines (419-430). Once the webhook stops crashing, automations will be invoked via `supabase.functions.invoke()`.
+
+## Fixes
+
+### Fix A — Add "meeting" to activity_type enum (database migration)
 ```sql
-ALTER TABLE events
-  ADD COLUMN cover_url text,
-  ADD COLUMN category text NOT NULL DEFAULT 'encontro',
-  ADD COLUMN observations text,
-  ADD COLUMN confirmation_deadline_days integer DEFAULT 3;
+ALTER TYPE activity_type ADD VALUE IF NOT EXISTS 'meeting';
 ```
+This is the correct fix because:
+- The automation builder UI offers "meeting" as an option
+- Users have configured rules with this type
+- 14 activities are waiting to be created with this type
 
-Categorias fixas: `encontro`, `imersao`, `workshop`, `treinamento`, `confraternizacao`, `outro`.
-
-- `cover_url`: URL da imagem de capa (armazenada no bucket `office-files` ou novo bucket `event-covers`)
-- `confirmation_deadline_days`: até quantos dias antes do evento o cliente pode confirmar (padrão 3)
-
-### Tabela `event_participants` — atualizar status:
-O campo `status` já existe como text. Os novos valores serão:
-- `a_confirmar` (ainda não respondeu)
-- `confirmado` (confirmou que vai)
-- `nao_vai` (confirmou que não vai)
-- `compareceu` (CS marcou presença)
-- `nao_compareceu` (CS marcou ausência)
-
-Migração para status antigos:
-```sql
-UPDATE event_participants SET status = 'a_confirmar' WHERE status = 'convidado';
-UPDATE event_participants SET status = 'compareceu' WHERE status = 'participou';
-UPDATE event_participants SET status = 'nao_compareceu' WHERE status = 'faltou';
+### Fix B — Add error handling in handleAction (execute-automations)
+In the `create_activity` case (line 46-47), capture and log the error:
+```javascript
+const { data: act, error: actErr } = await supabase.from("activities").insert(payload).select("id").single();
+if (actErr) {
+  console.error('[AUTOMATIONS] Activity insert error:', actErr.message, 'payload:', JSON.stringify(payload));
+  return { type: "create_activity", error: actErr.message };
+}
 ```
+Apply similar error capture to ALL action types that do database inserts (send_notification, add_note, create_action_plan, etc.).
 
-### Novo bucket de storage:
-Criar bucket `event-covers` (público) para upload de imagens de capa.
+### Fix C — Ensure webhook deployment is current
+The piperun-webhook code already has the `.catch()` fix from the previous iteration. Verify the edge function redeploys by checking logs after saving. No code change needed — just confirmation.
 
----
+### Fix D — Add company fallback in webhook (safety)
+In `piperun-webhook/index.ts` line 341, add fallback to `person.company`:
+```javascript
+let companyData = deal.company || deal.person?.company;
+```
+This handles edge cases where the Piperun payload structure varies.
 
-## 2. Página de Eventos (Admin/CSM/Manager)
+## Files Modified
+- `supabase/functions/execute-automations/index.ts` — error handling in handleAction
+- `supabase/functions/piperun-webhook/index.ts` — company fallback
+- Database migration: add `meeting` to `activity_type` enum
 
-### Arquivo: `src/pages/Eventos.tsx` — reescrever
-
-**Layout:**
-- Header: título + botão "Novo Evento"
-- Filtros: Select de produto + Select de categoria
-- Seção "Próximos Eventos": grid de cards (2-3 colunas)
-- Seção "Eventos Passados": collapsible com cards em opacidade reduzida
-
-**Card do evento:**
-- Imagem de capa no topo (ou placeholder colorido se sem imagem)
-- Título, data formatada, badge de tipo (presencial/online/híbrido), badge de categoria
-- Local (se houver)
-- Contador de participantes confirmados / total
-- Ao clicar → abre drawer/dialog de edição
-
-### Arquivo: `src/components/eventos/EventDetailDrawer.tsx` — novo
-
-**Drawer lateral (Sheet) com:**
-- Upload de imagem de capa
-- Campos editáveis: título, descrição, data início/fim, local, tipo, categoria, observações, prazo de confirmação, produtos elegíveis, máx. participantes
-- Salvar alterações inline
-- Abaixo: seção de Participantes (ParticipantManager atualizado)
-
-### Arquivo: `src/components/eventos/ParticipantManager.tsx` — atualizar
-
-**Novos status no select:**
-- `a_confirmar` → "A Confirmar" (cinza)
-- `confirmado` → "Confirmado" (azul)
-- `nao_vai` → "Não Vai" (laranja)
-- `compareceu` → "Compareceu" (verde)
-- `nao_compareceu` → "Não Compareceu" (vermelho)
-
-**Colunas da tabela:**
-- Escritório | Status do Escritório | Confirmação | Presença | Ações
-
-A coluna "Confirmação" mostra se o cliente confirmou/não vai. A coluna "Presença" é um select que o CSM preenche após o evento (compareceu/não compareceu), habilitado apenas se a data do evento já passou.
-
----
-
-## 3. Portal do Cliente
-
-### Arquivo: `src/pages/portal/PortalEventos.tsx` — atualizar
-
-- Ao clicar no card/linha do evento, abre um dialog com:
-  - Imagem de capa
-  - Título, descrição, data, horário, local, observações
-  - Botão de confirmação de presença (se dentro do prazo)
-  - Status atual da confirmação do cliente
-
-- Lógica do prazo: se `confirmation_deadline_days` = 3, o cliente pode confirmar até 3 dias antes do `event_date`
-- Após o prazo, o botão fica desabilitado com mensagem "Prazo encerrado"
-
----
-
-## 4. Health Score
-
-A integração com HS será configurável por produto via a tela de configuração de Health Score existente. Um novo indicador `event_attendance` poderá ser adicionado com janela de tempo configurável. A implementação do cálculo no motor de HS será feita em etapa separada para manter o escopo controlado.
-
----
-
-## Arquivos a criar/modificar
-
-| Arquivo | Ação |
-|---|---|
-| Migration SQL | Criar (add columns + update status + bucket) |
-| `src/pages/Eventos.tsx` | Reescrever com layout de cards e filtros |
-| `src/components/eventos/EventDetailDrawer.tsx` | Criar novo |
-| `src/components/eventos/EventCard.tsx` | Criar novo |
-| `src/components/eventos/ParticipantManager.tsx` | Atualizar status e layout |
-| `src/pages/portal/PortalEventos.tsx` | Atualizar com dialog de detalhes e confirmação |
+## Expected Result After Fix
+- All 17 `create_activity` actions succeed (activities created with correct types)
+- Webhook creates office with all mapped fields populated
+- Webhook triggers automations that execute all 19 actions
+- automation_logs show complete execution with all action IDs
 

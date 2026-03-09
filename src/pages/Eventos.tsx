@@ -6,54 +6,69 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Loader2, Calendar, MapPin, Users, Eye } from 'lucide-react';
-import { format, isFuture, isPast } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Plus, Loader2, Calendar, ChevronDown } from 'lucide-react';
+import { isFuture, isPast } from 'date-fns';
 import { toast } from 'sonner';
-import { ParticipantManager } from '@/components/eventos/ParticipantManager';
+import { EventCard } from '@/components/eventos/EventCard';
+import { EventDetailDrawer } from '@/components/eventos/EventDetailDrawer';
 
-interface Event {
-  id: string;
-  title: string;
-  description: string | null;
-  event_date: string;
-  end_date: string | null;
-  location: string | null;
-  type: string;
-  max_participants: number | null;
-  eligible_product_ids: string[] | null;
-  created_by: string;
-}
+const CATEGORIES = [
+  { value: 'encontro', label: 'Encontro' },
+  { value: 'imersao', label: 'Imersão' },
+  { value: 'workshop', label: 'Workshop' },
+  { value: 'treinamento', label: 'Treinamento' },
+  { value: 'confraternizacao', label: 'Confraternização' },
+  { value: 'outro', label: 'Outro' },
+];
 
 interface Product { id: string; name: string; }
 
 export default function Eventos() {
   const { session, isViewer } = useAuth();
-  const [events, setEvents] = useState<Event[]>([]);
+  const [events, setEvents] = useState<any[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [participantCounts, setParticipantCounts] = useState<Record<string, { confirmed: number; total: number }>>({});
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [detailEvent, setDetailEvent] = useState<Event | null>(null);
+  const [detailEvent, setDetailEvent] = useState<any | null>(null);
   const [creating, setCreating] = useState(false);
+  const [pastOpen, setPastOpen] = useState(false);
 
+  // Filters
+  const [filterProduct, setFilterProduct] = useState('all');
+  const [filterCategory, setFilterCategory] = useState('all');
+
+  // Create form
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [eventDate, setEventDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [location, setLocation] = useState('');
   const [type, setType] = useState('presencial');
+  const [category, setCategory] = useState('encontro');
   const [maxParticipants, setMaxParticipants] = useState('');
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
 
   const fetchEvents = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('events').select('*').order('event_date', { ascending: false });
-    setEvents((data as any[]) || []);
+    const [eventsRes, participantsRes] = await Promise.all([
+      supabase.from('events').select('*').order('event_date', { ascending: true }),
+      supabase.from('event_participants').select('event_id, status'),
+    ]);
+    setEvents((eventsRes.data as any[]) || []);
+
+    // Build counts
+    const counts: Record<string, { confirmed: number; total: number }> = {};
+    (participantsRes.data || []).forEach((p: any) => {
+      if (!counts[p.event_id]) counts[p.event_id] = { confirmed: 0, total: 0 };
+      counts[p.event_id].total++;
+      if (p.status === 'confirmado' || p.status === 'compareceu') counts[p.event_id].confirmed++;
+    });
+    setParticipantCounts(counts);
     setLoading(false);
   }, []);
 
@@ -75,23 +90,21 @@ export default function Eventos() {
       title, description: description || null,
       event_date: new Date(eventDate).toISOString(),
       end_date: endDate ? new Date(endDate).toISOString() : null,
-      location: location || null, type,
+      location: location || null, type, category,
       max_participants: maxParticipants ? parseInt(maxParticipants) : null,
       eligible_product_ids: selectedProductIds.length > 0 ? selectedProductIds : null,
       created_by: session.user.id,
     }).select('id').single();
     if (error) { toast.error('Erro: ' + error.message); setCreating(false); return; }
 
-    // Auto-pull active offices from eligible products
     if (selectedProductIds.length > 0 && created) {
       const { data: offices } = await supabase
-        .from('offices')
-        .select('id')
+        .from('offices').select('id')
         .in('active_product_id', selectedProductIds)
         .eq('status', 'ativo');
       if (offices && offices.length > 0) {
         await supabase.from('event_participants').insert(
-          offices.map(o => ({ event_id: created.id, office_id: o.id, confirmed: false, status: 'convidado' }))
+          offices.map(o => ({ event_id: created.id, office_id: o.id, confirmed: false, status: 'a_confirmar' }))
         );
         toast.success(`Evento criado com ${offices.length} participante(s)!`);
       } else {
@@ -103,18 +116,33 @@ export default function Eventos() {
 
     setDialogOpen(false);
     setTitle(''); setDescription(''); setEventDate(''); setEndDate('');
-    setLocation(''); setType('presencial'); setMaxParticipants(''); setSelectedProductIds([]);
+    setLocation(''); setType('presencial'); setCategory('encontro');
+    setMaxParticipants(''); setSelectedProductIds([]);
     fetchEvents();
     setCreating(false);
   };
 
+  // Filter events
+  const filtered = events.filter(ev => {
+    if (filterProduct !== 'all') {
+      const eligible = ev.eligible_product_ids as string[] | null;
+      if (!eligible || !eligible.includes(filterProduct)) return false;
+    }
+    if (filterCategory !== 'all' && ev.category !== filterCategory) return false;
+    return true;
+  });
+
+  const upcoming = filtered.filter(e => isFuture(new Date(e.event_date)));
+  const past = filtered.filter(e => isPast(new Date(e.event_date))).reverse();
+
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Eventos</h1>
           <p className="text-sm text-muted-foreground">
-            {events.filter(e => isFuture(new Date(e.event_date))).length} próximo{events.filter(e => isFuture(new Date(e.event_date))).length !== 1 ? 's' : ''} • {events.length} total
+            {upcoming.length} próximo{upcoming.length !== 1 ? 's' : ''} • {events.length} total
           </p>
         </div>
         {!isViewer && (
@@ -122,7 +150,7 @@ export default function Eventos() {
             <DialogTrigger asChild>
               <Button><Plus className="mr-2 h-4 w-4" />Novo Evento</Button>
             </DialogTrigger>
-            <DialogContent className="max-w-lg">
+            <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
               <DialogHeader><DialogTitle>Novo Evento</DialogTitle></DialogHeader>
               <form onSubmit={handleCreate} className="space-y-4">
                 <div className="space-y-2">
@@ -161,14 +189,20 @@ export default function Eventos() {
                   </div>
                 </div>
                 <div className="space-y-2">
+                  <Label>Categoria</Label>
+                  <Select value={category} onValueChange={setCategory}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {CATEGORIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
                   <Label>Produtos Elegíveis</Label>
                   <div className="flex flex-wrap gap-2">
                     {products.map(p => (
                       <label key={p.id} className="flex items-center gap-2 text-sm cursor-pointer">
-                        <Checkbox
-                          checked={selectedProductIds.includes(p.id)}
-                          onCheckedChange={() => toggleProduct(p.id)}
-                        />
+                        <Checkbox checked={selectedProductIds.includes(p.id)} onCheckedChange={() => toggleProduct(p.id)} />
                         {p.name}
                       </label>
                     ))}
@@ -187,110 +221,92 @@ export default function Eventos() {
         )}
       </div>
 
+      {/* Filters */}
+      <div className="flex gap-3">
+        <Select value={filterProduct} onValueChange={setFilterProduct}>
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="Filtrar produto" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os produtos</SelectItem>
+            {products.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={filterCategory} onValueChange={setFilterCategory}>
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="Filtrar categoria" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas as categorias</SelectItem>
+            {CATEGORIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+
       {loading ? (
-        <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
-          <div className="bg-muted/50 h-11 flex items-center px-4 gap-12">
-            {[...Array(5)].map((_, i) => <div key={i} className="h-3 w-16 rounded skeleton-shimmer" />)}
-          </div>
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="border-b border-border/50 px-4 py-3 flex items-center gap-12">
-              {[...Array(5)].map((_, j) => <div key={j} className="h-4 w-20 rounded skeleton-shimmer" />)}
-            </div>
-          ))}
-        </div>
-      ) : events.length === 0 ? (
+        <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+      ) : filtered.length === 0 ? (
         <Card><CardContent className="flex flex-col items-center justify-center py-12">
           <Calendar className="mb-3 h-10 w-10 text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground">Nenhum evento registrado.</p>
+          <p className="text-sm text-muted-foreground">Nenhum evento encontrado.</p>
         </CardContent></Card>
       ) : (
-        <Card>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Evento</TableHead>
-                <TableHead>Data</TableHead>
-                <TableHead>Local</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Produtos</TableHead>
-                <TableHead></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {events.map(ev => (
-                <TableRow key={ev.id}>
-                  <TableCell>
-                    <div>
-                      <p className="font-medium">{ev.title}</p>
-                      {ev.description && <p className="text-xs text-muted-foreground line-clamp-1">{ev.description}</p>}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    <div className="flex items-center gap-1.5">
-                      <Calendar className="h-3.5 w-3.5" />
-                      {format(new Date(ev.event_date), "dd/MM/yyyy HH:mm", { locale: ptBR })}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {ev.location ? <div className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" />{ev.location}</div> : '—'}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary" className="text-xs capitalize">{ev.type}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1 flex-wrap">
-                      {(ev.eligible_product_ids || []).map(pid => {
-                        const prod = products.find(p => p.id === pid);
-                        return prod ? <Badge key={pid} variant="outline" className="text-xs">{prod.name}</Badge> : null;
-                      })}
-                      {(!ev.eligible_product_ids || ev.eligible_product_ids.length === 0) && <span className="text-xs text-muted-foreground">Todos</span>}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Button size="sm" variant="ghost" onClick={() => setDetailEvent(ev)}>
-                      <Eye className="h-4 w-4 mr-1" /> Detalhes
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Card>
-      )}
-
-      {/* Detail dialog with participant management */}
-      <Dialog open={!!detailEvent} onOpenChange={(open) => !open && setDetailEvent(null)}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{detailEvent?.title}</DialogTitle></DialogHeader>
-          {detailEvent && (
+        <div className="space-y-8">
+          {/* Upcoming */}
+          {upcoming.length > 0 && (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-muted-foreground">Data:</span>
-                  <p className="font-medium">{format(new Date(detailEvent.event_date), "dd/MM/yyyy HH:mm", { locale: ptBR })}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Tipo:</span>
-                  <p className="font-medium capitalize">{detailEvent.type}</p>
-                </div>
-                {detailEvent.location && (
-                  <div>
-                    <span className="text-muted-foreground">Local:</span>
-                    <p className="font-medium">{detailEvent.location}</p>
-                  </div>
-                )}
+              <h2 className="text-lg font-semibold">Próximos Eventos</h2>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {upcoming.map(ev => (
+                  <EventCard
+                    key={ev.id}
+                    event={ev}
+                    confirmedCount={participantCounts[ev.id]?.confirmed || 0}
+                    totalCount={participantCounts[ev.id]?.total || 0}
+                    onClick={() => setDetailEvent(ev)}
+                  />
+                ))}
               </div>
-              {detailEvent.description && <p className="text-sm text-muted-foreground">{detailEvent.description}</p>}
-              <hr />
-              <ParticipantManager
-                eventId={detailEvent.id}
-                eligibleProductIds={detailEvent.eligible_product_ids || []}
-                readOnly={isViewer}
-              />
             </div>
           )}
-        </DialogContent>
-      </Dialog>
+
+          {/* Past - collapsible */}
+          {past.length > 0 && (
+            <Collapsible open={pastOpen} onOpenChange={setPastOpen}>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" className="w-full justify-between text-muted-foreground hover:text-foreground">
+                  <span>Eventos Passados ({past.length})</span>
+                  <ChevronDown className={`h-4 w-4 transition-transform ${pastOpen ? 'rotate-180' : ''}`} />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mt-4">
+                  {past.map(ev => (
+                    <EventCard
+                      key={ev.id}
+                      event={ev}
+                      confirmedCount={participantCounts[ev.id]?.confirmed || 0}
+                      totalCount={participantCounts[ev.id]?.total || 0}
+                      onClick={() => setDetailEvent(ev)}
+                      isPast
+                    />
+                  ))}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
+        </div>
+      )}
+
+      {/* Detail drawer */}
+      <EventDetailDrawer
+        event={detailEvent}
+        open={!!detailEvent}
+        onOpenChange={(open) => !open && setDetailEvent(null)}
+        products={products}
+        onSaved={() => { fetchEvents(); setDetailEvent(null); }}
+        readOnly={isViewer}
+      />
     </div>
   );
 }
