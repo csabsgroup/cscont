@@ -11,10 +11,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Plus, Loader2, Calendar, ChevronDown } from 'lucide-react';
+import { Plus, Loader2, Calendar, ChevronDown, CalendarDays, List } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { isFuture, isPast } from 'date-fns';
 import { toast } from 'sonner';
 import { EventCard } from '@/components/eventos/EventCard';
+import { EventCalendarView } from '@/components/eventos/EventCalendarView';
 
 const CATEGORIES = [
   { value: 'encontro', label: 'Encontro' },
@@ -28,8 +30,9 @@ const CATEGORIES = [
 interface Product { id: string; name: string; }
 
 export default function Eventos() {
-  const { session, isViewer } = useAuth();
+  const { session, isViewer, role } = useAuth();
   const navigate = useNavigate();
+  const [view, setView] = useState<'list' | 'calendar'>('list');
   const [events, setEvents] = useState<any[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [participantCounts, setParticipantCounts] = useState<Record<string, { confirmed: number; total: number }>>({});
@@ -138,87 +141,103 @@ export default function Eventos() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold">Eventos</h1>
           <p className="text-sm text-muted-foreground">
             {upcoming.length} próximo{upcoming.length !== 1 ? 's' : ''} • {events.length} total
           </p>
         </div>
-        {!isViewer && (
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button><Plus className="mr-2 h-4 w-4" />Novo Evento</Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-              <DialogHeader><DialogTitle>Novo Evento</DialogTitle></DialogHeader>
-              <form onSubmit={handleCreate} className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Título *</Label>
-                  <Input value={title} onChange={e => setTitle(e.target.value)} required />
-                </div>
-                <div className="space-y-2">
-                  <Label>Descrição</Label>
-                  <Textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
+        <div className="flex items-center gap-3">
+          {role && ['admin', 'manager', 'viewer'].includes(role) && (
+            <Tabs value={view} onValueChange={v => setView(v as 'list' | 'calendar')}>
+              <TabsList className="h-9">
+                <TabsTrigger value="list" className="gap-1.5 px-3">
+                  <List className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Lista</span>
+                </TabsTrigger>
+                <TabsTrigger value="calendar" className="gap-1.5 px-3">
+                  <CalendarDays className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Calendário</span>
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          )}
+          {!isViewer && (
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button><Plus className="mr-2 h-4 w-4" />Novo Evento</Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+                <DialogHeader><DialogTitle>Novo Evento</DialogTitle></DialogHeader>
+                <form onSubmit={handleCreate} className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Início *</Label>
-                    <Input type="datetime-local" value={eventDate} onChange={e => setEventDate(e.target.value)} required />
+                    <Label>Título *</Label>
+                    <Input value={title} onChange={e => setTitle(e.target.value)} required />
                   </div>
                   <div className="space-y-2">
-                    <Label>Fim</Label>
-                    <Input type="datetime-local" value={endDate} onChange={e => setEndDate(e.target.value)} />
+                    <Label>Descrição</Label>
+                    <Textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} />
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Local</Label>
-                    <Input value={location} onChange={e => setLocation(e.target.value)} />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Início *</Label>
+                      <Input type="datetime-local" value={eventDate} onChange={e => setEventDate(e.target.value)} required />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Fim</Label>
+                      <Input type="datetime-local" value={endDate} onChange={e => setEndDate(e.target.value)} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Local</Label>
+                      <Input value={location} onChange={e => setLocation(e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Tipo</Label>
+                      <Select value={type} onValueChange={setType}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="presencial">Presencial</SelectItem>
+                          <SelectItem value="online">Online</SelectItem>
+                          <SelectItem value="hibrido">Híbrido</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                   <div className="space-y-2">
-                    <Label>Tipo</Label>
-                    <Select value={type} onValueChange={setType}>
+                    <Label>Categoria</Label>
+                    <Select value={category} onValueChange={setCategory}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="presencial">Presencial</SelectItem>
-                        <SelectItem value="online">Online</SelectItem>
-                        <SelectItem value="hibrido">Híbrido</SelectItem>
+                        {CATEGORIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Categoria</Label>
-                  <Select value={category} onValueChange={setCategory}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {CATEGORIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Produtos Elegíveis</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {products.map(p => (
-                      <label key={p.id} className="flex items-center gap-2 text-sm cursor-pointer">
-                        <Checkbox checked={selectedProductIds.includes(p.id)} onCheckedChange={() => toggleProduct(p.id)} />
-                        {p.name}
-                      </label>
-                    ))}
+                  <div className="space-y-2">
+                    <Label>Produtos Elegíveis</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {products.map(p => (
+                        <label key={p.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                          <Checkbox checked={selectedProductIds.includes(p.id)} onCheckedChange={() => toggleProduct(p.id)} />
+                          {p.name}
+                        </label>
+                      ))}
+                    </div>
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Máx. participantes</Label>
-                  <Input type="number" value={maxParticipants} onChange={e => setMaxParticipants(e.target.value)} />
-                </div>
-                <Button type="submit" className="w-full" disabled={creating}>
-                  {creating ? 'Criando...' : 'Criar Evento'}
-                </Button>
-              </form>
-            </DialogContent>
-          </Dialog>
-        )}
+                  <div className="space-y-2">
+                    <Label>Máx. participantes</Label>
+                    <Input type="number" value={maxParticipants} onChange={e => setMaxParticipants(e.target.value)} />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={creating}>
+                    {creating ? 'Criando...' : 'Criar Evento'}
+                  </Button>
+                </form>
+              </DialogContent>
+            </Dialog>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -245,6 +264,8 @@ export default function Eventos() {
 
       {loading ? (
         <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+      ) : view === 'calendar' ? (
+        <EventCalendarView events={filtered} participantCounts={participantCounts} />
       ) : filtered.length === 0 ? (
         <Card><CardContent className="flex flex-col items-center justify-center py-12">
           <Calendar className="mb-3 h-10 w-10 text-muted-foreground/40" />
@@ -252,7 +273,6 @@ export default function Eventos() {
         </CardContent></Card>
       ) : (
         <div className="space-y-8">
-          {/* Upcoming */}
           {upcoming.length > 0 && (
             <div className="space-y-4">
               <h2 className="text-lg font-semibold">Próximos Eventos</h2>
@@ -269,8 +289,6 @@ export default function Eventos() {
               </div>
             </div>
           )}
-
-          {/* Past - collapsible */}
           {past.length > 0 && (
             <Collapsible open={pastOpen} onOpenChange={setPastOpen}>
               <CollapsibleTrigger asChild>
