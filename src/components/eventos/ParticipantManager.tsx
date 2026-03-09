@@ -118,7 +118,7 @@ export function ParticipantManager({ eventId, eligibleProductIds, readOnly, even
 
   const getAttendanceStatus = (status?: string) => {
     if (status === 'compareceu' || status === 'nao_compareceu') return status;
-    return '';
+    return 'pendente';
   };
 
   const getStatusBadge = (status?: string) => {
