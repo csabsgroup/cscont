@@ -158,7 +158,6 @@ export function ClienteContratos({ officeId, contracts, onRefresh }: Props) {
       end_date: editForm.end_date || null,
       renewal_date: editForm.renewal_date || null,
       installments_total: editForm.installments_total ? Number(editForm.installments_total) : null,
-      installments_overdue: editForm.installments_overdue ? Number(editForm.installments_overdue) : null,
       asaas_link: editForm.asaas_link || null,
       negotiation_notes: editForm.negotiation_notes || null,
     };
