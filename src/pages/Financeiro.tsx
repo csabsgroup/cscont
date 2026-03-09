@@ -39,7 +39,8 @@ export default function Financeiro() {
       if (data?.synced) parts.push(`${data.synced} sincronizados`);
       if (data?.notFound) parts.push(`${data.notFound} não encontrados no Asaas`);
       if (data?.errors) parts.push(`${data.errors} erros`);
-      toast.success(`Sincronização concluída (${data?.total || 0} escritórios): ${parts.join(', ') || 'nenhum atualizado'}`);
+      const suffix = data?.timedOut ? ' (interrompido por timeout — execute novamente para continuar)' : '';
+      toast.success(`Sincronização concluída (${data?.processed || 0}/${data?.total || 0} escritórios): ${parts.join(', ') || 'nenhum atualizado'}${suffix}`);
       await fetchData();
     } catch (err: any) {
       toast.error('Erro ao sincronizar: ' + (err.message || 'Erro desconhecido'));
