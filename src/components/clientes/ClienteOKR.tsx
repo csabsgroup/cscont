@@ -220,7 +220,7 @@ export function ClienteOKR({ officeId }: Props) {
                           {!isViewer && (
                             <div className="flex gap-1">
                               <Button size="sm" variant="ghost" onClick={() => openEditKr(kr)}><Edit2 className="h-3 w-3" /></Button>
-                              <Button size="sm" variant="ghost" onClick={() => removeKr(kr.id)}><Trash2 className="h-3 w-3 text-destructive" /></Button>
+                              <Button size="sm" variant="ghost" onClick={() => setDeleteTarget({ type: 'kr', id: kr.id, label: kr.title })}><Trash2 className="h-3 w-3 text-destructive" /></Button>
                             </div>
                           )}
                         </div>
