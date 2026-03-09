@@ -51,12 +51,16 @@ export default function ContratosGlobal() {
 
   const fetchContracts = useCallback(async () => {
     setLoading(true);
-    const [cRes, pRes] = await Promise.all([
-      supabase.from('contracts').select('*, offices(id, name), products:product_id(name)').order('created_at', { ascending: false }),
+    const [cRes, pRes, oRes] = await Promise.all([
+      supabase.from('contracts').select('*, offices(id, name, installments_overdue), products:product_id(name)').order('created_at', { ascending: false }),
       supabase.from('products').select('id, name').order('name'),
+      supabase.from('offices').select('id, installments_overdue'),
     ]);
     setContracts((cRes.data as Contract[]) || []);
     setProducts(pRes.data || []);
+    // Merge office-level overdue into contracts for display
+    const overdueMap = new Map((oRes.data || []).map((o: any) => [o.id, o.installments_overdue || 0]));
+    setContracts(prev => prev.map(c => ({ ...c, installments_overdue: overdueMap.get(c.office_id) || 0 })));
     setLoading(false);
   }, []);
 
