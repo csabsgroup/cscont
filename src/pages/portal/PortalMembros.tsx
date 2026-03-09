@@ -62,7 +62,8 @@ export default function PortalMembros() {
         query = query.eq('active_product_id', office.active_product_id);
       }
 
-      const { data } = await query;
+      const { data, error } = await query;
+      if (error) console.error('[PortalMembros] Query error:', error);
       setMembers((data as any[]) || []);
       setLoading(false);
     })();
