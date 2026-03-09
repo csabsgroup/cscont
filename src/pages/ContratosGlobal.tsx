@@ -79,7 +79,14 @@ export default function ContratosGlobal() {
   });
 
   const ativos = contracts.filter(c => c.status === 'ativo').length;
-  const vencidos = contracts.reduce((sum, c) => sum + (c.installments_overdue || 0), 0);
+  const seenOffices = new Set<string>();
+  let vencidos = 0;
+  for (const c of contracts) {
+    if (!seenOffices.has(c.office_id)) {
+      seenOffices.add(c.office_id);
+      vencidos += c.installments_overdue || 0;
+    }
+  }
 
   return (
     <div className="space-y-6">

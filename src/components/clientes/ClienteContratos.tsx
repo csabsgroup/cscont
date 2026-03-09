@@ -246,16 +246,9 @@ export function ClienteContratos({ officeId, contracts, onRefresh }: Props) {
           <Input type="date" value={formData.renewal_date} onChange={e => setFormData({ ...formData, renewal_date: e.target.value })} />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>Parcelas Total</Label>
-          <Input type="number" value={formData.installments_total} onChange={e => setFormData({ ...formData, installments_total: e.target.value })} />
-        </div>
-        <div className="space-y-2">
-          <Label>Parcelas Vencidas</Label>
-          <Input type="number" value={formData.installments_overdue} disabled placeholder="Sincronizado do Asaas" />
-          <p className="text-[10px] text-muted-foreground">Este campo é atualizado automaticamente pelo Asaas</p>
-        </div>
+      <div className="space-y-2">
+        <Label>Parcelas Total</Label>
+        <Input type="number" value={formData.installments_total} onChange={e => setFormData({ ...formData, installments_total: e.target.value })} />
       </div>
       <div className="space-y-2">
         <Label>Link Asaas</Label>

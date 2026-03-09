@@ -275,8 +275,13 @@ Deno.serve(async (req) => {
       for (const office of offices || []) {
         try {
           const result = await asaasGet(`/payments?customer=${office.asaas_customer_id}&status=OVERDUE`);
-          const totalOverdue = (result.data || []).reduce((s: number, p: any) => s + p.value, 0);
-          await supabase.from("offices").update({ asaas_total_overdue: totalOverdue }).eq("id", office.id);
+          const overduePayments = result.data || [];
+          const overdueCount = overduePayments.length;
+          const overdueValue = overduePayments.reduce((s: number, p: any) => s + p.value, 0);
+          await supabase.from("offices").update({
+            installments_overdue: overdueCount,
+            total_overdue_value: overdueValue,
+          }).eq("id", office.id);
           synced++;
         } catch (e) {
           console.error(`[ASAAS] Sync failed for office ${office.id}:`, e);

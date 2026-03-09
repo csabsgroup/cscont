@@ -839,7 +839,7 @@ async function enrichOfficeData(office: any, supabase: any): Promise<any> {
     days_since_creation: Math.ceil((now.getTime() - new Date(office.created_at).getTime()) / 86400000),
     // Contract data
     contract_value: activeContract?.value || null,
-    installments_overdue: activeContract?.installments_overdue || office.asaas_total_overdue || 0,
+    installments_overdue: office.installments_overdue || 0,
     // Journey
     journey_stage_id: journeyData?.journey_stage_id || null,
     // Health

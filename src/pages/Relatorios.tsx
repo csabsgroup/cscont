@@ -384,7 +384,7 @@ export default function Relatorios() {
     const overdueTable = overdueOfficesList.map(x => {
       return {
         name: x.name || '—', parcelas: x.installments_overdue || 0, valor: x.total_overdue_value || 0,
-        diasAtraso: 0, csm: profileMap.get(x.csm_id) || '—', product: x.products?.name || '—',
+        csm: profileMap.get(x.csm_id) || '—', product: x.products?.name || '—',
       };
     });
 

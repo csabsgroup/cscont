@@ -874,7 +874,6 @@ async function insertRow(template: EntityTemplate, row: Record<string, any>, war
       value: typeof row.value === 'number' ? row.value : (Number(row.value) || 0),
       monthly_value: typeof row.monthly_value === 'number' ? row.monthly_value : (Number(row.monthly_value) || 0),
       installments_total: Number(row.installments_total) || 0,
-      installments_overdue: Number(row.installments_overdue) || 0,
       status: row.status as any,
       negotiation_notes: row.negotiation_notes || null,
       asaas_link: row.asaas_link || null,
