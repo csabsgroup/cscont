@@ -198,13 +198,31 @@ export default function Eventos() {
               <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
                 <DialogHeader><DialogTitle>Novo Evento</DialogTitle></DialogHeader>
                 <form onSubmit={handleCreate} className="space-y-4">
+                  {/* Cover upload */}
+                  <div className="space-y-2">
+                    <Label>Imagem de Capa</Label>
+                    {coverPreview ? (
+                      <div className="relative rounded-lg overflow-hidden">
+                        <img src={coverPreview} alt="Capa" className="w-full h-40 object-cover" />
+                        <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2 h-7 w-7" onClick={removeCover}>
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <label className="flex flex-col items-center justify-center h-32 rounded-lg border-2 border-dashed border-border cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors">
+                        <ImagePlus className="h-8 w-8 text-muted-foreground mb-1" />
+                        <span className="text-sm text-muted-foreground">Clique para adicionar capa</span>
+                        <input type="file" accept="image/*" className="hidden" onChange={handleCoverSelect} />
+                      </label>
+                    )}
+                  </div>
                   <div className="space-y-2">
                     <Label>Título *</Label>
                     <Input value={title} onChange={e => setTitle(e.target.value)} required />
                   </div>
                   <div className="space-y-2">
                     <Label>Descrição</Label>
-                    <Textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} />
+                    <RichTextEditor value={description} onChange={setDescription} />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
