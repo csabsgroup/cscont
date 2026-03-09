@@ -31,6 +31,7 @@ import { WhatsAppSendDialog } from '@/components/clientes/WhatsAppSendDialog';
 import { ClienteVisao360 } from '@/components/clientes/ClienteVisao360';
 import { ClienteArquivos } from '@/components/clientes/ClienteArquivos';
 import { StatusChangeModal } from '@/components/clientes/StatusChangeModal';
+import { ClientAccessDialog } from '@/components/clientes/ClientAccessDialog';
 import { ActivityCounterBadges, ActivityCounts } from '@/components/shared/ActivityCounterBadges';
 import { Constants } from '@/integrations/supabase/types';
 import { cn } from '@/lib/utils';
