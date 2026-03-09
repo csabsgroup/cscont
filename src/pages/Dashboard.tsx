@@ -271,7 +271,7 @@ export default function Dashboard() {
               <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Consolidado do time" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Consolidado do time</SelectItem>
-                {csmProfiles.map(c => <SelectItem key={c.id} value={c.id}>{c.full_name || 'Sem nome'}</SelectItem>)}
+                {csmProfiles.map(c => <SelectItem key={c.id} value={c.id}>{(c.full_name || 'Sem nome') + (c._role === 'manager' ? ' (Gestor)' : '')}</SelectItem>)}
               </SelectContent>
             </Select>
           )}

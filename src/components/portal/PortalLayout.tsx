@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
-import { usePortalSettings } from '@/hooks/usePortalSettings';
+import { usePortal } from '@/contexts/PortalContext';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
@@ -24,26 +23,12 @@ const allNavItems = [
 ];
 
 export function PortalLayout({ children }: { children: React.ReactNode }) {
-  const { signOut, profile, user } = useAuth();
+  const { signOut, profile } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const { officeName, officeLogo, settings, settingsLoading } = usePortal();
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [officeName, setOfficeName] = useState('');
-  const [officeLogo, setOfficeLogo] = useState<string | null>(null);
-  const { settings, loading: settingsLoading } = usePortalSettings();
-
-  useEffect(() => {
-    if (!user) return;
-    (async () => {
-      const { data: links } = await supabase.from('client_office_links').select('office_id').eq('user_id', user.id);
-      const oid = links?.[0]?.office_id;
-      if (!oid) return;
-      const { data: office } = await supabase.from('offices').select('name, logo_url, photo_url').eq('id', oid).single();
-      if (office?.name) setOfficeName(office.name);
-      setOfficeLogo(office?.logo_url || office?.photo_url || null);
-    })();
-  }, [user]);
 
   // Filter nav items based on settings
   const navItems = allNavItems.filter(

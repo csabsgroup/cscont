@@ -71,7 +71,11 @@ function PortalRoute({ children }: { children: React.ReactNode }) {
   if (!session) return <Navigate to="/auth" replace />;
   if (!isClient) return <Navigate to="/" replace />;
 
-  return <PortalLayout>{children}</PortalLayout>;
+  return (
+    <PortalProvider>
+      <PortalLayout>{children}</PortalLayout>
+    </PortalProvider>
+  );
 }
 
 const App = () => (

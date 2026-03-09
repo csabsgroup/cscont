@@ -277,8 +277,8 @@ export default function Jornada() {
           <Select value={filterCsm} onValueChange={v => setFilterCsm(v === 'all' ? '' : v)}>
             <SelectTrigger className="w-[160px]"><SelectValue placeholder="Responsável" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos CSMs</SelectItem>
-              {csmList.map(c => <SelectItem key={c.id} value={c.id}>{c.full_name || 'Sem nome'}</SelectItem>)}
+              <SelectItem value="all">Todos</SelectItem>
+              {csmList.map((c: any) => <SelectItem key={c.id} value={c.id}>{(c.full_name || 'Sem nome') + (c._role === 'manager' ? ' (Gestor)' : '')}</SelectItem>)}
             </SelectContent>
           </Select>
         )}
