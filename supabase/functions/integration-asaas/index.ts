@@ -70,9 +70,14 @@ Deno.serve(async (req) => {
 
         if (offices?.length) {
           const result = await asaasGet(`/payments?customer=${payment.customer}&status=OVERDUE`);
-          const totalOverdue = (result.data || []).reduce((s: number, p: any) => s + p.value, 0);
+          const overduePayments = result.data || [];
+          const overdueCount = overduePayments.length;
+          const overdueValue = overduePayments.reduce((s: number, p: any) => s + p.value, 0);
           for (const office of offices) {
-            await supabase.from("offices").update({ asaas_total_overdue: totalOverdue }).eq("id", office.id);
+            await supabase.from("offices").update({
+              installments_overdue: overdueCount,
+              total_overdue_value: overdueValue,
+            }).eq("id", office.id);
           }
         }
       }
