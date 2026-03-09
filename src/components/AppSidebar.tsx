@@ -34,8 +34,9 @@ import {
 } from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { useMemo } from 'react';
 
-const operationItems = [
+const allOperationItems = [
   { title: 'Minha Carteira', url: '/', icon: LayoutDashboard },
   { title: 'Jornada', url: '/jornada', icon: Kanban },
   { title: 'Formulários', url: '/formularios', icon: FileText },
@@ -53,6 +54,14 @@ export function AppSidebar() {
   const collapsed = state === 'collapsed';
   const location = useLocation();
   const { profile, role, signOut } = useAuth();
+
+  // Hide "Tarefas Internas" for clients
+  const operationItems = useMemo(() => {
+    if (role === 'client') {
+      return allOperationItems.filter(item => item.url !== '/tarefas-internas');
+    }
+    return allOperationItems;
+  }, [role]);
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/';
