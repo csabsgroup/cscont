@@ -713,6 +713,7 @@ export default function Configuracoes() {
       case 'importexport': return <ImportExportTab />;
       case 'portal': return <PortalSettingsTab />;
       case 'usuarios': return <UsersTab />;
+      case 'hierarquia': return <HierarchyTab />;
       case 'auditoria': return <div className="text-sm text-muted-foreground">Veja a trilha de auditoria na página dedicada.</div>;
       default: return null;
     }
