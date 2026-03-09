@@ -145,10 +145,10 @@ export function BulkDeleteDialog({ open, onOpenChange, entity }: Props) {
             <div className="space-y-2">
               <p className="text-sm font-medium">Filtros (opcional)</p>
               {entity.filters.map(f => (
-                <Select key={f.key} value={filters[f.key] || ''} onValueChange={v => handleFilterChange(f.key, v)}>
+                <Select key={f.key} value={filters[f.key] || '__all__'} onValueChange={v => handleFilterChange(f.key, v)}>
                   <SelectTrigger><SelectValue placeholder={f.label} /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Todos</SelectItem>
+                    <SelectItem value="__all__">Todos</SelectItem>
                     {f.options.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
