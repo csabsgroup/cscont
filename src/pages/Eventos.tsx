@@ -264,6 +264,8 @@ export default function Eventos() {
 
       {loading ? (
         <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+      ) : view === 'calendar' ? (
+        <EventCalendarView events={filtered} participantCounts={participantCounts} />
       ) : filtered.length === 0 ? (
         <Card><CardContent className="flex flex-col items-center justify-center py-12">
           <Calendar className="mb-3 h-10 w-10 text-muted-foreground/40" />
@@ -271,7 +273,6 @@ export default function Eventos() {
         </CardContent></Card>
       ) : (
         <div className="space-y-8">
-          {/* Upcoming */}
           {upcoming.length > 0 && (
             <div className="space-y-4">
               <h2 className="text-lg font-semibold">Próximos Eventos</h2>
@@ -288,8 +289,6 @@ export default function Eventos() {
               </div>
             </div>
           )}
-
-          {/* Past - collapsible */}
           {past.length > 0 && (
             <Collapsible open={pastOpen} onOpenChange={setPastOpen}>
               <CollapsibleTrigger asChild>
