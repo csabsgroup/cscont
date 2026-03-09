@@ -16,14 +16,18 @@ export default function PortalMembros() {
     if (!officeId) { setLoading(false); return; }
     (async () => {
       const { data: office } = await supabase.from('offices').select('active_product_id').eq('id', officeId).single();
-      if (!office?.active_product_id) { setLoading(false); return; }
 
-      const { data } = await supabase.from('offices')
+      let query = supabase.from('offices')
         .select('id, name, photo_url, phone, email, instagram, whatsapp, city, state')
-        .eq('active_product_id', office.active_product_id)
         .in('status', ['ativo'])
         .neq('id', officeId)
         .order('name');
+      
+      if (office?.active_product_id) {
+        query = query.eq('active_product_id', office.active_product_id);
+      }
+      
+      const { data } = await query;
       
       const offices = data || [];
       
