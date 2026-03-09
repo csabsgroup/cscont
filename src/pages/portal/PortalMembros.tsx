@@ -61,7 +61,7 @@ export default function PortalMembros() {
       // 2. Fetch directory offices (WITHOUT embed to avoid silent PostgREST failures)
       let query = supabase
         .from('offices')
-        .select('id, name, external_id, city, state, email, whatsapp, logo_url, photo_url')
+        .select('id, name, city, state, email, whatsapp, logo_url, photo_url')
         .eq('status', 'ativo')
         .eq('visible_in_directory', true)
         .neq('id', officeId)
