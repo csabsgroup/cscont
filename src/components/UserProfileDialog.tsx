@@ -26,6 +26,7 @@ const roleLabels: Record<string, string> = {
 export function UserProfileDialog({ open, onOpenChange }: Props) {
   const { user, profile, role, refreshProfile } = useAuth();
   const [fullName, setFullName] = useState(profile?.full_name || '');
+  const [whatsapp, setWhatsapp] = useState(profile?.whatsapp || '');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
@@ -77,7 +78,7 @@ export function UserProfileDialog({ open, onOpenChange }: Props) {
 
     const { error } = await supabase
       .from('profiles')
-      .update({ full_name: fullName, avatar_url: avatarUrl })
+      .update({ full_name: fullName, avatar_url: avatarUrl, whatsapp: whatsapp || null } as any)
       .eq('id', user.id);
 
     if (error) {
@@ -123,6 +124,18 @@ export function UserProfileDialog({ open, onOpenChange }: Props) {
           <div className="space-y-2">
             <Label>Nome completo</Label>
             <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
+          </div>
+
+          {/* WhatsApp */}
+          <div className="space-y-2">
+            <Label>WhatsApp</Label>
+            <Input
+              value={whatsapp}
+              onChange={(e) => setWhatsapp(e.target.value.replace(/\D/g, ''))}
+              placeholder="5511999999999"
+              maxLength={15}
+            />
+            <p className="text-xs text-muted-foreground">Número completo com DDD (ex: 11999999999). O sistema adiciona o 55.</p>
           </div>
 
           {/* Email (read-only) */}

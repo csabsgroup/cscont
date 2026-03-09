@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Package, Route, Heart, FileText, Zap, Gift, Users, Link2, Globe, ArrowUpDown, ShieldX, Calendar, MessageSquare, CreditCard, Workflow, BarChart3, Eye, Bot, ClipboardList, ScrollText, ChevronRight } from 'lucide-react';
+import { Package, Route, Heart, FileText, Zap, Gift, Users, Link2, Globe, ArrowUpDown, ShieldX, Calendar, MessageSquare, CreditCard, Workflow, BarChart3, Eye, Bot, ClipboardList, ScrollText, ChevronRight, GitBranch } from 'lucide-react';
 import { ImportExportTab } from '@/components/configuracoes/ImportExportTab';
 import { HealthScoreTab } from '@/components/configuracoes/HealthScoreTab';
 import { FormTemplatesTab } from '@/components/configuracoes/FormTemplatesTab';
@@ -24,6 +24,7 @@ import { FirefliesConfig } from '@/components/configuracoes/integrations/Firefli
 import { WhatsAppConfig } from '@/components/configuracoes/integrations/WhatsAppConfig';
 import { useIntegrationSettings } from '@/hooks/useIntegrationSettings';
 import { PlaybooksTab } from '@/components/configuracoes/PlaybooksTab';
+import { HierarchyTab } from '@/components/configuracoes/HierarchyTab';
 
 // ─── Inline sub-components (Products, Stages, Users) ─────────
 import { useEffect, useCallback } from 'react';
@@ -241,6 +242,7 @@ function UsersTab() {
   const [editName, setEditName] = useState('');
   const [editRole, setEditRole] = useState('');
   const [editProductId, setEditProductId] = useState('');
+  const [editWhatsapp, setEditWhatsapp] = useState('');
   const [editPassword, setEditPassword] = useState('');
   const [editPasswordConfirm, setEditPasswordConfirm] = useState('');
   const [saving, setSaving] = useState(false);
@@ -297,6 +299,7 @@ function UsersTab() {
     setEditName(u.full_name || '');
     setEditRole(u.role || 'csm');
     setEditProductId(u.product_id || '');
+    setEditWhatsapp(u.whatsapp || '');
     setEditPassword('');
     setEditPasswordConfirm('');
     setEditTab('dados');
@@ -307,7 +310,7 @@ function UsersTab() {
   const handleSaveProfile = async () => {
     setSaving(true);
     const { data, error } = await supabase.functions.invoke('admin-manage-user', {
-      body: { action: 'update_profile', user_id: editUser.id, full_name: editName, role: editRole, product_id: editProductId === 'none' ? null : editProductId || null },
+      body: { action: 'update_profile', user_id: editUser.id, full_name: editName, role: editRole, product_id: editProductId === 'none' ? null : editProductId || null, whatsapp: editWhatsapp || null },
     });
     if (error || data?.error) {
       toast.error(data?.error || error?.message || 'Erro ao atualizar');
@@ -508,6 +511,16 @@ function UsersTab() {
                   <p className="text-xs text-muted-foreground">Define de qual produto este CSM é responsável</p>
                 </div>
               )}
+              <div className="space-y-2">
+                <Label>WhatsApp</Label>
+                <Input
+                  value={editWhatsapp}
+                  onChange={e => setEditWhatsapp(e.target.value.replace(/\D/g, ''))}
+                  placeholder="11999999999"
+                  maxLength={15}
+                />
+                <p className="text-xs text-muted-foreground">Número com DDD. O sistema adiciona o 55 automaticamente.</p>
+              </div>
               <Button onClick={handleSaveProfile} disabled={saving} className="w-full">
                 {saving ? 'Salvando...' : 'Salvar Alterações'}
               </Button>
@@ -623,7 +636,8 @@ const SIDEBAR_SECTIONS: SidebarSection[] = [
   { key: 'bonus', label: 'Catálogo de Bônus', icon: Gift, category: 'Catálogo de Bônus', adminOnly: true },
   { key: 'importexport', label: 'Importar / Exportar', icon: ArrowUpDown, category: 'Importar / Exportar' },
   { key: 'portal', label: 'Portal do Cliente', icon: Globe, category: 'Portal do Cliente', managerVisible: true },
-  { key: 'usuarios', label: 'Usuários & Permissões', icon: Users, category: 'Usuários & Permissões', adminOnly: true },
+  { key: 'usuarios', label: 'Usuários', icon: Users, category: 'Usuários & Permissões', adminOnly: true },
+  { key: 'hierarquia', label: 'Hierarquia', icon: GitBranch, category: 'Usuários & Permissões', adminOnly: true },
   { key: 'auditoria', label: 'Trilha de Auditoria', icon: ScrollText, category: 'Trilha de Auditoria', adminOnly: true },
 ];
 
@@ -711,6 +725,7 @@ export default function Configuracoes() {
       case 'importexport': return <ImportExportTab />;
       case 'portal': return <PortalSettingsTab />;
       case 'usuarios': return <UsersTab />;
+      case 'hierarquia': return <HierarchyTab />;
       case 'auditoria': return <div className="text-sm text-muted-foreground">Veja a trilha de auditoria na página dedicada.</div>;
       default: return null;
     }
