@@ -2778,6 +2778,7 @@ export type Database = {
     }
     Functions: {
       get_client_office_ids: { Args: { _user_id: string }; Returns: string[] }
+      get_client_product_ids: { Args: { _user_id: string }; Returns: string[] }
       get_csm_office_ids: { Args: { _user_id: string }; Returns: string[] }
       get_manager_office_ids: { Args: { _user_id: string }; Returns: string[] }
       get_user_role: {
