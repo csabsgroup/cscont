@@ -30,6 +30,7 @@ interface Payment {
   isOverdue: boolean;
   isPending: boolean;
   isCancelled: boolean;
+  isDeleted: boolean;
   daysOverdue: number;
   statusLabel: string;
 }
