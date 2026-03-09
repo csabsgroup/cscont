@@ -130,6 +130,7 @@ function PillarsSection({ productId }: { productId: string }) {
   };
 
   const deleteInd = async (id: string) => {
+    if (!window.confirm('Tem certeza que deseja remover este indicador?')) return;
     await supabase.from('health_indicators').delete().eq('id', id);
     toast.success('Indicador removido!'); fetch();
   };
