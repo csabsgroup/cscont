@@ -222,7 +222,7 @@ export function ClienteBonus({ officeId }: { officeId: string }) {
               </TableHeader>
               <TableBody>
                 {requests.map(r => (
-                  <TableRow key={r.id} className={r.status === 'pending' ? 'bg-amber-50/50' : ''}>
+                  <TableRow key={r.id} className={r.status === 'pending' ? 'bg-amber-50/50 dark:bg-amber-900/20' : ''}>
                     <TableCell className="font-medium">{r.bonus_catalog?.name}</TableCell>
                     <TableCell>{r.quantity}</TableCell>
                     <TableCell><Badge variant={statusLabels[r.status]?.variant || 'secondary'}>{statusLabels[r.status]?.label || r.status}</Badge></TableCell>
