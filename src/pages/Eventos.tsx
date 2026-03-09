@@ -141,11 +141,28 @@ export default function Eventos() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold">Eventos</h1>
           <p className="text-sm text-muted-foreground">
             {upcoming.length} próximo{upcoming.length !== 1 ? 's' : ''} • {events.length} total
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          {role && ['admin', 'manager', 'viewer'].includes(role) && (
+            <Tabs value={view} onValueChange={v => setView(v as 'list' | 'calendar')}>
+              <TabsList className="h-9">
+                <TabsTrigger value="list" className="gap-1.5 px-3">
+                  <List className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Lista</span>
+                </TabsTrigger>
+                <TabsTrigger value="calendar" className="gap-1.5 px-3">
+                  <CalendarDays className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Calendário</span>
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          )}
           </p>
         </div>
         {!isViewer && (
