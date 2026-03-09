@@ -10,126 +10,287 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Plus, Loader2, Edit2, Trash2, CheckCircle2 } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Plus, Loader2, Edit2, Trash2, ChevronDown, ChevronRight, Target, CheckCircle2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
 interface Props { officeId: string; }
 
-const statusLabels: Record<string, string> = {
-  pending: 'Pendente',
-  in_progress: 'Em Andamento',
-  done: 'Concluído',
-  cancelled: 'Cancelado',
+const areaLabels: Record<string, string> = {
+  gestao_estrategica: 'Gestão Estratégica',
+  marketing: 'Marketing',
+  vendas: 'Vendas',
+  sucesso_cliente: 'Sucesso do Cliente',
+  gestao_pessoas: 'Gestão de Pessoas',
+  financeiro: 'Financeiro',
 };
 
-const statusColors: Record<string, string> = {
-  pending: 'bg-muted text-muted-foreground',
-  in_progress: 'bg-primary/10 text-primary',
-  done: 'bg-success/10 text-success',
-  cancelled: 'bg-destructive/10 text-destructive',
+const areaColors: Record<string, string> = {
+  gestao_estrategica: 'bg-primary/10 text-primary',
+  marketing: 'bg-purple-100 text-purple-700',
+  vendas: 'bg-blue-100 text-blue-700',
+  sucesso_cliente: 'bg-green-100 text-green-700',
+  gestao_pessoas: 'bg-orange-100 text-orange-700',
+  financeiro: 'bg-yellow-100 text-yellow-700',
 };
+
+const statusLabels: Record<string, string> = {
+  pending: 'Pendente', in_progress: 'Em Andamento', done: 'Concluído', cancelled: 'Cancelado',
+};
+
+const krTypeLabels: Record<string, string> = { meta: 'Meta', action: 'Ação' };
 
 export function ClienteOKR({ officeId }: Props) {
   const { session, isViewer } = useAuth();
-  const [plans, setPlans] = useState<any[]>([]);
+  const [objectives, setObjectives] = useState<any[]>([]);
+  const [krs, setKrs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [edit, setEdit] = useState<any>(null);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [dueDate, setDueDate] = useState('');
-  const [status, setStatus] = useState('pending');
-  const [observations, setObservations] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [openIds, setOpenIds] = useState<Set<string>>(new Set());
 
-  const fetchPlans = useCallback(async () => {
+  // Objective dialog
+  const [objDialogOpen, setObjDialogOpen] = useState(false);
+  const [editObj, setEditObj] = useState<any>(null);
+  const [objTitle, setObjTitle] = useState('');
+  const [objDesc, setObjDesc] = useState('');
+  const [objArea, setObjArea] = useState('gestao_estrategica');
+  const [objSaving, setObjSaving] = useState(false);
+
+  // KR dialog
+  const [krDialogOpen, setKrDialogOpen] = useState(false);
+  const [krObjectiveId, setKrObjectiveId] = useState('');
+  const [editKr, setEditKr] = useState<any>(null);
+  const [krTitle, setKrTitle] = useState('');
+  const [krType, setKrType] = useState('action');
+  const [krArea, setKrArea] = useState('gestao_estrategica');
+  const [krDueDate, setKrDueDate] = useState('');
+  const [krStatus, setKrStatus] = useState('pending');
+  const [krDesc, setKrDesc] = useState('');
+  const [krSaving, setKrSaving] = useState(false);
+
+  const fetchAll = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('action_plans').select('*').eq('office_id', officeId).order('created_at', { ascending: false });
-    setPlans(data || []);
+    const [oRes, kRes] = await Promise.all([
+      supabase.from('okr_objectives').select('*').eq('office_id', officeId).order('created_at'),
+      supabase.from('action_plans').select('*').eq('office_id', officeId).not('objective_id', 'is', null).order('created_at'),
+    ]);
+    setObjectives(oRes.data || []);
+    setKrs(kRes.data || []);
     setLoading(false);
   }, [officeId]);
 
-  useEffect(() => { fetchPlans(); }, [fetchPlans]);
+  useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  const openNew = () => { setEdit(null); setTitle(''); setDescription(''); setDueDate(''); setStatus('pending'); setObservations(''); setDialogOpen(true); };
-  const openEdit = (p: any) => { setEdit(p); setTitle(p.title); setDescription(p.description || ''); setDueDate(p.due_date || ''); setStatus(p.status); setObservations(p.observations || ''); setDialogOpen(true); };
+  const toggleOpen = (id: string) => {
+    setOpenIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
 
-  const save = async (e: React.FormEvent) => {
-    e.preventDefault(); setSaving(true);
-    const payload: any = { title, description: description || null, due_date: dueDate || null, status: status as any, observations: observations || null, office_id: officeId };
-    if (edit) {
-      await supabase.from('action_plans').update(payload).eq('id', edit.id);
-      toast.success('Tarefa atualizada!');
+  // Objective CRUD
+  const openNewObj = () => { setEditObj(null); setObjTitle(''); setObjDesc(''); setObjArea('gestao_estrategica'); setObjDialogOpen(true); };
+  const openEditObj = (o: any) => { setEditObj(o); setObjTitle(o.title); setObjDesc(o.description || ''); setObjArea(o.area); setObjDialogOpen(true); };
+
+  const saveObj = async (e: React.FormEvent) => {
+    e.preventDefault(); setObjSaving(true);
+    const payload: any = { title: objTitle, description: objDesc || null, area: objArea, office_id: officeId };
+    if (editObj) {
+      await supabase.from('okr_objectives').update(payload).eq('id', editObj.id);
+      toast.success('Objetivo atualizado!');
+    } else {
+      payload.created_by = session?.user?.id;
+      await supabase.from('okr_objectives').insert(payload);
+      toast.success('Objetivo criado!');
+    }
+    setObjSaving(false); setObjDialogOpen(false); fetchAll();
+  };
+
+  const removeObj = async (id: string) => {
+    await supabase.from('okr_objectives').delete().eq('id', id);
+    toast.success('Objetivo removido!'); fetchAll();
+  };
+
+  // KR CRUD
+  const openNewKr = (objectiveId: string, area: string) => {
+    setEditKr(null); setKrObjectiveId(objectiveId); setKrTitle(''); setKrType('action');
+    setKrArea(area); setKrDueDate(''); setKrStatus('pending'); setKrDesc(''); setKrDialogOpen(true);
+  };
+  const openEditKr = (kr: any) => {
+    setEditKr(kr); setKrObjectiveId(kr.objective_id); setKrTitle(kr.title); setKrType(kr.kr_type || 'action');
+    setKrArea(kr.area || 'gestao_estrategica'); setKrDueDate(kr.due_date || ''); setKrStatus(kr.status); setKrDesc(kr.description || ''); setKrDialogOpen(true);
+  };
+
+  const saveKr = async (e: React.FormEvent) => {
+    e.preventDefault(); setKrSaving(true);
+    const payload: any = {
+      title: krTitle, description: krDesc || null, due_date: krDueDate || null,
+      status: krStatus as any, kr_type: krType, area: krArea,
+      objective_id: krObjectiveId, office_id: officeId,
+    };
+    if (editKr) {
+      await supabase.from('action_plans').update(payload).eq('id', editKr.id);
+      toast.success('KR atualizada!');
     } else {
       payload.created_by = session?.user?.id;
       await supabase.from('action_plans').insert(payload);
-      toast.success('Tarefa criada!');
+      toast.success('KR criada!');
     }
-    setSaving(false); setDialogOpen(false); fetchPlans();
+    setKrSaving(false); setKrDialogOpen(false); fetchAll();
   };
 
-  const remove = async (id: string) => {
+  const removeKr = async (id: string) => {
     await supabase.from('action_plans').delete().eq('id', id);
-    toast.success('Removido!'); fetchPlans();
+    toast.success('KR removida!'); fetchAll();
   };
 
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>;
 
-  const doneCount = plans.filter(p => p.status === 'done').length;
-  const progress = plans.length > 0 ? Math.round((doneCount / plans.length) * 100) : 0;
+  const getProgress = (objectiveId: string) => {
+    const objKrs = krs.filter(k => k.objective_id === objectiveId);
+    if (objKrs.length === 0) return 0;
+    const done = objKrs.filter(k => k.status === 'done').length;
+    return Math.round((done / objKrs.length) * 100);
+  };
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <p className="text-sm text-muted-foreground">{plans.length} tarefa(s)</p>
-          <div className="flex items-center gap-2 min-w-[200px]">
-            <Progress value={progress} className="h-2" />
-            <span className="text-sm font-medium">{progress}%</span>
-          </div>
-        </div>
-        {!isViewer && <Button size="sm" onClick={openNew}><Plus className="mr-1 h-4 w-4" />Nova Tarefa</Button>}
+        <p className="text-sm text-muted-foreground">{objectives.length} objetivo(s)</p>
+        {!isViewer && <Button size="sm" onClick={openNewObj}><Plus className="mr-1 h-4 w-4" />Novo Objetivo</Button>}
       </div>
 
-      {plans.length === 0 ? (
-        <div className="text-center py-12 text-sm text-muted-foreground">Nenhuma tarefa no Plano de Ação.</div>
+      {objectives.length === 0 ? (
+        <div className="text-center py-12 text-sm text-muted-foreground">Nenhum objetivo no OKR.</div>
       ) : (
-        <div className="space-y-2">
-          {plans.map(p => (
-            <Card key={p.id} className="p-4 flex items-start gap-3">
-              <CheckCircle2 className={`h-5 w-5 mt-0.5 flex-shrink-0 ${p.status === 'done' ? 'text-success' : 'text-muted-foreground/40'}`} />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className={`text-sm font-medium ${p.status === 'done' ? 'line-through text-muted-foreground' : ''}`}>{p.title}</span>
-                  <Badge variant="outline" className={`text-xs ${statusColors[p.status] || ''}`}>{statusLabels[p.status]}</Badge>
-                </div>
-                {p.description && <p className="text-xs text-muted-foreground mt-0.5">{p.description}</p>}
-                {p.due_date && <p className="text-xs text-muted-foreground mt-0.5">Vencimento: {format(new Date(p.due_date), 'dd/MM/yyyy')}</p>}
-                {p.observations && <p className="text-xs text-muted-foreground mt-1 italic">"{p.observations}"</p>}
-              </div>
-              {!isViewer && (
-                <div className="flex gap-1">
-                  <Button size="sm" variant="ghost" onClick={() => openEdit(p)}><Edit2 className="h-4 w-4" /></Button>
-                  <Button size="sm" variant="ghost" onClick={() => remove(p.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                </div>
-              )}
-            </Card>
-          ))}
+        <div className="space-y-3">
+          {objectives.map(obj => {
+            const progress = getProgress(obj.id);
+            const objKrs = krs.filter(k => k.objective_id === obj.id);
+            const isOpen = openIds.has(obj.id);
+            return (
+              <Card key={obj.id} className="overflow-hidden">
+                <Collapsible open={isOpen} onOpenChange={() => toggleOpen(obj.id)}>
+                  <CollapsibleTrigger asChild>
+                    <div className="p-4 cursor-pointer hover:bg-muted/30 transition-colors">
+                      <div className="flex items-start gap-3">
+                        {isOpen ? <ChevronDown className="h-5 w-5 mt-0.5 text-muted-foreground" /> : <ChevronRight className="h-5 w-5 mt-0.5 text-muted-foreground" />}
+                        <Target className="h-5 w-5 mt-0.5 text-primary flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium text-sm">{obj.title}</span>
+                            <Badge variant="outline" className={`text-xs ${areaColors[obj.area] || ''}`}>{areaLabels[obj.area] || obj.area}</Badge>
+                          </div>
+                          {obj.description && <p className="text-xs text-muted-foreground mt-0.5">{obj.description}</p>}
+                          <div className="flex items-center gap-2 mt-2">
+                            <Progress value={progress} className="h-2 flex-1" />
+                            <span className="text-xs font-medium text-muted-foreground">{progress}%</span>
+                            <span className="text-xs text-muted-foreground">({objKrs.length} KR{objKrs.length !== 1 ? 's' : ''})</span>
+                          </div>
+                        </div>
+                        {!isViewer && (
+                          <div className="flex gap-1" onClick={e => e.stopPropagation()}>
+                            <Button size="sm" variant="ghost" onClick={() => openEditObj(obj)}><Edit2 className="h-4 w-4" /></Button>
+                            <Button size="sm" variant="ghost" onClick={() => removeObj(obj.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="border-t px-4 pb-4 pt-2 space-y-2">
+                      {objKrs.length === 0 && <p className="text-xs text-muted-foreground py-2">Nenhuma KR adicionada.</p>}
+                      {objKrs.map(kr => (
+                        <div key={kr.id} className="flex items-start gap-3 p-2 rounded-md hover:bg-muted/20">
+                          <CheckCircle2 className={`h-4 w-4 mt-0.5 flex-shrink-0 ${kr.status === 'done' ? 'text-green-600' : 'text-muted-foreground/40'}`} />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`text-sm ${kr.status === 'done' ? 'line-through text-muted-foreground' : ''}`}>{kr.title}</span>
+                              <Badge variant="outline" className="text-xs">{krTypeLabels[kr.kr_type] || 'Ação'}</Badge>
+                              <Badge variant="outline" className={`text-xs ${areaColors[kr.area] || ''}`}>{areaLabels[kr.area] || kr.area}</Badge>
+                              <Badge variant="secondary" className="text-xs">{statusLabels[kr.status]}</Badge>
+                            </div>
+                            {kr.description && <p className="text-xs text-muted-foreground mt-0.5">{kr.description}</p>}
+                            {kr.due_date && <p className="text-xs text-muted-foreground mt-0.5">Prazo: {format(new Date(kr.due_date), 'dd/MM/yyyy')}</p>}
+                            {kr.observations && <p className="text-xs text-muted-foreground mt-1 italic">"{kr.observations}"</p>}
+                          </div>
+                          {!isViewer && (
+                            <div className="flex gap-1">
+                              <Button size="sm" variant="ghost" onClick={() => openEditKr(kr)}><Edit2 className="h-3 w-3" /></Button>
+                              <Button size="sm" variant="ghost" onClick={() => removeKr(kr.id)}><Trash2 className="h-3 w-3 text-destructive" /></Button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      {!isViewer && (
+                        <Button size="sm" variant="outline" className="mt-2" onClick={() => openNewKr(obj.id, obj.area)}>
+                          <Plus className="mr-1 h-3 w-3" />Nova KR
+                        </Button>
+                      )}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              </Card>
+            );
+          })}
         </div>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      {/* Objective Dialog */}
+      <Dialog open={objDialogOpen} onOpenChange={setObjDialogOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>{edit ? 'Editar Tarefa' : 'Nova Tarefa'}</DialogTitle></DialogHeader>
-          <form onSubmit={save} className="space-y-4">
-            <div className="space-y-2"><Label>Título *</Label><Input value={title} onChange={e => setTitle(e.target.value)} required /></div>
-            <div className="space-y-2"><Label>Descrição</Label><Textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} /></div>
+          <DialogHeader><DialogTitle>{editObj ? 'Editar Objetivo' : 'Novo Objetivo'}</DialogTitle></DialogHeader>
+          <form onSubmit={saveObj} className="space-y-4">
+            <div className="space-y-2"><Label>Título *</Label><Input value={objTitle} onChange={e => setObjTitle(e.target.value)} required /></div>
+            <div className="space-y-2"><Label>Descrição</Label><Textarea value={objDesc} onChange={e => setObjDesc(e.target.value)} rows={2} /></div>
+            <div className="space-y-2">
+              <Label>Área *</Label>
+              <Select value={objArea} onValueChange={setObjArea}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(areaLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button type="submit" className="w-full" disabled={objSaving}>{objSaving ? 'Salvando...' : 'Salvar'}</Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* KR Dialog */}
+      <Dialog open={krDialogOpen} onOpenChange={setKrDialogOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{editKr ? 'Editar KR' : 'Nova KR'}</DialogTitle></DialogHeader>
+          <form onSubmit={saveKr} className="space-y-4">
+            <div className="space-y-2"><Label>Título *</Label><Input value={krTitle} onChange={e => setKrTitle(e.target.value)} required /></div>
+            <div className="space-y-2"><Label>Descrição</Label><Textarea value={krDesc} onChange={e => setKrDesc(e.target.value)} rows={2} /></div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Vencimento</Label><Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} /></div>
+              <div className="space-y-2">
+                <Label>Tipo *</Label>
+                <Select value={krType} onValueChange={setKrType}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="meta">Meta</SelectItem>
+                    <SelectItem value="action">Ação</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Área</Label>
+                <Select value={krArea} onValueChange={setKrArea}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(areaLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2"><Label>Prazo</Label><Input type="date" value={krDueDate} onChange={e => setKrDueDate(e.target.value)} /></div>
               <div className="space-y-2">
                 <Label>Status</Label>
-                <Select value={status} onValueChange={setStatus}>
+                <Select value={krStatus} onValueChange={setKrStatus}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {Object.entries(statusLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
@@ -137,8 +298,7 @@ export function ClienteOKR({ officeId }: Props) {
                 </Select>
               </div>
             </div>
-            <div className="space-y-2"><Label>Observações</Label><Textarea value={observations} onChange={e => setObservations(e.target.value)} rows={2} /></div>
-            <Button type="submit" className="w-full" disabled={saving}>{saving ? 'Salvando...' : 'Salvar'}</Button>
+            <Button type="submit" className="w-full" disabled={krSaving}>{krSaving ? 'Salvando...' : 'Salvar'}</Button>
           </form>
         </DialogContent>
       </Dialog>

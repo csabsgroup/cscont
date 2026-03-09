@@ -5,14 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Plus, Loader2, Gift, CheckCircle2, XCircle } from 'lucide-react';
 import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 
 const statusLabels: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' }> = {
@@ -20,6 +19,43 @@ const statusLabels: Record<string, { label: string; variant: 'default' | 'second
   approved: { label: 'Aprovado', variant: 'default' },
   denied: { label: 'Negado', variant: 'destructive' },
 };
+
+interface GroupedGrant {
+  catalogItemId: string;
+  name: string;
+  unit: string;
+  totalQuantity: number;
+  totalUsed: number;
+  totalAvailable: number;
+  nearestExpiry: string | null;
+}
+
+function groupGrants(grants: any[]): GroupedGrant[] {
+  const map = new Map<string, GroupedGrant>();
+  for (const g of grants) {
+    const key = g.catalog_item_id;
+    const existing = map.get(key);
+    if (existing) {
+      existing.totalQuantity += Number(g.quantity);
+      existing.totalUsed += Number(g.used);
+      existing.totalAvailable += Number(g.available);
+      if (g.expires_at && (!existing.nearestExpiry || g.expires_at < existing.nearestExpiry)) {
+        existing.nearestExpiry = g.expires_at;
+      }
+    } else {
+      map.set(key, {
+        catalogItemId: key,
+        name: g.bonus_catalog?.name || 'Item',
+        unit: g.bonus_catalog?.unit || 'unidade',
+        totalQuantity: Number(g.quantity),
+        totalUsed: Number(g.used),
+        totalAvailable: Number(g.available),
+        nearestExpiry: g.expires_at || null,
+      });
+    }
+  }
+  return Array.from(map.values());
+}
 
 export function ClienteBonus({ officeId }: { officeId: string }) {
   const { session, isViewer } = useAuth();
@@ -34,13 +70,11 @@ export function ClienteBonus({ officeId }: { officeId: string }) {
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
-    console.log('[BONUS] Fetching catalog for office:', officeId);
     const [gRes, rRes, cRes] = await Promise.all([
       supabase.from('bonus_grants').select('*, bonus_catalog(name, unit)').eq('office_id', officeId).order('granted_at', { ascending: false }),
       supabase.from('bonus_requests').select('*, bonus_catalog(name, unit)').eq('office_id', officeId).order('created_at', { ascending: false }),
       supabase.from('bonus_catalog').select('*').order('name'),
     ]);
-    console.log('[BONUS] Catalog items found:', cRes.data?.length, cRes.data, cRes.error);
     setGrants(gRes.data || []);
     setRequests(rRes.data || []);
     setCatalog(cRes.data || []);
@@ -55,18 +89,13 @@ export function ClienteBonus({ officeId }: { officeId: string }) {
     const expiresAt = catalogItem?.default_validity_days
       ? new Date(Date.now() + catalogItem.default_validity_days * 86400000).toISOString()
       : null;
-
     const { error } = await supabase.from('bonus_grants').insert({
-      office_id: officeId,
-      catalog_item_id: selectedCatalogId,
-      quantity: parseFloat(quantity),
-      available: parseFloat(quantity),
-      expires_at: expiresAt,
+      office_id: officeId, catalog_item_id: selectedCatalogId,
+      quantity: parseFloat(quantity), available: parseFloat(quantity), expires_at: expiresAt,
     });
     if (error) toast.error('Erro: ' + error.message);
     else {
       toast.success('Bônus concedido!');
-      // Trigger automations
       try {
         await supabase.functions.invoke('execute-automations', {
           body: { action: 'triggerV2', trigger_type: 'bonus.requested', office_id: officeId, context: { suffix: `bonus_${Date.now()}` } },
@@ -79,8 +108,7 @@ export function ClienteBonus({ officeId }: { officeId: string }) {
 
   const handleRequestAction = async (requestId: string, status: 'approved' | 'denied') => {
     const { error } = await supabase.from('bonus_requests').update({
-      status: status as any,
-      reviewed_by: session?.user?.id,
+      status: status as any, reviewed_by: session?.user?.id,
     }).eq('id', requestId);
     if (error) toast.error('Erro: ' + error.message);
     else { toast.success(status === 'approved' ? 'Aprovado!' : 'Negado!'); fetchAll(); }
@@ -88,49 +116,62 @@ export function ClienteBonus({ officeId }: { officeId: string }) {
 
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>;
 
-  const totalAvailable = grants.reduce((sum, g) => sum + Number(g.available), 0);
+  const grouped = groupGrants(grants);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Gift className="h-5 w-5 text-primary" />
-          <div>
-            <h3 className="font-semibold">Bônus/Cashback</h3>
-            <p className="text-sm text-muted-foreground">Saldo disponível: {totalAvailable}</p>
-          </div>
+          <h3 className="font-semibold">Bônus/Cashback</h3>
         </div>
         {!isViewer && (
           <Button size="sm" onClick={() => setGrantDialogOpen(true)}><Plus className="mr-1 h-4 w-4" />Conceder Bônus</Button>
         )}
       </div>
 
-      {/* Grants */}
+      {/* Cards agrupados por tipo */}
       <Card>
         <CardHeader><CardTitle className="text-base">Bônus Concedidos</CardTitle></CardHeader>
         <CardContent>
-          {grants.length === 0 ? (
+          {grouped.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-4">Nenhum bônus concedido.</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Item</TableHead><TableHead>Qtd</TableHead><TableHead>Usado</TableHead>
-                  <TableHead>Disponível</TableHead><TableHead>Expira</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {grants.map(g => (
-                  <TableRow key={g.id}>
-                    <TableCell className="font-medium">{g.bonus_catalog?.name}</TableCell>
-                    <TableCell>{g.quantity} {g.bonus_catalog?.unit}</TableCell>
-                    <TableCell>{g.used}</TableCell>
-                    <TableCell className="font-medium">{g.available}</TableCell>
-                    <TableCell className="text-muted-foreground">{g.expires_at ? format(new Date(g.expires_at), 'dd/MM/yyyy') : '—'}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {grouped.map(g => {
+                const usedPercent = g.totalQuantity > 0 ? Math.round((g.totalUsed / g.totalQuantity) * 100) : 0;
+                return (
+                  <div key={g.catalogItemId} className="rounded-lg border border-border/60 p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Gift className="h-4 w-4 text-primary" />
+                      <span className="font-medium text-sm">{g.name}</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-center mb-3">
+                      <div>
+                        <p className="text-lg font-bold text-foreground">{g.totalQuantity}</p>
+                        <p className="text-xs text-muted-foreground">Ganho</p>
+                      </div>
+                      <div>
+                        <p className="text-lg font-bold text-primary">{g.totalUsed}</p>
+                        <p className="text-xs text-muted-foreground">Utilizado</p>
+                      </div>
+                      <div>
+                        <p className="text-lg font-bold text-green-600">{g.totalAvailable}</p>
+                        <p className="text-xs text-muted-foreground">Restante</p>
+                      </div>
+                    </div>
+                    <Progress value={usedPercent} className="h-2 mb-1" />
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>{usedPercent}% utilizado</span>
+                      <span>{g.unit}</span>
+                    </div>
+                    {g.nearestExpiry && (
+                      <p className="text-xs text-muted-foreground mt-2">Expira: {format(new Date(g.nearestExpiry), 'dd/MM/yyyy')}</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </CardContent>
       </Card>
@@ -151,8 +192,8 @@ export function ClienteBonus({ officeId }: { officeId: string }) {
               </TableHeader>
               <TableBody>
                 {requests.map(r => (
-                   <TableRow key={r.id} className={r.status === 'pending' ? 'bg-amber-50/50' : ''}>
-                     <TableCell className="font-medium">{r.bonus_catalog?.name}</TableCell>
+                  <TableRow key={r.id} className={r.status === 'pending' ? 'bg-amber-50/50' : ''}>
+                    <TableCell className="font-medium">{r.bonus_catalog?.name}</TableCell>
                     <TableCell>{r.quantity}</TableCell>
                     <TableCell><Badge variant={statusLabels[r.status]?.variant || 'secondary'}>{statusLabels[r.status]?.label || r.status}</Badge></TableCell>
                     <TableCell className="text-muted-foreground">{format(new Date(r.created_at), 'dd/MM/yyyy')}</TableCell>
