@@ -15,8 +15,8 @@ export default function Financeiro() {
   useEffect(() => {
     (async () => {
       const [c, o] = await Promise.all([
-        supabase.from('contracts').select('*, offices(name), products:product_id(name)'),
-        supabase.from('offices').select('id, name, asaas_total_overdue'),
+        supabase.from('contracts').select('*, offices(name, installments_overdue, total_overdue_value), products:product_id(name)'),
+        supabase.from('offices').select('id, name, installments_overdue, total_overdue_value'),
       ]);
       setContracts(c.data || []);
       setOffices(o.data || []);
@@ -26,9 +26,11 @@ export default function Financeiro() {
 
   const activeContracts = contracts.filter(c => c.status === 'ativo');
   const mrr = activeContracts.reduce((s, c) => s + (c.monthly_value || 0), 0);
-  const totalOverdue = activeContracts.reduce((s, c) => s + (c.installments_overdue || 0), 0);
-  const overdueValue = offices.reduce((s, o) => s + (o.asaas_total_overdue || 0), 0);
-  const overdueContracts = activeContracts.filter(c => (c.installments_overdue || 0) > 0);
+  // Inadimplência total vem das offices (sincronizado do Asaas)
+  const totalOverdue = offices.reduce((s, o) => s + (o.installments_overdue || 0), 0);
+  const overdueValue = offices.reduce((s, o) => s + (o.total_overdue_value || 0), 0);
+  // Escritórios com inadimplência
+  const overdueOffices = offices.filter(o => (o.installments_overdue || 0) > 0);
 
   if (loading) {
     return (
