@@ -98,7 +98,6 @@ export function ClienteContratos({ officeId, contracts, onRefresh }: Props) {
       end_date: form.end_date || null,
       renewal_date: form.renewal_date || null,
       installments_total: form.installments_total ? Number(form.installments_total) : null,
-      installments_overdue: form.installments_overdue ? Number(form.installments_overdue) : null,
       asaas_link: form.asaas_link || null,
       negotiation_notes: form.negotiation_notes || null,
     };
