@@ -40,9 +40,10 @@ Deno.serve(async (req) => {
 
     const { data: isAdmin } = await anonClient.rpc("has_role", { _user_id: callerId, _role: "admin" });
     const { data: isManager } = await anonClient.rpc("has_role", { _user_id: callerId, _role: "manager" });
+    const { data: isCSM } = await anonClient.rpc("has_role", { _user_id: callerId, _role: "csm" });
 
-    if (!isAdmin && !isManager) {
-      return new Response(JSON.stringify({ error: "Forbidden: admin or manager required" }), {
+    if (!isAdmin && !isManager && !isCSM) {
+      return new Response(JSON.stringify({ error: "Forbidden: admin, manager or csm required" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
