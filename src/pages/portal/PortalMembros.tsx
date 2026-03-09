@@ -19,7 +19,6 @@ interface MemberContact {
 interface Member {
   id: string;
   name: string;
-  external_id: string | null;
   city: string | null;
   state: string | null;
   email: string | null;
