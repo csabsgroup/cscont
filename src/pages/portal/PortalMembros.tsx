@@ -5,49 +5,65 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Loader2, Users, MapPin, Phone, Mail, Instagram, Search, MessageCircle } from 'lucide-react';
 import { UserAvatar } from '@/components/shared/UserAvatar';
+import { PaginationWithPageSize } from '@/components/shared/PaginationWithPageSize';
+
+interface MemberContact {
+  name: string;
+  email: string | null;
+  phone: string | null;
+  instagram: string | null;
+  role_title: string | null;
+}
+
+interface Member {
+  id: string;
+  name: string;
+  external_id: string | null;
+  city: string | null;
+  state: string | null;
+  email: string | null;
+  whatsapp: string | null;
+  logo_url: string | null;
+  photo_url: string | null;
+  contacts: MemberContact[];
+}
 
 export default function PortalMembros() {
   const { officeId } = usePortal();
-  const [members, setMembers] = useState<any[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
 
   useEffect(() => {
     if (!officeId) { setLoading(false); return; }
     (async () => {
-      const { data: office } = await supabase.from('offices').select('active_product_id').eq('id', officeId).single();
+      // Get current office's product
+      const { data: office } = await supabase
+        .from('offices')
+        .select('active_product_id')
+        .eq('id', officeId)
+        .single();
 
-      let query = supabase.from('offices')
-        .select('id, name, photo_url, phone, email, instagram, whatsapp, city, state')
-        .in('status', ['ativo'])
+      let query = supabase
+        .from('offices')
+        .select(`
+          id, name, external_id, city, state, email, whatsapp,
+          logo_url, photo_url,
+          contacts!contacts_office_id_fkey(name, email, phone, instagram, role_title)
+        `)
+        .eq('status', 'ativo')
+        .eq('visible_in_directory', true)
         .neq('id', officeId)
         .order('name');
-      
+
       if (office?.active_product_id) {
         query = query.eq('active_product_id', office.active_product_id);
       }
-      
+
       const { data } = await query;
-      
-      const offices = data || [];
-      
-      // Fetch main contacts for all offices
-      if (offices.length > 0) {
-        const officeIds = offices.map(o => o.id);
-        const { data: contacts } = await supabase.from('contacts')
-          .select('office_id, name')
-          .in('office_id', officeIds)
-          .eq('is_main_contact', true);
-        
-        const contactMap = new Map<string, string>();
-        (contacts || []).forEach(c => contactMap.set(c.office_id, c.name));
-        
-        offices.forEach(o => {
-          (o as any).main_contact_name = contactMap.get(o.id) || null;
-        });
-      }
-      
-      setMembers(offices);
+      setMembers((data as any[]) || []);
       setLoading(false);
     })();
   }, [officeId]);
@@ -59,55 +75,99 @@ export default function PortalMembros() {
     m.name?.toLowerCase().includes(q) || m.city?.toLowerCase().includes(q)
   );
 
+  // Pagination
+  const startIdx = (page - 1) * pageSize;
+  const paginated = filtered.slice(startIdx, startIdx + pageSize);
+
+  // Reset page on search change
+  const handleSearch = (val: string) => {
+    setSearch(val);
+    setPage(1);
+  };
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Membros Ativos</h1>
-        <p className="text-sm text-muted-foreground">{members.length} membro{members.length !== 1 ? 's' : ''} do seu produto</p>
+        <p className="text-sm text-muted-foreground">{filtered.length} membro{filtered.length !== 1 ? 's' : ''} do seu produto</p>
       </div>
 
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input placeholder="Buscar por nome ou cidade..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+        <Input placeholder="Buscar por nome ou cidade..." value={search} onChange={e => handleSearch(e.target.value)} className="pl-9" />
       </div>
 
       {filtered.length === 0 ? (
         <Card><CardContent className="flex flex-col items-center py-8"><Users className="h-8 w-8 text-muted-foreground/40 mb-2" /><p className="text-sm text-muted-foreground">Nenhum membro encontrado.</p></CardContent></Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map(m => (
-            <Card key={m.id}>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3 mb-3">
-                  <UserAvatar name={m.name} avatarUrl={m.photo_url} size="md" />
-                  <div>
-                    <p className="font-medium text-sm">{m.name}</p>
-                    {(m as any).main_contact_name && (
-                      <p className="text-xs text-muted-foreground">Contato: {(m as any).main_contact_name}</p>
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {paginated.map(m => {
+              const mainContact = m.contacts?.[0];
+              const logo = m.logo_url || m.photo_url;
+              return (
+                <Card key={m.id}>
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3 mb-3">
+                      <UserAvatar name={m.name} avatarUrl={logo} size="md" />
+                      <div className="min-w-0">
+                        <p className="font-medium text-sm truncate">{m.name}</p>
+                        {m.external_id && (
+                          <p className="text-xs text-muted-foreground">{m.external_id}</p>
+                        )}
+                        {(m.city || m.state) && (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1">
+                            <MapPin className="h-3 w-3 shrink-0" />
+                            {[m.city, m.state].filter(Boolean).join(', ')}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {mainContact && (
+                      <div className="border-t border-border/50 pt-2 mt-2 space-y-1 text-sm text-muted-foreground">
+                        <p className="flex items-center gap-1 text-foreground font-medium text-xs">
+                          👤 {mainContact.name}
+                          {mainContact.role_title && (
+                            <span className="text-muted-foreground font-normal">({mainContact.role_title})</span>
+                          )}
+                        </p>
+                        {mainContact.email && (
+                          <p className="flex items-center gap-1 text-xs"><Mail className="h-3 w-3" />{mainContact.email}</p>
+                        )}
+                        {mainContact.phone && (
+                          <p className="flex items-center gap-1 text-xs"><Phone className="h-3 w-3" />{mainContact.phone}</p>
+                        )}
+                        {mainContact.instagram && (
+                          <a href={`https://instagram.com/${mainContact.instagram.replace('@', '')}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs hover:underline">
+                            <Instagram className="h-3 w-3" />{mainContact.instagram}
+                          </a>
+                        )}
+                      </div>
                     )}
-                    {(m.city || m.state) && (
-                      <p className="text-xs text-muted-foreground flex items-center gap-1"><MapPin className="h-3 w-3" />{[m.city, m.state].filter(Boolean).join(', ')}</p>
+
+                    {m.whatsapp && (
+                      <div className={`${mainContact ? 'mt-1' : 'mt-2 border-t border-border/50 pt-2'}`}>
+                        <a href={`https://wa.me/${m.whatsapp.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-green-600 hover:underline">
+                          <MessageCircle className="h-3 w-3" />{m.whatsapp}
+                        </a>
+                      </div>
                     )}
-                  </div>
-                </div>
-                <div className="space-y-1 text-sm text-muted-foreground">
-                  {m.phone && <p className="flex items-center gap-1"><Phone className="h-3 w-3" />{m.phone}</p>}
-                  {m.email && <p className="flex items-center gap-1"><Mail className="h-3 w-3" />{m.email}</p>}
-                  {m.whatsapp && (
-                    <a href={`https://wa.me/${m.whatsapp.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-green-600 hover:underline">
-                      <MessageCircle className="h-3 w-3" />{m.whatsapp}
-                    </a>
-                  )}
-                  {m.instagram && (
-                    <a href={`https://instagram.com/${m.instagram.replace('@', '')}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 hover:underline">
-                      <Instagram className="h-3 w-3" />{m.instagram}
-                    </a>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+
+          <PaginationWithPageSize
+            totalItems={filtered.length}
+            currentPage={page}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            itemLabel="membros"
+          />
+        </>
       )}
     </div>
   );

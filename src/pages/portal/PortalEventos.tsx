@@ -8,6 +8,7 @@ import { Loader2, Calendar, List, Grid3x3 } from 'lucide-react';
 import { format, isFuture, isPast } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { PortalCalendar } from '@/components/portal/PortalCalendar';
+import { PaginationWithPageSize } from '@/components/shared/PaginationWithPageSize';
 
 export default function PortalEventos() {
   const { officeId } = usePortal();
@@ -16,6 +17,8 @@ export default function PortalEventos() {
   const [participation, setParticipation] = useState<Record<string, { confirmed: boolean }>>({});
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'lista' | 'calendario'>('lista');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   useEffect(() => {
     if (!officeId) { setLoading(false); return; }
@@ -50,6 +53,10 @@ export default function PortalEventos() {
 
   const upcoming = events.filter(e => isFuture(new Date(e.event_date)));
   const past = events.filter(e => isPast(new Date(e.event_date)));
+  const allListEvents = [...upcoming, ...past];
+
+  const startIdx = (page - 1) * pageSize;
+  const paginatedEvents = allListEvents.slice(startIdx, startIdx + pageSize);
 
   const calendarItems = [
     ...events.map(ev => ({
@@ -100,33 +107,34 @@ export default function PortalEventos() {
         <PortalCalendar events={calendarItems} />
       ) : (
         <>
-          {events.length === 0 && meetings.length === 0 ? (
+          {allListEvents.length === 0 ? (
             <Card><CardContent className="flex flex-col items-center py-8">
               <Calendar className="h-8 w-8 text-muted-foreground/40 mb-2" />
               <p className="text-sm text-muted-foreground">Nenhum evento disponível.</p>
             </CardContent></Card>
           ) : (
             <>
-              {upcoming.length > 0 && (
-                <div>
-                  <h2 className="text-lg font-semibold mb-3">Próximos</h2>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    {upcoming.map(ev => (
-                      <EventCard key={ev.id} event={ev} upcoming participationBadge={getParticipationBadge(ev.id, false)} />
-                    ))}
-                  </div>
-                </div>
-              )}
-              {past.length > 0 && (
-                <div>
-                  <h2 className="text-lg font-semibold mb-3 text-muted-foreground">Anteriores</h2>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    {past.map(ev => (
-                      <EventCard key={ev.id} event={ev} participationBadge={getParticipationBadge(ev.id, true)} />
-                    ))}
-                  </div>
-                </div>
-              )}
+              <div className="grid gap-4 sm:grid-cols-2">
+                {paginatedEvents.map(ev => {
+                  const isUpcoming = isFuture(new Date(ev.event_date));
+                  return (
+                    <EventCard
+                      key={ev.id}
+                      event={ev}
+                      upcoming={isUpcoming}
+                      participationBadge={getParticipationBadge(ev.id, !isUpcoming)}
+                    />
+                  );
+                })}
+              </div>
+              <PaginationWithPageSize
+                totalItems={allListEvents.length}
+                currentPage={page}
+                pageSize={pageSize}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                itemLabel="eventos"
+              />
             </>
           )}
         </>
