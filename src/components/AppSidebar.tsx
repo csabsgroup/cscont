@@ -1,6 +1,7 @@
 import logo from '@/assets/logo.png';
 import {
   LayoutDashboard,
+  ClipboardList,
   Building2,
   Kanban,
   CheckSquare,
@@ -37,6 +38,7 @@ import { Badge } from '@/components/ui/badge';
 const operationItems = [
   { title: 'Minha Carteira', url: '/', icon: LayoutDashboard },
   { title: 'Jornada', url: '/jornada', icon: Kanban },
+  { title: 'Tarefas Internas', url: '/tarefas-internas', icon: ClipboardList },
 ];
 
 const managementItems = [

@@ -397,6 +397,201 @@ export type Database = {
           },
         ]
       }
+      board_card_assignees: {
+        Row: {
+          card_id: string
+          created_at: string | null
+          id: string
+          user_id: string
+        }
+        Insert: {
+          card_id: string
+          created_at?: string | null
+          id?: string
+          user_id: string
+        }
+        Update: {
+          card_id?: string
+          created_at?: string | null
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "board_card_assignees_card_id_fkey"
+            columns: ["card_id"]
+            isOneToOne: false
+            referencedRelation: "board_cards"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      board_card_templates: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          default_checklist: Json | null
+          default_column_id: string | null
+          default_tags: string[] | null
+          description_template: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          title_template: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          default_checklist?: Json | null
+          default_column_id?: string | null
+          default_tags?: string[] | null
+          description_template?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          title_template?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          default_checklist?: Json | null
+          default_column_id?: string | null
+          default_tags?: string[] | null
+          description_template?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          title_template?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "board_card_templates_default_column_id_fkey"
+            columns: ["default_column_id"]
+            isOneToOne: false
+            referencedRelation: "board_columns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      board_cards: {
+        Row: {
+          checklist: Json | null
+          column_id: string
+          completed_at: string | null
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          due_date: string | null
+          id: string
+          sort_order: number
+          start_date: string | null
+          status: string | null
+          tags: string[] | null
+          template_id: string | null
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          checklist?: Json | null
+          column_id: string
+          completed_at?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          sort_order?: number
+          start_date?: string | null
+          status?: string | null
+          tags?: string[] | null
+          template_id?: string | null
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          checklist?: Json | null
+          column_id?: string
+          completed_at?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          sort_order?: number
+          start_date?: string | null
+          status?: string | null
+          tags?: string[] | null
+          template_id?: string | null
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "board_cards_column_id_fkey"
+            columns: ["column_id"]
+            isOneToOne: false
+            referencedRelation: "board_columns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      board_columns: {
+        Row: {
+          color: string | null
+          created_at: string | null
+          created_by: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          sort_order: number
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          sort_order?: number
+        }
+        Update: {
+          color?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
+      board_tags: {
+        Row: {
+          color: string | null
+          created_at: string | null
+          created_by: string | null
+          id: string
+          is_predefined: boolean | null
+          name: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_predefined?: boolean | null
+          name: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_predefined?: boolean | null
+          name?: string
+        }
+        Relationships: []
+      }
       bonus_catalog: {
         Row: {
           created_at: string
