@@ -1,77 +1,63 @@
 
 
-# Plano: Corrigir syncAll para resolver CNPJ → Asaas Customer ID
+# Diagnosis and Fix Plan
 
-## Problema
+## Root Causes Found
 
-- 449 escritórios têm CNPJ cadastrado
-- Apenas 4 têm `asaas_customer_id` preenchido
-- `syncAll` filtra `WHERE asaas_customer_id IS NOT NULL` — resultado: só sincroniza 4 escritórios
-- Os outros 445 nunca são consultados no Asaas, ficam com `installments_overdue = 0`
+### Problem 1 — Webhook mapping not filling fields
+The webhook_logs table confirms the error: `"supabase.from(...).insert(...).catch is not a function"`. The last two webhooks (March 5 and March 6) both crashed with this error BEFORE reaching office creation. The `.catch()` fix was applied in code but the webhooks arrived before deployment completed. The mapping paths are correct, the company data exists at root level with all expected fields. This problem is already fixed in code — just needs a new webhook to test.
 
-## Correção
+### Problem 2 — Only 3 of 17 create_activity actions succeeded
+**This is the critical finding.** The `activity_type` database enum has these valid values:
+`task, follow_up, onboarding, renewal, other, ligacao, check_in, email, whatsapp, planejamento`
 
-### Edge Function `integration-asaas/index.ts` — action `syncAll`
+It does NOT include `"meeting"`. The automation rule "[ELT] Delegação automática" has 14 actions with `activity_type: "meeting"` — every one of those fails silently because the INSERT violates the enum constraint. The `handleAction` function doesn't capture the error from `supabase.from("activities").insert(...)`.
 
-Reescrever o `syncAll` para:
+Evidence: automation_logs shows 19 `actions_executed` entries, but only 3 `create_activity` have an `id` (the ones with type "task" or "email"). The other 14 have no `id` — they failed silently.
 
-1. Buscar todos os escritórios com CNPJ (não apenas os que já têm `asaas_customer_id`)
-2. Para cada escritório sem `asaas_customer_id`, fazer lookup por CNPJ na API do Asaas (`/customers?cpfCnpj=...`)
-3. Cachear o `asaas_customer_id` encontrado
-4. Buscar pagamentos OVERDUE e atualizar `installments_overdue` + `total_overdue_value`
-5. Se o escritório não for encontrado no Asaas, pular silenciosamente (sem erro)
-6. Processar em batches para evitar timeout da edge function (limite de 60s)
-7. Retornar contadores: `{ synced, notFound, errors, total }`
+### Problem 3 — Webhook doesn't trigger automations
+Same root cause as Problem 1 — the webhook crashed before reaching the automation invocation lines (419-430). Once the webhook stops crashing, automations will be invoked via `supabase.functions.invoke()`.
 
-```text
-syncAll flow:
-┌─────────────────────────────────┐
-│ SELECT offices WHERE cnpj != '' │
-└──────────────┬──────────────────┘
-               │
-     ┌─────────▼─────────┐
-     │ Has asaas_customer_id? │
-     └──┬────────────┬────┘
-       YES          NO
-        │            │
-        │    ┌───────▼────────┐
-        │    │ GET /customers  │
-        │    │ ?cpfCnpj=...   │
-        │    └───────┬────────┘
-        │            │
-        │    ┌───────▼────────┐
-        │    │ Cache customer  │
-        │    │ id in offices   │
-        │    └───────┬────────┘
-        │            │
-     ┌──▼────────────▼──┐
-     │ GET /payments     │
-     │ ?customer=X       │
-     │ &status=OVERDUE   │
-     └──────────┬───────┘
-                │
-     ┌──────────▼───────┐
-     │ UPDATE offices    │
-     │ installments_overdue │
-     │ total_overdue_value  │
-     └──────────────────┘
+## Fixes
+
+### Fix A — Add "meeting" to activity_type enum (database migration)
+```sql
+ALTER TYPE activity_type ADD VALUE IF NOT EXISTS 'meeting';
 ```
+This is the correct fix because:
+- The automation builder UI offers "meeting" as an option
+- Users have configured rules with this type
+- 14 activities are waiting to be created with this type
 
-### Consideração de performance
+### Fix B — Add error handling in handleAction (execute-automations)
+In the `create_activity` case (line 46-47), capture and log the error:
+```javascript
+const { data: act, error: actErr } = await supabase.from("activities").insert(payload).select("id").single();
+if (actErr) {
+  console.error('[AUTOMATIONS] Activity insert error:', actErr.message, 'payload:', JSON.stringify(payload));
+  return { type: "create_activity", error: actErr.message };
+}
+```
+Apply similar error capture to ALL action types that do database inserts (send_notification, add_note, create_action_plan, etc.).
 
-- 449 escritórios × 2 chamadas API (lookup + payments) = até 898 requests
-- Edge functions têm timeout de ~60s
-- Solução: processar concorrentemente em batches de 5, com early-exit se próximo do timeout
-- Retornar quantos foram processados para o frontend mostrar progresso
+### Fix C — Ensure webhook deployment is current
+The piperun-webhook code already has the `.catch()` fix from the previous iteration. Verify the edge function redeploys by checking logs after saving. No code change needed — just confirmation.
 
-### Arquivo: `src/pages/Financeiro.tsx`
+### Fix D — Add company fallback in webhook (safety)
+In `piperun-webhook/index.ts` line 341, add fallback to `person.company`:
+```javascript
+let companyData = deal.company || deal.person?.company;
+```
+This handles edge cases where the Piperun payload structure varies.
 
-- Melhorar feedback do botão "Sincronizar Asaas" para mostrar resultado detalhado: `X sincronizados, Y não encontrados no Asaas`
+## Files Modified
+- `supabase/functions/execute-automations/index.ts` — error handling in handleAction
+- `supabase/functions/piperun-webhook/index.ts` — company fallback
+- Database migration: add `meeting` to `activity_type` enum
 
-## Arquivos a modificar
-
-| Arquivo | Mudança |
-|---|---|
-| `supabase/functions/integration-asaas/index.ts` | Reescrever `syncAll` para incluir lookup por CNPJ |
-| `src/pages/Financeiro.tsx` | Melhorar feedback da sincronização |
+## Expected Result After Fix
+- All 17 `create_activity` actions succeed (activities created with correct types)
+- Webhook creates office with all mapped fields populated
+- Webhook triggers automations that execute all 19 actions
+- automation_logs show complete execution with all action IDs
 
