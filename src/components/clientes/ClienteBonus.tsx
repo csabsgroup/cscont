@@ -107,11 +107,41 @@ export function ClienteBonus({ officeId }: { officeId: string }) {
   };
 
   const handleRequestAction = async (requestId: string, status: 'approved' | 'denied') => {
+    const request = requests.find(r => r.id === requestId);
+    
+    if (status === 'approved' && request) {
+      // Check available balance for the catalog item
+      const itemGrants = grants
+        .filter(g => g.catalog_item_id === request.catalog_item_id && Number(g.available) > 0)
+        .sort((a: any, b: any) => (a.expires_at || '9999') < (b.expires_at || '9999') ? -1 : 1);
+      
+      const totalAvailable = itemGrants.reduce((sum: number, g: any) => sum + Number(g.available), 0);
+      const qtyToDebit = Number(request.quantity);
+      
+      if (totalAvailable < qtyToDebit) {
+        toast.error(`Saldo insuficiente! Disponível: ${totalAvailable}, Solicitado: ${qtyToDebit}`);
+        return;
+      }
+      
+      // Debit from grants (FIFO by expiry)
+      let remaining = qtyToDebit;
+      for (const g of itemGrants) {
+        if (remaining <= 0) break;
+        const debit = Math.min(remaining, Number(g.available));
+        const { error: grantError } = await supabase.from('bonus_grants').update({
+          used: Number(g.used) + debit,
+          available: Number(g.available) - debit,
+        }).eq('id', g.id);
+        if (grantError) { toast.error('Erro ao debitar: ' + grantError.message); return; }
+        remaining -= debit;
+      }
+    }
+    
     const { error } = await supabase.from('bonus_requests').update({
       status: status as any, reviewed_by: session?.user?.id,
     }).eq('id', requestId);
     if (error) toast.error('Erro: ' + error.message);
-    else { toast.success(status === 'approved' ? 'Aprovado!' : 'Negado!'); fetchAll(); }
+    else { toast.success(status === 'approved' ? 'Aprovado e debitado!' : 'Negado!'); fetchAll(); }
   };
 
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>;
