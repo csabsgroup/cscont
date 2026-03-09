@@ -1,63 +1,68 @@
 
 
-# Diagnosis and Fix Plan
+# Plano: Inadimplência baseada exclusivamente no Asaas
 
-## Root Causes Found
+## Problema identificado
 
-### Problem 1 — Webhook mapping not filling fields
-The webhook_logs table confirms the error: `"supabase.from(...).insert(...).catch is not a function"`. The last two webhooks (March 5 and March 6) both crashed with this error BEFORE reaching office creation. The `.catch()` fix was applied in code but the webhooks arrived before deployment completed. The mapping paths are correct, the company data exists at root level with all expected fields. This problem is already fixed in code — just needs a new webhook to test.
+O sistema tem **duas fontes de verdade** para inadimplência:
+1. `contracts.installments_overdue` — campo manual editável no formulário de contrato
+2. `offices.installments_overdue` / `offices.total_overdue_value` — sincronizados do Asaas pela edge function
 
-### Problem 2 — Only 3 of 17 create_activity actions succeeded
-**This is the critical finding.** The `activity_type` database enum has these valid values:
-`task, follow_up, onboarding, renewal, other, ligacao, check_in, email, whatsapp, planejamento`
+Todos os indicadores do sistema (Dashboard, Relatórios, Health Score, Jornada, lista de Clientes, Header 360) leem de `contracts.installments_overdue` (manual), não do Asaas. Isso explica a divergência de "2 parcelas vencidas no CRM vs 1 no Asaas".
 
-It does NOT include `"meeting"`. The automation rule "[ELT] Delegação automática" has 14 actions with `activity_type: "meeting"` — every one of those fails silently because the INSERT violates the enum constraint. The `handleAction` function doesn't capture the error from `supabase.from("activities").insert(...)`.
+Além disso, a edge function classifica como "overdue" por lógica de data (`dueDate < today`), sem considerar que cobranças excluídas/removidas no Asaas têm status `DELETED`.
 
-Evidence: automation_logs shows 19 `actions_executed` entries, but only 3 `create_activity` have an `id` (the ones with type "task" or "email"). The other 14 have no `id` — they failed silently.
+---
 
-### Problem 3 — Webhook doesn't trigger automations
-Same root cause as Problem 1 — the webhook crashed before reaching the automation invocation lines (419-430). Once the webhook stops crashing, automations will be invoked via `supabase.functions.invoke()`.
+## Correções
 
-## Fixes
+### 1 — Edge Function: tratar status DELETED do Asaas
 
-### Fix A — Add "meeting" to activity_type enum (database migration)
-```sql
-ALTER TYPE activity_type ADD VALUE IF NOT EXISTS 'meeting';
+Na classificação de parcelas, adicionar `DELETED` como status cancelado/excluído:
+
 ```
-This is the correct fix because:
-- The automation builder UI offers "meeting" as an option
-- Users have configured rules with this type
-- 14 activities are waiting to be created with this type
-
-### Fix B — Add error handling in handleAction (execute-automations)
-In the `create_activity` case (line 46-47), capture and log the error:
-```javascript
-const { data: act, error: actErr } = await supabase.from("activities").insert(payload).select("id").single();
-if (actErr) {
-  console.error('[AUTOMATIONS] Activity insert error:', actErr.message, 'payload:', JSON.stringify(payload));
-  return { type: "create_activity", error: actErr.message };
-}
+isCancelled → incluir "DELETED" na lista
+Adicionar isDeleted separadamente para exibição
+translateAsaasStatus: DELETED → "Excluída"
 ```
-Apply similar error capture to ALL action types that do database inserts (send_notification, add_note, create_action_plan, etc.).
 
-### Fix C — Ensure webhook deployment is current
-The piperun-webhook code already has the `.catch()` fix from the previous iteration. Verify the edge function redeploys by checking logs after saving. No code change needed — just confirmation.
+Inadimplência = **APENAS** parcelas com `status === "OVERDUE"` do próprio Asaas, não por lógica de data. Isso garante que se o Asaas marca como OVERDUE, é overdue; se excluiu, não conta.
 
-### Fix D — Add company fallback in webhook (safety)
-In `piperun-webhook/index.ts` line 341, add fallback to `person.company`:
-```javascript
-let companyData = deal.company || deal.person?.company;
+### 2 — Unificar fonte de verdade: offices como fonte do Asaas
+
+Todos os componentes que mostram inadimplência passam a ler de `offices.installments_overdue` e `offices.total_overdue_value` (escritos pelo Asaas), em vez de `contracts.installments_overdue`.
+
+**Arquivos afetados:**
+
+| Arquivo | Mudança |
+|---|---|
+| `supabase/functions/integration-asaas/index.ts` | Usar `p.status === "OVERDUE"` do Asaas em vez de lógica de data; tratar `DELETED` |
+| `supabase/functions/calculate-health-score/index.ts` | Ler `offices.installments_overdue` em vez de `contracts.installments_overdue` |
+| `src/pages/Financeiro.tsx` | Ler de `offices.installments_overdue` e `offices.total_overdue_value` |
+| `src/pages/Relatorios.tsx` | Inadimplência usa `offices` ao invés de `contracts.installments_overdue` |
+| `src/pages/Clientes.tsx` | Mapa de overdue usa `offices.installments_overdue` |
+| `src/pages/Jornada.tsx` | Idem |
+| `src/components/clientes/ClienteHeader.tsx` | Ler de office em vez de contract |
+| `src/components/clientes/ClienteMetricas.tsx` | Idem |
+| `src/components/clientes/ClienteContratos.tsx` | Remover campo manual "Parcelas Vencidas" do formulário (agora vem do Asaas) |
+| `src/components/jornada/JornadaTableView.tsx` | Ler de office |
+| `src/pages/portal/PortalContrato.tsx` | Ler de office |
+| `src/components/clientes/ClienteFinanceiro.tsx` | Filtro "excluídas" no dropdown de status |
+
+### 3 — Lógica de classificação refinada na Edge Function
+
 ```
-This handles edge cases where the Piperun payload structure varies.
+// ANTES (errado): isOverdue por data
+const isOverdue = !isPaid && !isCancelled && p.dueDate < today;
 
-## Files Modified
-- `supabase/functions/execute-automations/index.ts` — error handling in handleAction
-- `supabase/functions/piperun-webhook/index.ts` — company fallback
-- Database migration: add `meeting` to `activity_type` enum
+// DEPOIS (correto): isOverdue pelo status do Asaas
+const isOverdue = p.status === "OVERDUE";
+const isDeleted = p.status === "DELETED";
+// isPending: PENDING + AWAITING_RISK_ANALYSIS + cobranças não-pagas não-vencidas
+```
 
-## Expected Result After Fix
-- All 17 `create_activity` actions succeed (activities created with correct types)
-- Webhook creates office with all mapped fields populated
-- Webhook triggers automations that execute all 19 actions
-- automation_logs show complete execution with all action IDs
+Isso garante que:
+- Cobrança excluída no Asaas → aparece como "Excluída" no CRM
+- Cobrança com status OVERDUE no Asaas = inadimplente
+- Nenhuma lógica local de data sobrescreve o status do Asaas
 
