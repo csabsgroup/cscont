@@ -325,18 +325,14 @@ export function ClienteFinanceiro({ officeId, cnpj }: Props) {
           </Table>
         </div>
 
-        {totalPages > 1 && (
-          <PaginationWithPageSize
-            currentPage={page}
-            totalPages={totalPages}
-            pageSize={pageSize}
-            onPageChange={setPage}
-            onPageSizeChange={(s) => { setPageSize(s); setPage(1); }}
-          />
-        )}
-        <p className="text-xs text-muted-foreground text-right">
-          Mostrando {Math.min((page - 1) * pageSize + 1, totalFiltered)}-{Math.min(page * pageSize, totalFiltered)} de {totalFiltered} cobranças
-        </p>
+        <PaginationWithPageSize
+          totalItems={totalFiltered}
+          currentPage={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(s) => { setPageSize(s); setPage(1); }}
+          itemLabel="cobranças"
+        />
       </Card>
     </div>
   );
