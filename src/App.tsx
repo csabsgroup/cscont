@@ -16,6 +16,7 @@ import Jornada from "@/pages/Jornada";
 import Atividades from "@/pages/Atividades";
 import Reunioes from "@/pages/Reunioes";
 import Eventos from "@/pages/Eventos";
+import EventoDetalhe from "@/pages/EventoDetalhe";
 import ContratosGlobal from "@/pages/ContratosGlobal";
 import ContatosGlobal from "@/pages/ContatosGlobal";
 import Configuracoes from "@/pages/Configuracoes";
