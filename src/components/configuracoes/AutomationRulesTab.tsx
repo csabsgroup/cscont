@@ -18,7 +18,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Plus, Loader2, Trash2, Edit2, Zap, Clock, X, Copy, ArrowLeft, ChevronDown, ChevronUp, CalendarIcon, FileText, Play, Users, MoreHorizontal } from 'lucide-react';
+import { Plus, Loader2, Trash2, Edit2, Zap, Clock, X, Copy, ArrowLeft, ChevronDown, ChevronUp, CalendarIcon, FileText, Play, Users, MoreHorizontal, AlertTriangle } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -364,6 +365,7 @@ export function AutomationRulesTab() {
 
   // Run now
   const [runNow, setRunNow] = useState(false);
+  const [forceRerun, setForceRerun] = useState(false);
   const [runNowLoading, setRunNowLoading] = useState(false);
 
   // Preview matched offices
@@ -428,6 +430,7 @@ export function AutomationRulesTab() {
     setForm({ ...EMPTY_FORM, condition_groups: [{ id: genId(), logic: 'and', conditions: [] }] });
     setActiveStep(1);
     setRunNow(false);
+    setForceRerun(false);
     setPreviewOffices(null);
     setEditorOpen(true);
   };
@@ -538,9 +541,9 @@ export function AutomationRulesTab() {
       setEditorOpen(false);
       fetchRules();
       toast.success('Regra salva! Executando em segundo plano para todos os clientes... ⚙️', { duration: 6000 });
-      // Fire-and-forget: clear idempotency + trigger batch processing
+      // Fire-and-forget: trigger batch processing (only force_rerun if explicitly checked)
       supabase.functions.invoke('execute-automations', {
-        body: { action: 'runNowAll', rule_id: savedRuleId, skip_idempotency: true },
+        body: { action: 'runNowAll', rule_id: savedRuleId, force_rerun: forceRerun },
       }).then(({ data: runResult }) => {
         const total = runResult?.total || 0;
         toast.success(`✅ Automação processando ${total} clientes em lotes. Acompanhe na aba Logs.`, { duration: 8000 });
@@ -1802,11 +1805,27 @@ export function AutomationRulesTab() {
                 <Switch checked={runNow} onCheckedChange={setRunNow} />
               </div>
               {runNow && (
-                <div className="rounded-md border border-yellow-500/30 bg-yellow-500/5 p-2">
-                  <p className="text-xs text-yellow-600 dark:text-yellow-400 flex items-center gap-1">
-                    <Play className="h-3 w-3" />
-                    Ao salvar, a regra será disparada imediatamente para todos os clientes elegíveis.
-                  </p>
+                <div className="space-y-2">
+                  <div className="rounded-md border border-yellow-500/30 bg-yellow-500/5 p-2">
+                    <p className="text-xs text-yellow-600 dark:text-yellow-400 flex items-center gap-1">
+                      <Play className="h-3 w-3" />
+                      Ao salvar, a regra será disparada para clientes que ainda não foram atingidos.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Checkbox checked={forceRerun} onCheckedChange={(v) => setForceRerun(!!v)} id="force-rerun" />
+                    <label htmlFor="force-rerun" className="text-xs text-muted-foreground cursor-pointer">
+                      Forçar re-execução em todos os clientes, mesmo os já atingidos
+                    </label>
+                  </div>
+                  {forceRerun && (
+                    <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2">
+                      <p className="text-xs text-destructive flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        Atenção: isso criará atividades duplicadas se o cliente já foi atingido anteriormente.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
