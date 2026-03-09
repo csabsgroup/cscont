@@ -5,7 +5,7 @@ import { Loader2, TrendingUp, DollarSign, BarChart3, Heart, Users, Briefcase } f
 import { HealthBadge } from './HealthBadge';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-interface Props { officeId: string; officeOverdue?: number; officeOverdue?: number; }
+interface Props { officeId: string; officeOverdue?: number; officeOverdue?: number; officeOverdue?: numbe, officeOverduer; }
 
 export function Cl, officeOverdueienteMetricas({ officeId }: Props) {
   const [contracts, setContracts] = useState<any[]>([]);
@@ -123,7 +123,7 @@ export function Cl, officeOverdueienteMetricas({ officeId }: Props) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{activeContract?.installments_overdue ?? 0}</p>
+        officeOt-bold">{activeContract?.installments_overdue ?? 0}</p>
             <p className="text-xs text-muted-foreground">Parcelas vencidas</p>
           </CardContent>
         </Card>

@@ -108,8 +108,13 @@ export default function Jornada() {
     (healthRes.data || []).forEach((h: any) => { hMap[h.office_id] = { score: h.score, band: h.band }; });
     setHealthScores(hMap);
 
+    // Merge contract data with office-level overdue from Asaas
+    const overdueMap: Record<string, number> = {};
+    (officesOverdueRes.data || []).forEach((o: any) => { overdueMap[o.id] = o.installments_overdue || 0; });
     const cMap: Record<string, any> = {};
-    (contractsRes.data || []).forEach((c: any) => { cMap[c.office_id] = c; });
+    (contractsRes.data || []).forEach((c: any) => {
+      cMap[c.office_id] = { ...c, installments_overdue: overdueMap[c.office_id] || 0 };
+    });
     setContracts(cMap);
 
     const officeIds = journeys.map((oj: any) => oj.office_id);

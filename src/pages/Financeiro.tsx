@@ -72,7 +72,7 @@ export default function Financeiro() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-destructive">{totalOverdue}</div>
-            <p className="text-xs text-muted-foreground">{overdueContracts.length} contratos com atraso</p>
+            <p className="text-xs text-muted-foreground">{overdueOffices.length} escritórios com atraso</p>
           </CardContent>
         </Card>
         <Card>

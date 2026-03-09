@@ -376,17 +376,15 @@ export default function Relatorios() {
       return { name: s.name, total: countInStage, avancou: completed, pct: countInStage > 0 ? Math.round((completed / countInStage) * 100) : 0 };
     });
 
-    // Inadimplência
-    const overdueContracts = activeContracts.filter(c => (c.installments_overdue || 0) > 0);
-    const totalOverdueValue = overdueContracts.reduce((s, c) => s + (c.monthly_value || 0) * (c.installments_overdue || 0), 0);
+    // Inadimplência — fonte de verdade: offices (sincronizado do Asaas)
+    const overdueOfficesList = o.filter(x => (x.installments_overdue || 0) > 0);
+    const totalOverdueValue = overdueOfficesList.reduce((s, x) => s + (x.total_overdue_value || 0), 0);
     const overduePct = activeMRR > 0 ? ((totalOverdueValue / activeMRR) * 100).toFixed(1) : '0';
 
-    const overdueTable = overdueContracts.map(c => {
-      const office = o.find(x => x.id === c.office_id);
-      const diasAtraso = c.end_date ? Math.max(0, differenceInDays(new Date(), new Date(c.end_date))) : 0;
+    const overdueTable = overdueOfficesList.map(x => {
       return {
-        name: office?.name || '—', parcelas: c.installments_overdue, valor: (c.monthly_value || 0) * (c.installments_overdue || 0),
-        diasAtraso, csm: profileMap.get(office?.csm_id) || '—', product: c.products?.name || '—',
+        name: x.name || '—', parcelas: x.installments_overdue || 0, valor: x.total_overdue_value || 0,
+        diasAtraso: 0, csm: profileMap.get(x.csm_id) || '—', product: x.products?.name || '—',
       };
     });
 

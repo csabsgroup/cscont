@@ -317,7 +317,7 @@ Deno.serve(async (req) => {
     const daysSinceLastMeeting = meetings.length > 0
       ? Math.floor((now.getTime() - new Date(meetings[0].scheduled_at).getTime()) / 86400000)
       : 999;
-    const installmentsOverdue = activeContract?.installments_overdue || 0;
+    const installmentsOverdue = officeOverdue?.installments_overdue || 0;
 
     for (const override of overrides || []) {
       let conditionMet = false;

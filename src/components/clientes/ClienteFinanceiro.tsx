@@ -268,6 +268,7 @@ export function ClienteFinanceiro({ officeId, cnpj }: Props) {
               <SelectItem value="pending">Pendentes</SelectItem>
               <SelectItem value="overdue">Vencidas</SelectItem>
               <SelectItem value="cancelled">Canceladas</SelectItem>
+              <SelectItem value="deleted">Excluídas</SelectItem>
             </SelectContent>
           </Select>
           <Select value={periodFilter} onValueChange={(v) => { setPeriodFilter(v as PeriodFilter); setPage(1); }}>

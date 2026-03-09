@@ -313,7 +313,7 @@ export default function Clientes() {
         healthScore: h?.score ?? null,
         healthBand: h?.band ?? null,
         ltv: ltvMap[o.id] || 0,
-        installmentsOverdue: installmentsMap[o.id] || 0,
+        installmentsOverdue: o.installments_overdue || 0,
         daysToRenewal: renewalMap[o.id] ?? null,
         lastMeeting: lastMeetingMap[o.id] || null,
         journeyStage: stg?.name || null,

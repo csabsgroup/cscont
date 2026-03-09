@@ -159,8 +159,10 @@ Deno.serve(async (req) => {
       const classified = allPayments.map((p: any) => {
         const dueDate = new Date(p.dueDate);
         const isPaid = ["RECEIVED", "CONFIRMED", "RECEIVED_IN_CASH"].includes(p.status);
-        const isCancelled = ["REFUNDED", "REFUND_REQUESTED", "CHARGEBACK_REQUESTED", "CHARGEBACK_DISPUTE", "AWAITING_CHARGEBACK_REVERSAL", "DUNNING_REQUESTED", "DUNNING_RECEIVED"].includes(p.status);
-        const isOverdue = !isPaid && !isCancelled && p.dueDate < today;
+        const isDeleted = p.status === "DELETED";
+        const isCancelled = ["REFUNDED", "REFUND_REQUESTED", "CHARGEBACK_REQUESTED", "CHARGEBACK_DISPUTE", "AWAITING_CHARGEBACK_REVERSAL", "DUNNING_REQUESTED", "DUNNING_RECEIVED", "DELETED"].includes(p.status);
+        // Inadimplência = APENAS status OVERDUE do Asaas
+        const isOverdue = p.status === "OVERDUE";
         const isPending = !isPaid && !isCancelled && !isOverdue;
 
         let daysOverdue = 0;
@@ -183,6 +185,7 @@ Deno.serve(async (req) => {
           isOverdue,
           isPending,
           isCancelled,
+          isDeleted,
           daysOverdue,
           statusLabel: translateAsaasStatus(p.status),
         };
