@@ -172,8 +172,8 @@ Deno.serve(async (req) => {
 
         case "contracts": {
           if (key === "installments_overdue" || key === "inadimplencia") {
-            if (!activeContract) return { score: 0, hasData: false };
-            const overdue = activeContract.installments_overdue || 0;
+            // Use office-level overdue from Asaas sync (single source of truth)
+            const overdue = officeOverdue?.installments_overdue || 0;
             if (overdue === 0) return { score: 100, hasData: true };
             if (overdue <= 1) return { score: 60, hasData: true };
             if (overdue <= 2) return { score: 30, hasData: true };
