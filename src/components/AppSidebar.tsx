@@ -40,6 +40,7 @@ const allOperationItems = [
   { title: 'Minha Carteira', url: '/', icon: LayoutDashboard },
   { title: 'Jornada', url: '/jornada', icon: Kanban },
   { title: 'Formulários', url: '/formularios', icon: FileText },
+  { title: 'Eventos', url: '/eventos', icon: Calendar },
   { title: 'Tarefas Internas', url: '/tarefas-internas', icon: ClipboardList },
 ];
 
