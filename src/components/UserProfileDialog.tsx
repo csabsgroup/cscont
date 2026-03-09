@@ -78,7 +78,7 @@ export function UserProfileDialog({ open, onOpenChange }: Props) {
 
     const { error } = await supabase
       .from('profiles')
-      .update({ full_name: fullName, avatar_url: avatarUrl })
+      .update({ full_name: fullName, avatar_url: avatarUrl, whatsapp: whatsapp || null } as any)
       .eq('id', user.id);
 
     if (error) {
