@@ -162,10 +162,7 @@ export default function Eventos() {
                 </TabsTrigger>
               </TabsList>
             </Tabs>
-          )}
-          </p>
-        </div>
-        {!isViewer && (
+          {!isViewer && (
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button><Plus className="mr-2 h-4 w-4" />Novo Evento</Button>
