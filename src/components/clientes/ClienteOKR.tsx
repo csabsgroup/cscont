@@ -194,7 +194,7 @@ export function ClienteOKR({ officeId }: Props) {
                         {!isViewer && (
                           <div className="flex gap-1" onClick={e => e.stopPropagation()}>
                             <Button size="sm" variant="ghost" onClick={() => openEditObj(obj)}><Edit2 className="h-4 w-4" /></Button>
-                            <Button size="sm" variant="ghost" onClick={() => removeObj(obj.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                            <Button size="sm" variant="ghost" onClick={() => setDeleteTarget({ type: 'obj', id: obj.id, label: obj.title })}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                           </div>
                         )}
                       </div>
