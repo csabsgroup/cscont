@@ -156,9 +156,6 @@ export default function PortalMembros() {
                       <UserAvatar name={m.name} avatarUrl={logo} size="md" />
                       <div className="min-w-0">
                         <p className="font-medium text-sm truncate">{m.name}</p>
-                        {m.external_id && (
-                          <p className="text-xs text-muted-foreground">{m.external_id}</p>
-                        )}
                         {(m.city || m.state) && (
                           <p className="text-xs text-muted-foreground flex items-center gap-1">
                             <MapPin className="h-3 w-3 shrink-0" />
