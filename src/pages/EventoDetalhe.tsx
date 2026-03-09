@@ -201,7 +201,7 @@ export default function EventoDetalhe() {
       </Button>
 
       {/* Cover header */}
-      <div className="relative rounded-xl overflow-hidden bg-muted h-56 md:h-72">
+      <div className="relative isolate rounded-xl overflow-hidden bg-muted h-56 md:h-72">
         {form.cover_url ? (
           <img src={form.cover_url} alt="Capa" className="h-full w-full object-cover" />
         ) : (
