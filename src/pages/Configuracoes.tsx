@@ -624,7 +624,8 @@ const SIDEBAR_SECTIONS: SidebarSection[] = [
   { key: 'bonus', label: 'Catálogo de Bônus', icon: Gift, category: 'Catálogo de Bônus', adminOnly: true },
   { key: 'importexport', label: 'Importar / Exportar', icon: ArrowUpDown, category: 'Importar / Exportar' },
   { key: 'portal', label: 'Portal do Cliente', icon: Globe, category: 'Portal do Cliente', managerVisible: true },
-  { key: 'usuarios', label: 'Usuários & Permissões', icon: Users, category: 'Usuários & Permissões', adminOnly: true },
+  { key: 'usuarios', label: 'Usuários', icon: Users, category: 'Usuários & Permissões', adminOnly: true },
+  { key: 'hierarquia', label: 'Hierarquia', icon: GitBranch, category: 'Usuários & Permissões', adminOnly: true },
   { key: 'auditoria', label: 'Trilha de Auditoria', icon: ScrollText, category: 'Trilha de Auditoria', adminOnly: true },
 ];
 
