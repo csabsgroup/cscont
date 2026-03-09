@@ -14,7 +14,6 @@ interface Profile {
   id: string;
   full_name: string | null;
   avatar_url: string | null;
-  product_id: string | null;
 }
 
 interface Link {
