@@ -48,6 +48,7 @@ export function ClienteOKR({ officeId }: Props) {
   const [krs, setKrs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
+  const [deleteTarget, setDeleteTarget] = useState<{ type: 'obj' | 'kr'; id: string; label: string } | null>(null);
 
   // Objective dialog
   const [objDialogOpen, setObjDialogOpen] = useState(false);
