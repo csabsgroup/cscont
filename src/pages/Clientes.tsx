@@ -285,14 +285,12 @@ export default function Clientes() {
       }
     });
 
-    // LTV, installments, renewal
+    // LTV, renewal (overdue now comes from offices table, synced from Asaas)
     const ltvMap: Record<string, number> = {};
-    const installmentsMap: Record<string, number> = {};
     const renewalMap: Record<string, number | null> = {};
     (contractsRes.data || []).forEach(c => {
       ltvMap[c.office_id] = (ltvMap[c.office_id] || 0) + (c.value || 0);
       if (c.status === 'ativo') {
-        installmentsMap[c.office_id] = (installmentsMap[c.office_id] || 0) + (c.installments_overdue || 0);
         if (c.renewal_date) {
           const d = differenceInDays(new Date(c.renewal_date), new Date());
           if (renewalMap[c.office_id] == null || d < (renewalMap[c.office_id] as number)) renewalMap[c.office_id] = d;
