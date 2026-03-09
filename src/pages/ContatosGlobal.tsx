@@ -214,7 +214,7 @@ export default function ContatosGlobal() {
                     <TableCell>
                       <div className="flex gap-1">
                         <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); openEdit(c); }}><Edit2 className="h-4 w-4" /></Button>
-                        <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); handleDelete(c.id); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                        <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setDeleteId(c.id); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                       </div>
                     </TableCell>
                   )}
