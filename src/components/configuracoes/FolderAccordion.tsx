@@ -243,10 +243,11 @@ export function useFolders(scope: 'playbooks' | 'automations') {
       .select('*')
       .eq('scope', scope)
       .order('sort_order');
-    setFolders((data as Folder[]) || []);
+    setFolders((data as unknown as Folder[]) || []);
     setLoading(false);
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchFolders(); }, [scope]);
 
   return { folders, loading, refetch: fetchFolders };
