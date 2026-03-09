@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
@@ -14,7 +15,6 @@ import { Plus, Loader2, Calendar, ChevronDown } from 'lucide-react';
 import { isFuture, isPast } from 'date-fns';
 import { toast } from 'sonner';
 import { EventCard } from '@/components/eventos/EventCard';
-import { EventDetailDrawer } from '@/components/eventos/EventDetailDrawer';
 
 const CATEGORIES = [
   { value: 'encontro', label: 'Encontro' },
@@ -29,12 +29,12 @@ interface Product { id: string; name: string; }
 
 export default function Eventos() {
   const { session, isViewer } = useAuth();
+  const navigate = useNavigate();
   const [events, setEvents] = useState<any[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [participantCounts, setParticipantCounts] = useState<Record<string, { confirmed: number; total: number }>>({});
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [detailEvent, setDetailEvent] = useState<any | null>(null);
   const [creating, setCreating] = useState(false);
   const [pastOpen, setPastOpen] = useState(false);
 
@@ -263,7 +263,7 @@ export default function Eventos() {
                     event={ev}
                     confirmedCount={participantCounts[ev.id]?.confirmed || 0}
                     totalCount={participantCounts[ev.id]?.total || 0}
-                    onClick={() => setDetailEvent(ev)}
+                    onClick={() => navigate(`/eventos/${ev.id}`)}
                   />
                 ))}
               </div>
@@ -287,7 +287,7 @@ export default function Eventos() {
                       event={ev}
                       confirmedCount={participantCounts[ev.id]?.confirmed || 0}
                       totalCount={participantCounts[ev.id]?.total || 0}
-                      onClick={() => setDetailEvent(ev)}
+                      onClick={() => navigate(`/eventos/${ev.id}`)}
                       isPast
                     />
                   ))}
@@ -297,16 +297,6 @@ export default function Eventos() {
           )}
         </div>
       )}
-
-      {/* Detail drawer */}
-      <EventDetailDrawer
-        event={detailEvent}
-        open={!!detailEvent}
-        onOpenChange={(open) => !open && setDetailEvent(null)}
-        products={products}
-        onSaved={() => { fetchEvents(); setDetailEvent(null); }}
-        readOnly={isViewer}
-      />
     </div>
   );
 }
