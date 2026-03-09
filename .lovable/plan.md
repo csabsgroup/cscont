@@ -1,52 +1,63 @@
 
 
-# Plano: Corrigir Financeiro, KPI 360 e Card Faturamento Total
+# Diagnosis and Fix Plan
 
-## Problemas Identificados
+## Root Causes Found
 
-### 1. Página Financeiro mostra poucos dados
-A página lê `offices.installments_overdue` e `offices.total_overdue_value`, mas esses campos só são preenchidos quando alguém abre a aba Financeiro do cliente individual (que chama `getFinancialByOffice`) ou quando chega webhook. Escritórios que nunca foram consultados ficam com 0.
+### Problem 1 — Webhook mapping not filling fields
+The webhook_logs table confirms the error: `"supabase.from(...).insert(...).catch is not a function"`. The last two webhooks (March 5 and March 6) both crashed with this error BEFORE reaching office creation. The `.catch()` fix was applied in code but the webhooks arrived before deployment completed. The mapping paths are correct, the company data exists at root level with all expected fields. This problem is already fixed in code — just needs a new webhook to test.
 
-### 2. KPI "Parcelas em Atraso" no 360 mostra 0
-Em `ClienteVisao360.tsx` linha 62: `const overdueInstallments = activeContract?.installments_overdue || 0` — ainda lê do **contrato** (campo legado), não do office. Além disso, o valor estimado usa `overdueInstallments * monthly_value` em vez do `total_overdue_value` real do Asaas.
+### Problem 2 — Only 3 of 17 create_activity actions succeeded
+**This is the critical finding.** The `activity_type` database enum has these valid values:
+`task, follow_up, onboarding, renewal, other, ligacao, check_in, email, whatsapp, planejamento`
 
-### 3. Falta card "Faturamento Total" no Dashboard
-Não existe. Precisa adicionar: soma de `contract.value` de todos os contratos ativos filtrados.
+It does NOT include `"meeting"`. The automation rule "[ELT] Delegação automática" has 14 actions with `activity_type: "meeting"` — every one of those fails silently because the INSERT violates the enum constraint. The `handleAction` function doesn't capture the error from `supabase.from("activities").insert(...)`.
 
----
+Evidence: automation_logs shows 19 `actions_executed` entries, but only 3 `create_activity` have an `id` (the ones with type "task" or "email"). The other 14 have no `id` — they failed silently.
 
-## Correções
+### Problem 3 — Webhook doesn't trigger automations
+Same root cause as Problem 1 — the webhook crashed before reaching the automation invocation lines (419-430). Once the webhook stops crashing, automations will be invoked via `supabase.functions.invoke()`.
 
-### A — Página Financeiro: botão "Sincronizar Todos" + dados da tabela
+## Fixes
 
-**Arquivo:** `src/pages/Financeiro.tsx`
-- Adicionar botão "Sincronizar Asaas" que chama `integration-asaas` com action `syncAll`
-- Após sincronização, recarrega dados da tabela `offices`
-- Manter leitura da tabela como está (rápido), com o botão para forçar atualização
+### Fix A — Add "meeting" to activity_type enum (database migration)
+```sql
+ALTER TYPE activity_type ADD VALUE IF NOT EXISTS 'meeting';
+```
+This is the correct fix because:
+- The automation builder UI offers "meeting" as an option
+- Users have configured rules with this type
+- 14 activities are waiting to be created with this type
 
-### B — KPI Parcelas em Atraso no 360: ler do office + buscar Asaas ao abrir
+### Fix B — Add error handling in handleAction (execute-automations)
+In the `create_activity` case (line 46-47), capture and log the error:
+```javascript
+const { data: act, error: actErr } = await supabase.from("activities").insert(payload).select("id").single();
+if (actErr) {
+  console.error('[AUTOMATIONS] Activity insert error:', actErr.message, 'payload:', JSON.stringify(payload));
+  return { type: "create_activity", error: actErr.message };
+}
+```
+Apply similar error capture to ALL action types that do database inserts (send_notification, add_note, create_action_plan, etc.).
 
-**Arquivo:** `src/components/clientes/ClienteVisao360.tsx`
-- Trocar `activeContract?.installments_overdue || 0` por `office.installments_overdue || 0`
-- Trocar `overdueInstallments * monthly_value` por `office.total_overdue_value || 0`
+### Fix C — Ensure webhook deployment is current
+The piperun-webhook code already has the `.catch()` fix from the previous iteration. Verify the edge function redeploys by checking logs after saving. No code change needed — just confirmation.
 
-**Arquivo:** `src/pages/Cliente360.tsx`
-- Ao carregar a página, se `office.cnpj` existir, disparar chamada silenciosa a `integration-asaas` com action `getFinancialByOffice` para atualizar os campos do office. Isso garante que os KPIs reflitam dados atualizados do Asaas.
+### Fix D — Add company fallback in webhook (safety)
+In `piperun-webhook/index.ts` line 341, add fallback to `person.company`:
+```javascript
+let companyData = deal.company || deal.person?.company;
+```
+This handles edge cases where the Piperun payload structure varies.
 
-### C — Card "Faturamento Total" no Dashboard
+## Files Modified
+- `supabase/functions/execute-automations/index.ts` — error handling in handleAction
+- `supabase/functions/piperun-webhook/index.ts` — company fallback
+- Database migration: add `meeting` to `activity_type` enum
 
-**Arquivo:** `src/pages/Dashboard.tsx`
-- Adicionar KPI `Faturamento Total` = `activeContracts.reduce((s, c) => s + (c.value || 0), 0)`
-- Posicionar no grid de KPIs junto aos existentes (MRR, Variação MRR, etc.)
-
----
-
-## Arquivos a modificar
-
-| Arquivo | Mudança |
-|---|---|
-| `src/pages/Financeiro.tsx` | Botão "Sincronizar Asaas" + feedback |
-| `src/components/clientes/ClienteVisao360.tsx` | Ler overdue do `office` em vez do `contract` |
-| `src/pages/Cliente360.tsx` | Auto-sync Asaas ao abrir (silencioso) |
-| `src/pages/Dashboard.tsx` | Novo card "Faturamento Total" |
+## Expected Result After Fix
+- All 17 `create_activity` actions succeed (activities created with correct types)
+- Webhook creates office with all mapped fields populated
+- Webhook triggers automations that execute all 19 actions
+- automation_logs show complete execution with all action IDs
 

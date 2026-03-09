@@ -3,33 +3,51 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { DollarSign, AlertTriangle, TrendingUp } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { DollarSign, AlertTriangle, TrendingUp, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
 export default function Financeiro() {
   const navigate = useNavigate();
   const [contracts, setContracts] = useState<any[]>([]);
   const [offices, setOffices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
 
-  useEffect(() => {
-    (async () => {
-      const [c, o] = await Promise.all([
-        supabase.from('contracts').select('*, offices(name, installments_overdue, total_overdue_value), products:product_id(name)'),
-        supabase.from('offices').select('id, name, installments_overdue, total_overdue_value'),
-      ]);
-      setContracts(c.data || []);
-      setOffices(o.data || []);
-      setLoading(false);
-    })();
-  }, []);
+  const fetchData = async () => {
+    setLoading(true);
+    const [c, o] = await Promise.all([
+      supabase.from('contracts').select('*, offices(name, installments_overdue, total_overdue_value), products:product_id(name)'),
+      supabase.from('offices').select('id, name, cnpj, installments_overdue, total_overdue_value'),
+    ]);
+    setContracts(c.data || []);
+    setOffices(o.data || []);
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchData(); }, []);
+
+  const handleSyncAll = async () => {
+    setSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('integration-asaas', {
+        body: { action: 'syncAll' },
+      });
+      if (error) throw error;
+      toast.success(`Sincronização concluída! ${data?.updated || 0} escritórios atualizados.`);
+      await fetchData();
+    } catch (err: any) {
+      toast.error('Erro ao sincronizar: ' + (err.message || 'Erro desconhecido'));
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const activeContracts = contracts.filter(c => c.status === 'ativo');
   const mrr = activeContracts.reduce((s, c) => s + (c.monthly_value || 0), 0);
-  // Inadimplência total vem das offices (sincronizado do Asaas)
   const totalOverdue = offices.reduce((s, o) => s + (o.installments_overdue || 0), 0);
   const overdueValue = offices.reduce((s, o) => s + (o.total_overdue_value || 0), 0);
-  // Escritórios com inadimplência
   const overdueOffices = offices.filter(o => (o.installments_overdue || 0) > 0);
 
   if (loading) {
@@ -49,9 +67,15 @@ export default function Financeiro() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Financeiro</h1>
-        <p className="text-sm text-muted-foreground">Visão financeira consolidada dos contratos</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Financeiro</h1>
+          <p className="text-sm text-muted-foreground">Visão financeira consolidada dos contratos</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={handleSyncAll} disabled={syncing} className="gap-2">
+          <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+          {syncing ? 'Sincronizando...' : 'Sincronizar Asaas'}
+        </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -82,7 +106,7 @@ export default function Financeiro() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-warning">R$ {overdueValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
-            <p className="text-xs text-muted-foreground">Total Asaas overdue</p>
+            <p className="text-xs text-muted-foreground">Total inadimplente Asaas</p>
           </CardContent>
         </Card>
       </div>
