@@ -162,80 +162,82 @@ export default function Eventos() {
                 </TabsTrigger>
               </TabsList>
             </Tabs>
+          )}
           {!isViewer && (
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button><Plus className="mr-2 h-4 w-4" />Novo Evento</Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-              <DialogHeader><DialogTitle>Novo Evento</DialogTitle></DialogHeader>
-              <form onSubmit={handleCreate} className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Título *</Label>
-                  <Input value={title} onChange={e => setTitle(e.target.value)} required />
-                </div>
-                <div className="space-y-2">
-                  <Label>Descrição</Label>
-                  <Textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button><Plus className="mr-2 h-4 w-4" />Novo Evento</Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+                <DialogHeader><DialogTitle>Novo Evento</DialogTitle></DialogHeader>
+                <form onSubmit={handleCreate} className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Início *</Label>
-                    <Input type="datetime-local" value={eventDate} onChange={e => setEventDate(e.target.value)} required />
+                    <Label>Título *</Label>
+                    <Input value={title} onChange={e => setTitle(e.target.value)} required />
                   </div>
                   <div className="space-y-2">
-                    <Label>Fim</Label>
-                    <Input type="datetime-local" value={endDate} onChange={e => setEndDate(e.target.value)} />
+                    <Label>Descrição</Label>
+                    <Textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} />
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Local</Label>
-                    <Input value={location} onChange={e => setLocation(e.target.value)} />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Início *</Label>
+                      <Input type="datetime-local" value={eventDate} onChange={e => setEventDate(e.target.value)} required />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Fim</Label>
+                      <Input type="datetime-local" value={endDate} onChange={e => setEndDate(e.target.value)} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Local</Label>
+                      <Input value={location} onChange={e => setLocation(e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Tipo</Label>
+                      <Select value={type} onValueChange={setType}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="presencial">Presencial</SelectItem>
+                          <SelectItem value="online">Online</SelectItem>
+                          <SelectItem value="hibrido">Híbrido</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                   <div className="space-y-2">
-                    <Label>Tipo</Label>
-                    <Select value={type} onValueChange={setType}>
+                    <Label>Categoria</Label>
+                    <Select value={category} onValueChange={setCategory}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="presencial">Presencial</SelectItem>
-                        <SelectItem value="online">Online</SelectItem>
-                        <SelectItem value="hibrido">Híbrido</SelectItem>
+                        {CATEGORIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Categoria</Label>
-                  <Select value={category} onValueChange={setCategory}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {CATEGORIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Produtos Elegíveis</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {products.map(p => (
-                      <label key={p.id} className="flex items-center gap-2 text-sm cursor-pointer">
-                        <Checkbox checked={selectedProductIds.includes(p.id)} onCheckedChange={() => toggleProduct(p.id)} />
-                        {p.name}
-                      </label>
-                    ))}
+                  <div className="space-y-2">
+                    <Label>Produtos Elegíveis</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {products.map(p => (
+                        <label key={p.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                          <Checkbox checked={selectedProductIds.includes(p.id)} onCheckedChange={() => toggleProduct(p.id)} />
+                          {p.name}
+                        </label>
+                      ))}
+                    </div>
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Máx. participantes</Label>
-                  <Input type="number" value={maxParticipants} onChange={e => setMaxParticipants(e.target.value)} />
-                </div>
-                <Button type="submit" className="w-full" disabled={creating}>
-                  {creating ? 'Criando...' : 'Criar Evento'}
-                </Button>
-              </form>
-            </DialogContent>
-          </Dialog>
-        )}
+                  <div className="space-y-2">
+                    <Label>Máx. participantes</Label>
+                    <Input type="number" value={maxParticipants} onChange={e => setMaxParticipants(e.target.value)} />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={creating}>
+                    {creating ? 'Criando...' : 'Criar Evento'}
+                  </Button>
+                </form>
+              </DialogContent>
+            </Dialog>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
