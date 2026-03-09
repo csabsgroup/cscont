@@ -398,7 +398,7 @@ export default function Cliente360() {
         <Card className="p-6"><ClienteNotas officeId={office.id} initialNotes={office.notes} /></Card>
       )}
 
-      {activeTab === 'metricas' && <ClienteMetricas officeId={office.id} />}
+      {activeTab === 'metricas' && <ClienteMetricas officeId={office.id} officeOverdue={office.installments_overdue || 0} />}
 
       {activeTab === 'okr' && (
         <Card className="p-6"><ClienteOKR officeId={office.id} /></Card>
