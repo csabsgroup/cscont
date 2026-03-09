@@ -537,27 +537,45 @@ export type Database = {
       }
       board_columns: {
         Row: {
+          bg_color: string | null
+          bg_gradient_from: string | null
+          bg_gradient_to: string | null
+          bg_opacity: number | null
           color: string | null
           created_at: string | null
           created_by: string | null
+          header_color: string | null
+          icon: string | null
           id: string
           is_active: boolean | null
           name: string
           sort_order: number
         }
         Insert: {
+          bg_color?: string | null
+          bg_gradient_from?: string | null
+          bg_gradient_to?: string | null
+          bg_opacity?: number | null
           color?: string | null
           created_at?: string | null
           created_by?: string | null
+          header_color?: string | null
+          icon?: string | null
           id?: string
           is_active?: boolean | null
           name: string
           sort_order?: number
         }
         Update: {
+          bg_color?: string | null
+          bg_gradient_from?: string | null
+          bg_gradient_to?: string | null
+          bg_opacity?: number | null
           color?: string | null
           created_at?: string | null
           created_by?: string | null
+          header_color?: string | null
+          icon?: string | null
           id?: string
           is_active?: boolean | null
           name?: string
