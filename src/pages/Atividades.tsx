@@ -297,6 +297,10 @@ export default function Atividades() {
           </TabsList>
           {(['hoje', 'atrasadas', 'futuras', 'concluidas'] as const).map(tab => {
             const list = tab === 'hoje' ? hoje : tab === 'atrasadas' ? atrasadas : tab === 'futuras' ? futuras : concluidas;
+            const currentTabPage = tabPage[tab] || 1;
+            const currentTabPageSize = tabPageSize[tab] || 25;
+            const startIdx = (currentTabPage - 1) * currentTabPageSize;
+            const paginatedList = list.slice(startIdx, startIdx + currentTabPageSize);
             return (
               <TabsContent key={tab} value={tab} className="space-y-2 mt-4">
                 {list.length === 0 ? (
@@ -312,7 +316,20 @@ export default function Atividades() {
                     </CardContent>
                   </Card>
                 ) : (
-                  list.map(a => <ActivityCard key={a.id} activity={a} onRefresh={fetchActivities} isViewer={isViewer} navigate={navigate} onEdit={setEditActivityId} />)
+                  <>
+                    {paginatedList.map(a => <ActivityCard key={a.id} activity={a} onRefresh={fetchActivities} isViewer={isViewer} navigate={navigate} onEdit={setEditActivityId} />)}
+                    <PaginationWithPageSize
+                      totalItems={list.length}
+                      currentPage={currentTabPage}
+                      pageSize={currentTabPageSize}
+                      onPageChange={(p) => setTabPage(prev => ({ ...prev, [tab]: p }))}
+                      onPageSizeChange={(s) => {
+                        setTabPageSize(prev => ({ ...prev, [tab]: s }));
+                        setTabPage(prev => ({ ...prev, [tab]: 1 }));
+                      }}
+                      itemLabel="atividades"
+                    />
+                  </>
                 )}
               </TabsContent>
             );

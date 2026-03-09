@@ -20,6 +20,7 @@ import { differenceInDays, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { UserAvatar } from '@/components/shared/UserAvatar';
 import { CreateClientWizard } from '@/components/clientes/CreateClientWizard';
+import { PaginationWithPageSize } from '@/components/shared/PaginationWithPageSize';
 
 // ─── Types ───────────────────────────────────────────────────────
 interface Office {
