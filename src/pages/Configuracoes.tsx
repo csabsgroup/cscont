@@ -310,7 +310,7 @@ function UsersTab() {
   const handleSaveProfile = async () => {
     setSaving(true);
     const { data, error } = await supabase.functions.invoke('admin-manage-user', {
-      body: { action: 'update_profile', user_id: editUser.id, full_name: editName, role: editRole, product_id: editProductId === 'none' ? null : editProductId || null },
+      body: { action: 'update_profile', user_id: editUser.id, full_name: editName, role: editRole, product_id: editProductId === 'none' ? null : editProductId || null, whatsapp: editWhatsapp || null },
     });
     if (error || data?.error) {
       toast.error(data?.error || error?.message || 'Erro ao atualizar');
