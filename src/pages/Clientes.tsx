@@ -240,7 +240,7 @@ export default function Clientes() {
       supabase.from('offices').select('*, products:active_product_id(name)').order('name'),
       supabase.from('contacts').select('name, office_id').eq('is_main_contact', true),
       supabase.from('health_scores').select('office_id, score, band').order('calculated_at', { ascending: false }),
-      supabase.from('contracts').select('office_id, monthly_value, value, installments_overdue, renewal_date, status'),
+      supabase.from('contracts').select('office_id, monthly_value, value, renewal_date, status'),
       supabase.from('meetings').select('office_id, scheduled_at, status').eq('status', 'completed'),
       supabase.from('journey_stages').select('id, name, product_id'),
       supabase.from('office_journey').select('office_id, journey_stage_id'),
