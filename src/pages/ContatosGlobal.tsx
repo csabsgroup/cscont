@@ -100,9 +100,13 @@ export default function ContatosGlobal() {
     setSaving(false); setDialogOpen(false); fetchAll();
   };
 
-  const handleDelete = async (id: string) => {
-    const { error } = await supabase.from('contacts').delete().eq('id', id);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    const { error } = await supabase.from('contacts').delete().eq('id', deleteId);
     if (error) toast.error('Erro: ' + error.message); else { toast.success('Contato removido!'); fetchAll(); }
+    setDeleteId(null);
   };
 
   const filtered = contacts.filter(c => {

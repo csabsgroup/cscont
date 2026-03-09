@@ -36,7 +36,7 @@ export default function PortalLogin() {
       navigate('/portal', { replace: true });
     } else {
       await supabase.auth.signOut();
-      toast({ title: 'Acesso negado', description: 'Esta área é exclusiva para clientes.', variant: 'destructive' });
+      toast({ title: 'Credenciais inválidas', description: 'Verifique seu email e senha.', variant: 'destructive' });
     }
     setLoading(false);
   };
