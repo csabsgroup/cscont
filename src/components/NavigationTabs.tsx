@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Home, CheckSquare, Building2, FileText, DollarSign, Phone, Kanban, BarChart3 } from 'lucide-react';
+import { Home, CheckSquare, Building2, FileText, DollarSign, Phone, Kanban, BarChart3, ClipboardList } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const tabs = [
