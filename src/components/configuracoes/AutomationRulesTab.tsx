@@ -364,6 +364,7 @@ export function AutomationRulesTab() {
 
   // Run now
   const [runNow, setRunNow] = useState(false);
+  const [forceRerun, setForceRerun] = useState(false);
   const [runNowLoading, setRunNowLoading] = useState(false);
 
   // Preview matched offices
