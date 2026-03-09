@@ -9,15 +9,15 @@ import { toast } from 'sonner';
 import { isPast } from 'date-fns';
 
 const CONFIRMATION_OPTIONS = [
-  { value: 'a_confirmar', label: 'A Confirmar', color: 'bg-muted text-muted-foreground' },
-  { value: 'confirmado', label: 'Confirmado', color: 'bg-primary/10 text-primary' },
-  { value: 'nao_vai', label: 'Não Vai', color: 'bg-orange-500/10 text-orange-600' },
+  { value: 'a_confirmar', label: 'A Confirmar', color: 'bg-muted text-muted-foreground', dot: 'bg-muted-foreground' },
+  { value: 'confirmado', label: 'Confirmado', color: 'bg-primary/10 text-primary', dot: 'bg-primary' },
+  { value: 'nao_vai', label: 'Não Vai', color: 'bg-orange-500/10 text-orange-600', dot: 'bg-orange-500' },
 ];
 
 const ATTENDANCE_OPTIONS = [
-  { value: 'pendente', label: '—' },
-  { value: 'compareceu', label: 'Compareceu', color: 'bg-emerald-500/10 text-emerald-600' },
-  { value: 'nao_compareceu', label: 'Não Compareceu', color: 'bg-destructive/10 text-destructive' },
+  { value: 'pendente', label: '—', dot: '' },
+  { value: 'compareceu', label: 'Compareceu', color: 'bg-emerald-500/10 text-emerald-600', dot: 'bg-emerald-500' },
+  { value: 'nao_compareceu', label: 'Não Compareceu', color: 'bg-destructive/10 text-destructive', dot: 'bg-destructive' },
 ];
 
 interface Participant {
