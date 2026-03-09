@@ -145,6 +145,9 @@ export default function Atividades() {
     setOfficeId(''); setAssigneeId(session?.user?.id || ''); setChecklistItems([]); setNewCheckItem('');
   };
 
+  const [tabPage, setTabPage] = useState<Record<string, number>>({ hoje: 1, atrasadas: 1, futuras: 1, concluidas: 1 });
+  const [tabPageSize, setTabPageSize] = useState<Record<string, number>>({ hoje: 25, atrasadas: 25, futuras: 25, concluidas: 25 });
+
   const hoje = activities.filter(a => !a.completed_at && a.due_date && isToday(new Date(a.due_date)));
   const atrasadas = activities.filter(a => !a.completed_at && a.due_date && isPast(new Date(a.due_date)) && !isToday(new Date(a.due_date)));
   const futuras = activities.filter(a => !a.completed_at && (!a.due_date || (isFuture(new Date(a.due_date)) && !isToday(new Date(a.due_date)))));
