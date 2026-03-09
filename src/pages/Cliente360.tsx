@@ -280,7 +280,7 @@ export default function Cliente360() {
     { key: 'timeline', label: 'Atividades', icon: ClipboardList, count: activitiesCount },
     { key: 'arquivos', label: 'Arquivos', icon: Paperclip, count: filesCount },
     { key: 'contratos', label: 'Contratos', icon: FileText },
-    { key: 'historico', label: 'Histórico', icon: History },
+    
     { key: 'contatos', label: 'Contatos', icon: Phone, count: contacts.length },
     { key: 'notas', label: 'Notas', icon: StickyNote, count: notesLines },
     { key: 'metricas', label: 'Métricas', icon: BarChart3 },
@@ -384,9 +384,6 @@ export default function Cliente360() {
         <Card className="p-6"><ClienteContratos officeId={office.id} contracts={contracts} onRefresh={fetchAll} /></Card>
       )}
 
-      {activeTab === 'historico' && (
-        <Card className="p-6"><ClienteTimeline officeId={office.id} readOnly={isViewer} /></Card>
-      )}
 
       {activeTab === 'contatos' && (
         <Card className="p-6"><ClienteContatos officeId={office.id} contacts={contacts} onRefresh={fetchAll} /></Card>

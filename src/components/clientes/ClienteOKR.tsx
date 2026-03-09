@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Plus, Loader2, Edit2, Trash2, ChevronDown, ChevronRight, Target, CheckCircle2 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -47,6 +48,7 @@ export function ClienteOKR({ officeId }: Props) {
   const [krs, setKrs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
+  const [deleteTarget, setDeleteTarget] = useState<{ type: 'obj' | 'kr'; id: string; label: string } | null>(null);
 
   // Objective dialog
   const [objDialogOpen, setObjDialogOpen] = useState(false);
@@ -109,7 +111,7 @@ export function ClienteOKR({ officeId }: Props) {
 
   const removeObj = async (id: string) => {
     await supabase.from('okr_objectives').delete().eq('id', id);
-    toast.success('Objetivo removido!'); fetchAll();
+    toast.success('Objetivo removido!'); setDeleteTarget(null); fetchAll();
   };
 
   // KR CRUD
@@ -142,7 +144,7 @@ export function ClienteOKR({ officeId }: Props) {
 
   const removeKr = async (id: string) => {
     await supabase.from('action_plans').delete().eq('id', id);
-    toast.success('KR removida!'); fetchAll();
+    toast.success('KR removida!'); setDeleteTarget(null); fetchAll();
   };
 
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>;
@@ -192,7 +194,7 @@ export function ClienteOKR({ officeId }: Props) {
                         {!isViewer && (
                           <div className="flex gap-1" onClick={e => e.stopPropagation()}>
                             <Button size="sm" variant="ghost" onClick={() => openEditObj(obj)}><Edit2 className="h-4 w-4" /></Button>
-                            <Button size="sm" variant="ghost" onClick={() => removeObj(obj.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                            <Button size="sm" variant="ghost" onClick={() => setDeleteTarget({ type: 'obj', id: obj.id, label: obj.title })}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                           </div>
                         )}
                       </div>
@@ -218,7 +220,7 @@ export function ClienteOKR({ officeId }: Props) {
                           {!isViewer && (
                             <div className="flex gap-1">
                               <Button size="sm" variant="ghost" onClick={() => openEditKr(kr)}><Edit2 className="h-3 w-3" /></Button>
-                              <Button size="sm" variant="ghost" onClick={() => removeKr(kr.id)}><Trash2 className="h-3 w-3 text-destructive" /></Button>
+                              <Button size="sm" variant="ghost" onClick={() => setDeleteTarget({ type: 'kr', id: kr.id, label: kr.title })}><Trash2 className="h-3 w-3 text-destructive" /></Button>
                             </div>
                           )}
                         </div>
@@ -302,6 +304,28 @@ export function ClienteOKR({ officeId }: Props) {
           </form>
         </DialogContent>
       </Dialog>
+      {/* Delete confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={open => { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget?.type === 'obj'
+                ? `Tem certeza que deseja excluir o objetivo "${deleteTarget.label}" e todas as suas KRs? Esta ação não pode ser desfeita.`
+                : `Tem certeza que deseja excluir a KR "${deleteTarget?.label}"? Esta ação não pode ser desfeita.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteTarget?.type === 'obj' ? removeObj(deleteTarget.id) : removeKr(deleteTarget!.id)}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

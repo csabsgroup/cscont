@@ -63,6 +63,20 @@ export default function PortalLogin() {
               {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Entrar
             </Button>
+            <div className="text-center">
+              <button
+                type="button"
+                className="text-sm text-primary hover:underline"
+                onClick={async () => {
+                  if (!email) { toast({ title: 'Informe seu email primeiro', variant: 'destructive' }); return; }
+                  const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + '/portal/login' });
+                  if (error) toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+                  else toast({ title: 'Email enviado', description: 'Verifique sua caixa de entrada para redefinir a senha.' });
+                }}
+              >
+                Esqueci minha senha
+              </button>
+            </div>
           </form>
         </CardContent>
       </Card>

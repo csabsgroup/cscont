@@ -110,8 +110,13 @@ export function ClienteBonus({ officeId }: { officeId: string }) {
     const request = requests.find(r => r.id === requestId);
     
     if (status === 'approved' && request) {
-      // Check available balance for the catalog item
-      const itemGrants = grants
+      // Re-fetch grants to avoid race conditions with stale state data
+      const { data: freshGrants } = await supabase.from('bonus_grants')
+        .select('*, bonus_catalog(name, unit)')
+        .eq('office_id', officeId)
+        .order('granted_at', { ascending: false });
+      
+      const itemGrants = (freshGrants || [])
         .filter(g => g.catalog_item_id === request.catalog_item_id && Number(g.available) > 0)
         .sort((a: any, b: any) => (a.expires_at || '9999') < (b.expires_at || '9999') ? -1 : 1);
       
@@ -222,7 +227,7 @@ export function ClienteBonus({ officeId }: { officeId: string }) {
               </TableHeader>
               <TableBody>
                 {requests.map(r => (
-                  <TableRow key={r.id} className={r.status === 'pending' ? 'bg-amber-50/50' : ''}>
+                  <TableRow key={r.id} className={r.status === 'pending' ? 'bg-amber-50/50 dark:bg-amber-900/20' : ''}>
                     <TableCell className="font-medium">{r.bonus_catalog?.name}</TableCell>
                     <TableCell>{r.quantity}</TableCell>
                     <TableCell><Badge variant={statusLabels[r.status]?.variant || 'secondary'}>{statusLabels[r.status]?.label || r.status}</Badge></TableCell>

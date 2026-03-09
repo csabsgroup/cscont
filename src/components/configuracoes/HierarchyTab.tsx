@@ -14,7 +14,6 @@ interface Profile {
   id: string;
   full_name: string | null;
   avatar_url: string | null;
-  product_id: string | null;
 }
 
 interface Link {
@@ -50,7 +49,7 @@ export function HierarchyTab() {
     const allIds = [...new Set([...managerIds, ...csmIds, ...adminIds])];
     let profiles: Profile[] = [];
     if (allIds.length > 0) {
-      const { data } = await supabase.from('profiles').select('id, full_name, avatar_url, product_id').in('id', allIds);
+      const { data } = await supabase.from('profiles').select('id, full_name, avatar_url').in('id', allIds);
       profiles = (data || []) as Profile[];
     }
 

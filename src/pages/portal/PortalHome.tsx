@@ -36,7 +36,7 @@ export default function PortalHome() {
 
       const [contractRes, okrRes, healthRes, bonusRes, meetingRes] = await Promise.all([
         supabase.from('contracts').select('status, end_date, product_id').eq('office_id', officeId).eq('status', 'ativo').maybeSingle(),
-        supabase.from('action_plans').select('status').eq('office_id', officeId),
+        supabase.from('action_plans').select('status').eq('office_id', officeId).not('objective_id', 'is', null),
         supabase.from('health_scores').select('score, band').eq('office_id', officeId).order('calculated_at', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('bonus_grants').select('available').eq('office_id', officeId),
         supabase.from('meetings').select('title, scheduled_at').eq('office_id', officeId).eq('share_with_client', true).gte('scheduled_at', new Date().toISOString()).order('scheduled_at', { ascending: true }).limit(1).maybeSingle(),

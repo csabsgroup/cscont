@@ -192,7 +192,7 @@ export default function PortalBonus() {
               <TableHeader><TableRow><TableHead>Item</TableHead><TableHead>Qtd</TableHead><TableHead>Status</TableHead><TableHead>Data</TableHead></TableRow></TableHeader>
               <TableBody>
                 {requests.map(r => (
-                  <TableRow key={r.id} className={r.status === 'pending' ? 'bg-amber-50/50' : ''}>
+                  <TableRow key={r.id} className={r.status === 'pending' ? 'bg-amber-50/50 dark:bg-amber-900/20' : ''}>
                     <TableCell className="font-medium">{r.bonus_catalog?.name}</TableCell>
                     <TableCell>{r.quantity}</TableCell>
                     <TableCell><Badge variant={statusLabels[r.status]?.variant}>{statusLabels[r.status]?.label}</Badge></TableCell>

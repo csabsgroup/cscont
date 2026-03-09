@@ -56,7 +56,12 @@ export default function PortalOKR() {
     else {
       toast.success('Atualizado!');
       if (officeId) recalculateHealth(officeId);
-      fetchAll();
+      // Only re-fetch for status changes (not observation edits) to avoid textarea re-render
+      if (!('observations' in patch)) fetchAll();
+      else {
+        // Update local state for observations without full re-fetch
+        setKrs(prev => prev.map(k => k.id === id ? { ...k, ...patch } : k));
+      }
     }
   };
 
