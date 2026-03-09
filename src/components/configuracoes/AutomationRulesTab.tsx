@@ -540,9 +540,9 @@ export function AutomationRulesTab() {
       setEditorOpen(false);
       fetchRules();
       toast.success('Regra salva! Executando em segundo plano para todos os clientes... ⚙️', { duration: 6000 });
-      // Fire-and-forget: clear idempotency + trigger batch processing
+      // Fire-and-forget: trigger batch processing (only force_rerun if explicitly checked)
       supabase.functions.invoke('execute-automations', {
-        body: { action: 'runNowAll', rule_id: savedRuleId, skip_idempotency: true },
+        body: { action: 'runNowAll', rule_id: savedRuleId, force_rerun: forceRerun },
       }).then(({ data: runResult }) => {
         const total = runResult?.total || 0;
         toast.success(`✅ Automação processando ${total} clientes em lotes. Acompanhe na aba Logs.`, { duration: 8000 });
