@@ -155,6 +155,20 @@ export default function Cliente360() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
+  // Auto-sync Asaas financial data when office has CNPJ
+  useEffect(() => {
+    if (!office?.cnpj || !id) return;
+    supabase.functions.invoke('integration-asaas', {
+      body: { action: 'getFinancialByOffice', officeId: id },
+    }).then(() => {
+      // Silently refresh office data after sync
+      supabase.from('offices').select('installments_overdue, total_overdue_value').eq('id', id).single()
+        .then(({ data }) => {
+          if (data) setOffice((prev: any) => prev ? { ...prev, ...data } : prev);
+        });
+    }).catch(() => { /* silent fail */ });
+  }, [office?.cnpj, id]);
+
   // Fetch CSM list for reassign dialog
   const openReassign = async () => {
     const { data } = await supabase.from('profiles').select('id, full_name, avatar_url').order('full_name');

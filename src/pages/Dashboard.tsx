@@ -138,6 +138,7 @@ export default function Dashboard() {
   const today = new Date();
   const ativos = filteredOffices.filter(o => ['ativo', 'bonus_elite', 'upsell'].includes(o.status));
   const activeContracts = filteredContracts.filter(c => c.status === 'ativo');
+  const faturamentoTotal = activeContracts.reduce((s, c) => s + (Number(c.value) || 0), 0);
   const mrr = ativos.reduce((s, o) => s + (Number(o.mrr) || 0), 0);
 
   // MRR Variation: compare current total vs previous month from office_metrics_history

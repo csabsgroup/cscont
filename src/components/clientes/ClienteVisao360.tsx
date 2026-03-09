@@ -59,8 +59,8 @@ export function ClienteVisao360({
   const donePlans = actionPlans.filter(p => p.status === 'done').length;
   const okrPercent = totalPlans > 0 ? Math.round((donePlans / totalPlans) * 100) : 0;
   const ltv = contracts.reduce((sum: number, c: any) => sum + (c.value || 0), 0);
-  const overdueInstallments = activeContract?.installments_overdue || 0;
-  const overdueValue = overdueInstallments * (activeContract?.monthly_value || 0);
+  const overdueInstallments = office.installments_overdue || 0;
+  const overdueValue = office.total_overdue_value || 0;
   const mainContact = contacts.find((c: any) => c.is_main_contact) || contacts[0];
 
   const diasRenovacao = office.cycle_end_date
