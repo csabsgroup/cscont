@@ -385,7 +385,7 @@ function PlaybooksSection({ productId }: { productId: string }) {
     setSaving(false); setDialogOpen(false); fetch();
   };
 
-  const remove = async (id: string) => { await supabase.from('health_playbooks').delete().eq('id', id); toast.success('Removido!'); fetch(); };
+  const remove = async (id: string) => { if (!window.confirm('Remover este playbook?')) return; await supabase.from('health_playbooks').delete().eq('id', id); toast.success('Removido!'); fetch(); };
 
   if (loading) return <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>;
 

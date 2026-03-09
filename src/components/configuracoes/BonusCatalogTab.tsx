@@ -77,6 +77,7 @@ export function BonusCatalogTab() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!window.confirm('Tem certeza que deseja remover este item do catálogo?')) return;
     const { error } = await supabase.from('bonus_catalog').delete().eq('id', id);
     if (error) toast.error('Erro: ' + error.message); else { toast.success('Item removido!'); fetchAll(); }
   };
