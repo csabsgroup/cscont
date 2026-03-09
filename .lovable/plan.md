@@ -1,43 +1,63 @@
 
 
-# Diagnóstico e Correção: Automação não atingiu todos os clientes
+# Diagnosis and Fix Plan
 
-## Diagnóstico
+## Root Causes Found
 
-**262 escritórios** têm produto Aceleração + status ativo, mas apenas **42 foram processados**. Duas causas raiz:
+### Problem 1 — Webhook mapping not filling fields
+The webhook_logs table confirms the error: `"supabase.from(...).insert(...).catch is not a function"`. The last two webhooks (March 5 and March 6) both crashed with this error BEFORE reaching office creation. The `.catch()` fix was applied in code but the webhooks arrived before deployment completed. The mapping paths are correct, the company data exists at root level with all expected fields. This problem is already fixed in code — just needs a new webhook to test.
 
-### Causa 1 — Timeout da Edge Function
-Cada escritório leva ~4.5 segundos para processar (7 ações incluindo 6 playbooks). O processamento é sequencial: 262 × 4.5s = ~1179 segundos. A Edge Function tem limite de ~400s e morre após processar ~42 escritórios. Os logs confirmam: `shutdown` aparece intercalado com os `Summary` dos últimos offices processados.
+### Problem 2 — Only 3 of 17 create_activity actions succeeded
+**This is the critical finding.** The `activity_type` database enum has these valid values:
+`task, follow_up, onboarding, renewal, other, ligacao, check_in, email, whatsapp, planejamento`
 
-### Causa 2 — Idempotência bloqueia re-execução
-O `runNowAll` chama `executeV2Rules` que verifica a tabela `automation_executions`. Os 42 escritórios já processados têm registros lá. Se disparar novamente, esses 42 serão pulados (correto), mas os restantes 220 sofrerão o mesmo timeout.
+It does NOT include `"meeting"`. The automation rule "[ELT] Delegação automática" has 14 actions with `activity_type: "meeting"` — every one of those fails silently because the INSERT violates the enum constraint. The `handleAction` function doesn't capture the error from `supabase.from("activities").insert(...)`.
 
-## Correções
+Evidence: automation_logs shows 19 `actions_executed` entries, but only 3 `create_activity` have an `id` (the ones with type "task" or "email"). The other 14 have no `id` — they failed silently.
 
-### Fix 1 — Processamento em lotes (Edge Function)
-Refatorar `runNowAll` em `execute-automations/index.ts`:
-- Processar escritórios em lotes de 10
-- Após cada lote, verificar o tempo decorrido
-- Se restarem escritórios, a função chama a si mesma via `fetch()` com os IDs restantes (passando `offset` ou `remaining_ids`)
-- Retornar imediatamente ao frontend com `{ queued: true, total: 262 }` e processar em background
+### Problem 3 — Webhook doesn't trigger automations
+Same root cause as Problem 1 — the webhook crashed before reaching the automation invocation lines (419-430). Once the webhook stops crashing, automations will be invoked via `supabase.functions.invoke()`.
 
-A abordagem:
-1. `runNowAll` recebe `rule_id` + opcionalmente `offset`
-2. Busca offices, pula os já processados (via `automation_executions`)
-3. Processa até 15 offices (~67s)
-4. Se restarem mais, faz `fetch()` para si mesma com `offset` incrementado (fire-and-forget)
-5. Retorna resultado parcial ao cliente
+## Fixes
 
-### Fix 2 — Bypass idempotência no "Disparar agora"
-Adicionar flag `skip_idempotency: true` quando `runNowAll` chama `executeV2Rules`, para que offices que já rodaram possam rodar de novo se o usuário explicitamente pedir.
+### Fix A — Add "meeting" to activity_type enum (database migration)
+```sql
+ALTER TYPE activity_type ADD VALUE IF NOT EXISTS 'meeting';
+```
+This is the correct fix because:
+- The automation builder UI offers "meeting" as an option
+- Users have configured rules with this type
+- 14 activities are waiting to be created with this type
 
-### Fix 3 — UI: Fechar editor ao ativar + toast
-Em `AutomationRulesTab.tsx`:
-- No `handleSave`, quando `runNow` está ativo: fechar o editor (`setEditorOpen(false)`) ANTES de invocar a função, mostrar toast "Regra salva e executando em segundo plano..."
-- Não esperar o `await` da invocação para fechar o editor — disparar fire-and-forget
-- Adicionar toast de conclusão via `.then()` no background
+### Fix B — Add error handling in handleAction (execute-automations)
+In the `create_activity` case (line 46-47), capture and log the error:
+```javascript
+const { data: act, error: actErr } = await supabase.from("activities").insert(payload).select("id").single();
+if (actErr) {
+  console.error('[AUTOMATIONS] Activity insert error:', actErr.message, 'payload:', JSON.stringify(payload));
+  return { type: "create_activity", error: actErr.message };
+}
+```
+Apply similar error capture to ALL action types that do database inserts (send_notification, add_note, create_action_plan, etc.).
 
-## Arquivos modificados
-- `supabase/functions/execute-automations/index.ts` — lotes + bypass idempotência
-- `src/components/configuracoes/AutomationRulesTab.tsx` — fechar editor antes de executar
+### Fix C — Ensure webhook deployment is current
+The piperun-webhook code already has the `.catch()` fix from the previous iteration. Verify the edge function redeploys by checking logs after saving. No code change needed — just confirmation.
+
+### Fix D — Add company fallback in webhook (safety)
+In `piperun-webhook/index.ts` line 341, add fallback to `person.company`:
+```javascript
+let companyData = deal.company || deal.person?.company;
+```
+This handles edge cases where the Piperun payload structure varies.
+
+## Files Modified
+- `supabase/functions/execute-automations/index.ts` — error handling in handleAction
+- `supabase/functions/piperun-webhook/index.ts` — company fallback
+- Database migration: add `meeting` to `activity_type` enum
+
+## Expected Result After Fix
+- All 17 `create_activity` actions succeed (activities created with correct types)
+- Webhook creates office with all mapped fields populated
+- Webhook triggers automations that execute all 19 actions
+- automation_logs show complete execution with all action IDs
 
