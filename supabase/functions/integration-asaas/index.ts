@@ -266,29 +266,74 @@ Deno.serve(async (req) => {
     }
 
     if (action === "syncAll") {
+      // Fetch ALL offices with CNPJ (not just those with asaas_customer_id)
       const { data: offices } = await supabase
         .from("offices")
-        .select("id, asaas_customer_id")
-        .not("asaas_customer_id", "is", null);
+        .select("id, cnpj, asaas_customer_id")
+        .not("cnpj", "is", null)
+        .neq("cnpj", "");
 
+      const allOffices = offices || [];
+      const total = allOffices.length;
       let synced = 0;
-      for (const office of offices || []) {
-        try {
-          const result = await asaasGet(`/payments?customer=${office.asaas_customer_id}&status=OVERDUE`);
-          const overduePayments = result.data || [];
-          const overdueCount = overduePayments.length;
-          const overdueValue = overduePayments.reduce((s: number, p: any) => s + p.value, 0);
-          await supabase.from("offices").update({
-            installments_overdue: overdueCount,
-            total_overdue_value: overdueValue,
-          }).eq("id", office.id);
-          synced++;
-        } catch (e) {
-          console.error(`[ASAAS] Sync failed for office ${office.id}:`, e);
+      let notFound = 0;
+      let errors = 0;
+      const startTime = Date.now();
+      const TIMEOUT_MS = 50000; // 50s safety margin (edge fn limit ~60s)
+
+      // Process in concurrent batches of 5
+      const BATCH_SIZE = 5;
+      for (let i = 0; i < allOffices.length; i += BATCH_SIZE) {
+        if (Date.now() - startTime > TIMEOUT_MS) {
+          console.log(`[ASAAS] Timeout approaching, processed ${synced + notFound + errors}/${total}`);
+          break;
         }
+
+        const batch = allOffices.slice(i, i + BATCH_SIZE);
+        const results = await Promise.allSettled(batch.map(async (office) => {
+          let customerId = office.asaas_customer_id;
+
+          // If no cached customer ID, lookup by CNPJ
+          if (!customerId) {
+            const cnpjDigits = (office.cnpj || "").replace(/\D/g, "");
+            if (!cnpjDigits) { notFound++; return; }
+
+            try {
+              const customerRes = await asaasGet(`/customers?cpfCnpj=${cnpjDigits}`);
+              if (customerRes.data && customerRes.data.length > 0) {
+                customerId = customerRes.data[0].id;
+                // Cache the customer ID
+                await supabase.from("offices").update({ asaas_customer_id: customerId }).eq("id", office.id);
+              } else {
+                notFound++;
+                return;
+              }
+            } catch (e) {
+              console.error(`[ASAAS] CNPJ lookup failed for office ${office.id}:`, e);
+              errors++;
+              return;
+            }
+          }
+
+          // Fetch overdue payments
+          try {
+            const result = await asaasGet(`/payments?customer=${customerId}&status=OVERDUE`);
+            const overduePayments = result.data || [];
+            const overdueCount = overduePayments.length;
+            const overdueValue = overduePayments.reduce((s: number, p: any) => s + p.value, 0);
+            await supabase.from("offices").update({
+              installments_overdue: overdueCount,
+              total_overdue_value: overdueValue,
+            }).eq("id", office.id);
+            synced++;
+          } catch (e) {
+            console.error(`[ASAAS] Payment sync failed for office ${office.id}:`, e);
+            errors++;
+          }
+        }));
       }
 
-      return jsonResponse({ success: true, synced });
+      return jsonResponse({ success: true, synced, notFound, errors, total });
     }
 
     return jsonResponse(
