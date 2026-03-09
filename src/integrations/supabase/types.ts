@@ -1189,6 +1189,9 @@ export type Database = {
       }
       events: {
         Row: {
+          category: string
+          confirmation_deadline_days: number | null
+          cover_url: string | null
           created_at: string
           created_by: string
           description: string | null
@@ -1198,11 +1201,15 @@ export type Database = {
           id: string
           location: string | null
           max_participants: number | null
+          observations: string | null
           title: string
           type: string
           updated_at: string
         }
         Insert: {
+          category?: string
+          confirmation_deadline_days?: number | null
+          cover_url?: string | null
           created_at?: string
           created_by: string
           description?: string | null
@@ -1212,11 +1219,15 @@ export type Database = {
           id?: string
           location?: string | null
           max_participants?: number | null
+          observations?: string | null
           title: string
           type?: string
           updated_at?: string
         }
         Update: {
+          category?: string
+          confirmation_deadline_days?: number | null
+          cover_url?: string | null
           created_at?: string
           created_by?: string
           description?: string | null
@@ -1226,6 +1237,7 @@ export type Database = {
           id?: string
           location?: string | null
           max_participants?: number | null
+          observations?: string | null
           title?: string
           type?: string
           updated_at?: string
