@@ -89,10 +89,22 @@ export default function Dashboard() {
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   // === FILTERED DATA ===
+  // Expand selected filter: if a manager is selected, include their subordinate CSMs
+  const expandedCsmIds = useMemo(() => {
+    if (selectedCsms.length === 0) return [];
+    const selected = selectedCsms[0];
+    const profile = csmProfiles.find(p => p.id === selected);
+    if (profile?._role === 'manager') {
+      const subordinates = managerCsmLinks.filter(l => l.manager_id === selected).map(l => l.csm_id);
+      return subordinates.length > 0 ? subordinates : [selected];
+    }
+    return [selected];
+  }, [selectedCsms, csmProfiles, managerCsmLinks]);
+
   const filteredOffices = useMemo(() => {
     let result = offices;
-    if (selectedCsms.length > 0) {
-      result = result.filter(o => selectedCsms.includes(o.csm_id));
+    if (expandedCsmIds.length > 0) {
+      result = result.filter(o => expandedCsmIds.includes(o.csm_id));
     }
     if (selectedProductId) {
       result = result.filter(o => o.active_product_id === selectedProductId);
