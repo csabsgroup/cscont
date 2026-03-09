@@ -1,6 +1,7 @@
 import logo from '@/assets/logo.png';
 import {
   LayoutDashboard,
+  ClipboardList,
   Building2,
   Kanban,
   CheckSquare,
