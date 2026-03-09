@@ -181,7 +181,7 @@ export function ParticipantManager({ eventId, eligibleProductIds, readOnly, even
                   </TableCell>
                   <TableCell>
                     {readOnly ? (
-                      attendVal ? <Badge className={`text-xs ${getStatusBadge(attendVal).color}`}>{getStatusBadge(attendVal).label}</Badge> : <span className="text-xs text-muted-foreground">—</span>
+                      attendVal !== 'pendente' ? <Badge className={`text-xs ${getStatusBadge(attendVal).color}`}>{getStatusBadge(attendVal).label}</Badge> : <span className="text-xs text-muted-foreground">—</span>
                     ) : (
                       <Select value={attendVal} onValueChange={val => updateAttendance(p, val)} disabled={!eventIsPast}>
                         <SelectTrigger className={`w-[150px] h-8 text-xs ${!eventIsPast ? 'opacity-50' : ''}`}>
