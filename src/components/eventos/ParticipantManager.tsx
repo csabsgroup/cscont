@@ -95,8 +95,7 @@ export function ParticipantManager({ eventId, eligibleProductIds, readOnly, even
   };
 
   const updateAttendance = async (p: Participant, attendance: string) => {
-    if (!attendance) {
-      // Reset back to confirmation status
+    if (attendance === 'pendente') {
       const confirmStatus = p.confirmed ? 'confirmado' : 'a_confirmar';
       await supabase.from('event_participants').update({ status: confirmStatus }).eq('id', p.id);
     } else {
