@@ -530,23 +530,26 @@ export function AutomationRulesTab() {
       else { toast.success('Regra criada!'); savedRuleId = inserted?.id; }
     }
 
-    // Run now if toggled
-    if (runNow && savedRuleId) {
-      setRunNowLoading(true);
-      toast.info('Executando regra para todos os clientes...');
-      try {
-        const { data: runResult } = await supabase.functions.invoke('execute-automations', {
-          body: { action: 'runNowAll', rule_id: savedRuleId },
-        });
-        toast.success(`Regra executada! ${runResult?.executed || 0} clientes processados.`);
-      } catch (e) {
-        toast.error('Erro ao executar regra imediatamente.');
-      }
-      setRunNowLoading(false);
-    }
-
     setRunNow(false);
     setSaving(false);
+
+    // Close editor immediately — fire-and-forget the execution
+    if (runNow && savedRuleId) {
+      setEditorOpen(false);
+      fetchRules();
+      toast.success('Regra salva! Executando em segundo plano para todos os clientes... ⚙️', { duration: 6000 });
+      // Fire-and-forget: clear idempotency + trigger batch processing
+      supabase.functions.invoke('execute-automations', {
+        body: { action: 'runNowAll', rule_id: savedRuleId, skip_idempotency: true },
+      }).then(({ data: runResult }) => {
+        const total = runResult?.total || 0;
+        toast.success(`✅ Automação processando ${total} clientes em lotes. Acompanhe na aba Logs.`, { duration: 8000 });
+      }).catch(() => {
+        toast.error('Erro ao iniciar execução da regra. Verifique os Logs.');
+      });
+      return;
+    }
+
     setEditorOpen(false);
     fetchRules();
   };
