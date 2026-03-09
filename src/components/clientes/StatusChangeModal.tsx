@@ -91,6 +91,15 @@ export function StatusChangeModal({
       const { error } = await supabase.from('offices').update(updatePayload).eq('id', officeId);
       if (error) throw error;
 
+      // Sync contract statuses on loss
+      if (isChurnLike) {
+        const contractStatus = targetStatus === 'nao_renovado' ? 'encerrado' : 'cancelado';
+        const { error: contractErr } = await supabase.from('contracts')
+          .update({ status: contractStatus as any })
+          .eq('office_id', officeId);
+        if (contractErr) console.error('Contract sync error:', contractErr);
+      }
+
       // Audit log
       const reasonName = reasons.find(r => r.id === churnReasonId)?.name;
       await supabase.from('audit_logs').insert({
