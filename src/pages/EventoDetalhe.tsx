@@ -275,7 +275,7 @@ export default function EventoDetalhe() {
               </div>
               <div className="space-y-1.5">
                 <Label>Descrição</Label>
-                <Textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={3} disabled={readOnly} />
+                <RichTextEditor value={form.description} onChange={v => setForm({ ...form, description: v })} readOnly={readOnly} />
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="space-y-1.5">
