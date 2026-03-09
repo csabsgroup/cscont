@@ -7,14 +7,14 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Plus, Loader2, Trash2, Edit2, GripVertical, Copy } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Plus, Loader2, Trash2, Edit2, GripVertical, Copy, MoreHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
+import { FolderAccordion, useFolders, MoveToFolderMenu, type Folder } from './FolderAccordion';
 
 const TYPE_LABELS: Record<string, string> = {
   task: 'Tarefa', follow_up: 'Follow-up', onboarding: 'Onboarding', renewal: 'Renovação',
@@ -34,6 +34,18 @@ interface PlaybookActivity {
   responsible_type: string;
 }
 
+interface Playbook {
+  id: string;
+  name: string;
+  description?: string;
+  product_id?: string;
+  is_active: boolean;
+  auto_advance_journey?: boolean;
+  advance_to_stage_id?: string;
+  activities: PlaybookActivity[];
+  folder_id?: string | null;
+}
+
 const genId = () => crypto.randomUUID();
 
 const emptyActivity = (): PlaybookActivity => ({
@@ -42,7 +54,7 @@ const emptyActivity = (): PlaybookActivity => ({
 
 export function PlaybooksTab() {
   const { user } = useAuth();
-  const [playbooks, setPlaybooks] = useState<any[]>([]);
+  const [playbooks, setPlaybooks] = useState<Playbook[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [stages, setStages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,10 +62,14 @@ export function PlaybooksTab() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // Folders
+  const { folders, refetch: refetchFolders } = useFolders('playbooks');
+
   // Form
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [productId, setProductId] = useState('');
+  const [folderId, setFolderId] = useState<string | null>(null);
   const [isActive, setIsActive] = useState(true);
   const [autoAdvance, setAutoAdvance] = useState(false);
   const [advanceToStageId, setAdvanceToStageId] = useState('');
@@ -66,7 +82,7 @@ export function PlaybooksTab() {
       supabase.from('products').select('id, name').eq('is_active', true).order('name'),
       supabase.from('journey_stages').select('id, name, product_id').order('position'),
     ]);
-    setPlaybooks((pbRes.data as any[]) || []);
+    setPlaybooks((pbRes.data as unknown as Playbook[]) || []);
     setProducts(prodRes.data || []);
     setStages(stagesRes.data || []);
     setLoading(false);
@@ -76,14 +92,17 @@ export function PlaybooksTab() {
 
   const openNew = () => {
     setEditingId(null); setName(''); setDescription(''); setProductId('');
+    setFolderId(null);
     setIsActive(true); setAutoAdvance(false); setAdvanceToStageId('');
     setActivities([emptyActivity()]);
     setEditorOpen(true);
   };
 
-  const openEdit = (pb: any) => {
+  const openEdit = (pb: Playbook) => {
     setEditingId(pb.id); setName(pb.name); setDescription(pb.description || '');
-    setProductId(pb.product_id || ''); setIsActive(pb.is_active);
+    setProductId(pb.product_id || ''); 
+    setFolderId(pb.folder_id || null);
+    setIsActive(pb.is_active);
     setAutoAdvance(pb.auto_advance_journey || false);
     setAdvanceToStageId(pb.advance_to_stage_id || '');
     const acts = Array.isArray(pb.activities) ? pb.activities.map((a: any) => ({ ...a, id: a.id || genId() })) : [emptyActivity()];
@@ -97,7 +116,9 @@ export function PlaybooksTab() {
     setSaving(true);
     const payload = {
       name, description: description || null,
-      product_id: productId || null, is_active: isActive,
+      product_id: productId || null, 
+      folder_id: folderId || null,
+      is_active: isActive,
       auto_advance_journey: autoAdvance,
       advance_to_stage_id: autoAdvance && advanceToStageId ? advanceToStageId : null,
       activities: activities.map((a, i) => ({ ...a, order: i + 1 })),
@@ -121,11 +142,12 @@ export function PlaybooksTab() {
     toast.success('Playbook excluído'); fetchAll();
   };
 
-  const handleDuplicate = (pb: any) => {
+  const handleDuplicate = (pb: Playbook) => {
     setEditingId(null);
     setName(`Cópia de ${pb.name}`);
     setDescription(pb.description || '');
     setProductId(pb.product_id || '');
+    setFolderId(pb.folder_id || null);
     setIsActive(true);
     setAutoAdvance(pb.auto_advance_journey || false);
     setAdvanceToStageId(pb.advance_to_stage_id || '');
@@ -134,6 +156,12 @@ export function PlaybooksTab() {
       : [emptyActivity()];
     setActivities(acts);
     setEditorOpen(true);
+  };
+
+  const handleMoveToFolder = async (playbookId: string, newFolderId: string | null) => {
+    const { error } = await supabase.from('playbook_templates' as any).update({ folder_id: newFolderId }).eq('id', playbookId);
+    if (error) toast.error('Erro ao mover: ' + error.message);
+    else { toast.success('Playbook movido!'); fetchAll(); }
   };
 
   const updateActivity = (actId: string, patch: Partial<PlaybookActivity>) => {
@@ -156,6 +184,54 @@ export function PlaybooksTab() {
 
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>;
 
+  // Render item for FolderAccordion
+  const renderPlaybookItem = (pb: Playbook) => (
+    <div className="flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-sm truncate">{pb.name}</span>
+          <Badge variant={pb.is_active ? 'default' : 'secondary'} className="text-xs">
+            {pb.is_active ? 'Ativo' : 'Inativo'}
+          </Badge>
+        </div>
+        <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+          <span>{products.find(p => p.id === pb.product_id)?.name || 'Todos os produtos'}</span>
+          <span>•</span>
+          <span>{Array.isArray(pb.activities) ? pb.activities.length : 0} atividades</span>
+          {pb.auto_advance_journey && (
+            <>
+              <span>•</span>
+              <Badge variant="outline" className="text-[10px]">Auto-avança</Badge>
+            </>
+          )}
+        </div>
+      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button size="icon" variant="ghost" className="h-8 w-8">
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => openEdit(pb)}>
+            <Edit2 className="mr-2 h-3 w-3" />Editar
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => handleDuplicate(pb)}>
+            <Copy className="mr-2 h-3 w-3" />Duplicar
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => handleDelete(pb.id)} className="text-destructive">
+            <Trash2 className="mr-2 h-3 w-3" />Excluir
+          </DropdownMenuItem>
+          <MoveToFolderMenu
+            folders={folders}
+            currentFolderId={pb.folder_id || null}
+            onMove={(fId) => handleMoveToFolder(pb.id, fId)}
+          />
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -163,40 +239,15 @@ export function PlaybooksTab() {
         <Button size="sm" onClick={openNew}><Plus className="mr-1 h-4 w-4" />Novo Playbook</Button>
       </div>
 
-      <Card>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nome</TableHead>
-              <TableHead>Produto</TableHead>
-              <TableHead>Atividades</TableHead>
-              <TableHead>Auto-Avançar</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {playbooks.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhum playbook configurado.</TableCell></TableRow>
-            ) : playbooks.map(pb => (
-              <TableRow key={pb.id}>
-                <TableCell className="font-medium">{pb.name}</TableCell>
-                <TableCell className="text-muted-foreground">{products.find(p => p.id === pb.product_id)?.name || 'Todos'}</TableCell>
-                <TableCell><Badge variant="secondary">{Array.isArray(pb.activities) ? pb.activities.length : 0}</Badge></TableCell>
-                <TableCell>{pb.auto_advance_journey ? <Badge variant="default">Sim</Badge> : <span className="text-muted-foreground">Não</span>}</TableCell>
-                <TableCell><Badge variant={pb.is_active ? 'default' : 'secondary'}>{pb.is_active ? 'Ativo' : 'Inativo'}</Badge></TableCell>
-                <TableCell>
-                  <div className="flex gap-1">
-                    <Button size="sm" variant="ghost" onClick={() => openEdit(pb)}><Edit2 className="h-4 w-4" /></Button>
-                    <Button size="sm" variant="ghost" onClick={() => handleDuplicate(pb)}><Copy className="h-4 w-4" /></Button>
-                    <Button size="sm" variant="ghost" onClick={() => handleDelete(pb.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Card>
+      <FolderAccordion
+        scope="playbooks"
+        items={playbooks}
+        folders={folders}
+        renderItem={renderPlaybookItem}
+        onMoveItem={handleMoveToFolder}
+        onFoldersChange={refetchFolders}
+        emptyMessage="Nenhum playbook configurado."
+      />
 
       {/* Editor Dialog */}
       <Dialog open={editorOpen} onOpenChange={setEditorOpen}>
@@ -213,6 +264,16 @@ export function PlaybooksTab() {
                   <SelectContent>
                     <SelectItem value="all">Todos os produtos</SelectItem>
                     {products.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Pasta</Label>
+                <Select value={folderId || '__none__'} onValueChange={v => setFolderId(v === '__none__' ? null : v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Sem pasta</SelectItem>
+                    {folders.map(f => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
