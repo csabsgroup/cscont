@@ -14,7 +14,6 @@ import { Plus, Loader2, Calendar, ChevronDown } from 'lucide-react';
 import { isFuture, isPast } from 'date-fns';
 import { toast } from 'sonner';
 import { EventCard } from '@/components/eventos/EventCard';
-import { EventDetailDrawer } from '@/components/eventos/EventDetailDrawer';
 
 const CATEGORIES = [
   { value: 'encontro', label: 'Encontro' },
