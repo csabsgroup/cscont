@@ -1151,7 +1151,7 @@ Deno.serve(async (req) => {
 
     // ========== runNowAll ==========
     if (action === "runNowAll") {
-      const { rule_id, batch_offset, skip_idempotency } = body;
+      const { rule_id, batch_offset, force_rerun } = body;
       if (!rule_id) throw new Error("rule_id required");
       const BATCH_SIZE = 15;
       const offset = batch_offset || 0;
@@ -1166,9 +1166,9 @@ Deno.serve(async (req) => {
       const { data: allOffices } = await officeQuery;
       const totalOffices = (allOffices || []).length;
 
-      // If skip_idempotency, clear previous execution records for this rule so they can re-run
-      if (skip_idempotency && offset === 0) {
-        console.log(`[AUTOMATIONS] runNowAll: Clearing previous executions for rule ${rule_id} (skip_idempotency=true)`);
+      // Only clear executions if user explicitly chose "force re-run" AND this is the first batch
+      if (force_rerun && offset === 0) {
+        console.log(`[AUTOMATIONS] runNowAll: Clearing previous executions for rule ${rule_id} (force_rerun=true)`);
         await supabase.from("automation_executions").delete().eq("rule_id", rule_id);
       }
 
@@ -1201,7 +1201,7 @@ Deno.serve(async (req) => {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${serviceRoleKey}`,
           },
-          body: JSON.stringify({ action: "runNowAll", rule_id, batch_offset: nextOffset, skip_idempotency: false }),
+          body: JSON.stringify({ action: "runNowAll", rule_id, batch_offset: nextOffset, force_rerun: false }),
         }).catch(e => console.error('[AUTOMATIONS] Self-invoke failed:', e));
       }
 
