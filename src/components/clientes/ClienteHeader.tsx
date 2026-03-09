@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { StatusDropdown } from './StatusDropdown';
 import { HealthScoreBars } from './HealthScoreBars';
 import { CustomFieldsDisplay } from './CustomFieldsDisplay';
-import { ArrowLeft, Pencil, MoreVertical, UserCog, RefreshCw, StickyNote, Eye, Camera, Phone, Trash2 } from 'lucide-react';
+import { ArrowLeft, Pencil, MoreVertical, UserCog, RefreshCw, StickyNote, Eye, Camera, Phone, Trash2, KeyRound } from 'lucide-react';
 import { UserAvatar } from '@/components/shared/UserAvatar';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -59,12 +59,13 @@ interface ClienteHeaderProps {
   onLogoUpdated?: () => void;
   onPreviewOpen?: () => void;
   onWhatsApp?: () => void;
+  onManageAccess?: () => void;
   contracts?: any[];
 }
 
 export function ClienteHeader({
   office, onEdit, onDelete, health, stageName, csmProfile,
-  onReassignCSM, onChangeStatus, onStatusSelect, canEditStatus, onQuickNote, onLogoUpdated, onPreviewOpen, onWhatsApp, contracts,
+  onReassignCSM, onChangeStatus, onStatusSelect, canEditStatus, onQuickNote, onLogoUpdated, onPreviewOpen, onWhatsApp, onManageAccess, contracts,
 }: ClienteHeaderProps) {
   const navigate = useNavigate();
   const { isViewer, isClient, isAdmin, isManager } = useAuth();
@@ -222,6 +223,11 @@ export function ClienteHeader({
               <DropdownMenuItem onClick={onQuickNote}>
                 <StickyNote className="mr-2 h-4 w-4" />Nota Rápida
               </DropdownMenuItem>
+              {onManageAccess && (
+                <DropdownMenuItem onClick={onManageAccess}>
+                  <KeyRound className="mr-2 h-4 w-4" />Gerenciar Acesso Portal
+                </DropdownMenuItem>
+              )}
               {(isAdmin || isManager) && onDelete && (
                 <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive focus:bg-destructive/10">
                   <Trash2 className="mr-2 h-4 w-4" />Excluir Cliente
