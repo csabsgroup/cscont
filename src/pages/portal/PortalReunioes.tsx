@@ -6,11 +6,14 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, Video } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { PaginationWithPageSize } from '@/components/shared/PaginationWithPageSize';
 
 export default function PortalReunioes() {
   const { officeId } = usePortal();
   const [meetings, setMeetings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   useEffect(() => {
     if (!officeId) { setLoading(false); return; }
@@ -23,31 +26,44 @@ export default function PortalReunioes() {
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
 
+  const startIdx = (page - 1) * pageSize;
+  const paginated = meetings.slice(startIdx, startIdx + pageSize);
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Reuniões</h1>
       {meetings.length === 0 ? (
         <Card><CardContent className="flex flex-col items-center py-8"><Video className="h-8 w-8 text-muted-foreground/40 mb-2" /><p className="text-sm text-muted-foreground">Nenhuma reunião compartilhada.</p></CardContent></Card>
       ) : (
-        <div className="space-y-3">
-          {meetings.map(m => (
-            <Card key={m.id}>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base">{m.title}</CardTitle>
-                  <Badge variant={m.status === 'completed' ? 'default' : 'secondary'}>{m.status === 'completed' ? 'Concluída' : m.status === 'scheduled' ? 'Agendada' : 'Cancelada'}</Badge>
-                </div>
-                <p className="text-sm text-muted-foreground">{format(new Date(m.scheduled_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
-              </CardHeader>
-              {(m.notes || m.transcript) && (
-                <CardContent className="space-y-3">
-                  {m.notes && <div><p className="text-sm font-medium mb-1">Ata</p><p className="text-sm text-muted-foreground whitespace-pre-wrap">{m.notes}</p></div>}
-                  {m.transcript && <div><p className="text-sm font-medium mb-1">Transcrição</p><p className="text-sm text-muted-foreground whitespace-pre-wrap">{m.transcript}</p></div>}
-                </CardContent>
-              )}
-            </Card>
-          ))}
-        </div>
+        <>
+          <div className="space-y-3">
+            {paginated.map(m => (
+              <Card key={m.id}>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base">{m.title}</CardTitle>
+                    <Badge variant={m.status === 'completed' ? 'default' : 'secondary'}>{m.status === 'completed' ? 'Concluída' : m.status === 'scheduled' ? 'Agendada' : 'Cancelada'}</Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{format(new Date(m.scheduled_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
+                </CardHeader>
+                {(m.notes || m.transcript) && (
+                  <CardContent className="space-y-3">
+                    {m.notes && <div><p className="text-sm font-medium mb-1">Ata</p><p className="text-sm text-muted-foreground whitespace-pre-wrap">{m.notes}</p></div>}
+                    {m.transcript && <div><p className="text-sm font-medium mb-1">Transcrição</p><p className="text-sm text-muted-foreground whitespace-pre-wrap">{m.transcript}</p></div>}
+                  </CardContent>
+                )}
+              </Card>
+            ))}
+          </div>
+          <PaginationWithPageSize
+            totalItems={meetings.length}
+            currentPage={page}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            itemLabel="reuniões"
+          />
+        </>
       )}
     </div>
   );

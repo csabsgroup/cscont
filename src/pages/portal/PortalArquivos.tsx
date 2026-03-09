@@ -4,6 +4,7 @@ import { usePortal } from '@/contexts/PortalContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Loader2, FileText, ExternalLink, File, Image, FileSpreadsheet } from 'lucide-react';
 import { format } from 'date-fns';
+import { PaginationWithPageSize } from '@/components/shared/PaginationWithPageSize';
 
 function getFileIcon(type: string | null) {
   if (!type) return <File className="h-5 w-5 text-muted-foreground" />;
@@ -17,6 +18,8 @@ export default function PortalArquivos() {
   const { officeId } = usePortal();
   const [files, setFiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   useEffect(() => {
     if (!officeId) { setLoading(false); return; }
@@ -34,6 +37,9 @@ export default function PortalArquivos() {
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
 
+  const startIdx = (page - 1) * pageSize;
+  const paginated = files.slice(startIdx, startIdx + pageSize);
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Arquivos Compartilhados</h1>
@@ -43,22 +49,32 @@ export default function PortalArquivos() {
           <p className="text-sm text-muted-foreground">Nenhum arquivo compartilhado.</p>
         </CardContent></Card>
       ) : (
-        <div className="space-y-2">
-          {files.map((f: any) => (
-            <Card key={f.id} className="cursor-pointer hover:shadow-sm transition-shadow" onClick={() => window.open(f.file_url, '_blank')}>
-              <CardContent className="flex items-center justify-between p-4">
-                <div className="flex items-center gap-3">
-                  {getFileIcon(f.file_type)}
-                  <div>
-                    <p className="text-sm font-medium">{f.name}</p>
-                    <p className="text-xs text-muted-foreground">{format(new Date(f.created_at), 'dd/MM/yyyy')}</p>
+        <>
+          <div className="space-y-2">
+            {paginated.map((f: any) => (
+              <Card key={f.id} className="cursor-pointer hover:shadow-sm transition-shadow" onClick={() => window.open(f.file_url, '_blank')}>
+                <CardContent className="flex items-center justify-between p-4">
+                  <div className="flex items-center gap-3">
+                    {getFileIcon(f.file_type)}
+                    <div>
+                      <p className="text-sm font-medium">{f.name}</p>
+                      <p className="text-xs text-muted-foreground">{format(new Date(f.created_at), 'dd/MM/yyyy')}</p>
+                    </div>
                   </div>
-                </div>
-                <ExternalLink className="h-4 w-4 text-muted-foreground" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                  <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          <PaginationWithPageSize
+            totalItems={files.length}
+            currentPage={page}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            itemLabel="arquivos"
+          />
+        </>
       )}
     </div>
   );

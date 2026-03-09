@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { ActivityPopup } from '@/components/atividades/ActivityPopup';
 import { ActivityEditDrawer } from '@/components/atividades/ActivityEditDrawer';
+import { PaginationWithPageSize } from '@/components/shared/PaginationWithPageSize';
 import { UserAvatar } from '@/components/shared/UserAvatar';
 
 interface Activity {
@@ -143,6 +144,9 @@ export default function Atividades() {
     setTitle(''); setDescription(''); setDueDate(''); setType('task'); setPriority('medium');
     setOfficeId(''); setAssigneeId(session?.user?.id || ''); setChecklistItems([]); setNewCheckItem('');
   };
+
+  const [tabPage, setTabPage] = useState<Record<string, number>>({ hoje: 1, atrasadas: 1, futuras: 1, concluidas: 1 });
+  const [tabPageSize, setTabPageSize] = useState<Record<string, number>>({ hoje: 25, atrasadas: 25, futuras: 25, concluidas: 25 });
 
   const hoje = activities.filter(a => !a.completed_at && a.due_date && isToday(new Date(a.due_date)));
   const atrasadas = activities.filter(a => !a.completed_at && a.due_date && isPast(new Date(a.due_date)) && !isToday(new Date(a.due_date)));
@@ -293,6 +297,10 @@ export default function Atividades() {
           </TabsList>
           {(['hoje', 'atrasadas', 'futuras', 'concluidas'] as const).map(tab => {
             const list = tab === 'hoje' ? hoje : tab === 'atrasadas' ? atrasadas : tab === 'futuras' ? futuras : concluidas;
+            const currentTabPage = tabPage[tab] || 1;
+            const currentTabPageSize = tabPageSize[tab] || 25;
+            const startIdx = (currentTabPage - 1) * currentTabPageSize;
+            const paginatedList = list.slice(startIdx, startIdx + currentTabPageSize);
             return (
               <TabsContent key={tab} value={tab} className="space-y-2 mt-4">
                 {list.length === 0 ? (
@@ -308,7 +316,20 @@ export default function Atividades() {
                     </CardContent>
                   </Card>
                 ) : (
-                  list.map(a => <ActivityCard key={a.id} activity={a} onRefresh={fetchActivities} isViewer={isViewer} navigate={navigate} onEdit={setEditActivityId} />)
+                  <>
+                    {paginatedList.map(a => <ActivityCard key={a.id} activity={a} onRefresh={fetchActivities} isViewer={isViewer} navigate={navigate} onEdit={setEditActivityId} />)}
+                    <PaginationWithPageSize
+                      totalItems={list.length}
+                      currentPage={currentTabPage}
+                      pageSize={currentTabPageSize}
+                      onPageChange={(p) => setTabPage(prev => ({ ...prev, [tab]: p }))}
+                      onPageSizeChange={(s) => {
+                        setTabPageSize(prev => ({ ...prev, [tab]: s }));
+                        setTabPage(prev => ({ ...prev, [tab]: 1 }));
+                      }}
+                      itemLabel="atividades"
+                    />
+                  </>
                 )}
               </TabsContent>
             );

@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Loader2, Gift, Plus } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { PaginationWithPageSize } from '@/components/shared/PaginationWithPageSize';
 
 const statusLabels: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' }> = {
   pending: { label: 'Pendente', variant: 'secondary' },
@@ -69,6 +70,8 @@ export default function PortalBonus() {
   const [selectedItem, setSelectedItem] = useState('');
   const [qty, setQty] = useState('1');
   const [notes, setNotes] = useState('');
+  const [reqPage, setReqPage] = useState(1);
+  const [reqPageSize, setReqPageSize] = useState(25);
 
   const fetchAll = useCallback(async () => {
     if (!officeId) { setLoading(false); return; }
@@ -188,19 +191,29 @@ export default function PortalBonus() {
           {requests.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-4">Nenhuma solicitação.</p>
           ) : (
-            <Table>
-              <TableHeader><TableRow><TableHead>Item</TableHead><TableHead>Qtd</TableHead><TableHead>Status</TableHead><TableHead>Data</TableHead></TableRow></TableHeader>
-              <TableBody>
-                {requests.map(r => (
-                  <TableRow key={r.id} className={r.status === 'pending' ? 'bg-amber-50/50 dark:bg-amber-900/20' : ''}>
-                    <TableCell className="font-medium">{r.bonus_catalog?.name}</TableCell>
-                    <TableCell>{r.quantity}</TableCell>
-                    <TableCell><Badge variant={statusLabels[r.status]?.variant}>{statusLabels[r.status]?.label}</Badge></TableCell>
-                    <TableCell className="text-muted-foreground">{format(new Date(r.created_at), 'dd/MM/yyyy')}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <>
+              <Table>
+                <TableHeader><TableRow><TableHead>Item</TableHead><TableHead>Qtd</TableHead><TableHead>Status</TableHead><TableHead>Data</TableHead></TableRow></TableHeader>
+                <TableBody>
+                  {requests.slice((reqPage - 1) * reqPageSize, reqPage * reqPageSize).map(r => (
+                    <TableRow key={r.id} className={r.status === 'pending' ? 'bg-amber-50/50 dark:bg-amber-900/20' : ''}>
+                      <TableCell className="font-medium">{r.bonus_catalog?.name}</TableCell>
+                      <TableCell>{r.quantity}</TableCell>
+                      <TableCell><Badge variant={statusLabels[r.status]?.variant}>{statusLabels[r.status]?.label}</Badge></TableCell>
+                      <TableCell className="text-muted-foreground">{format(new Date(r.created_at), 'dd/MM/yyyy')}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <PaginationWithPageSize
+                totalItems={requests.length}
+                currentPage={reqPage}
+                pageSize={reqPageSize}
+                onPageChange={setReqPage}
+                onPageSizeChange={setReqPageSize}
+                itemLabel="solicitações"
+              />
+            </>
           )}
         </CardContent>
       </Card>

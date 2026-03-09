@@ -20,6 +20,7 @@ import { differenceInDays, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { UserAvatar } from '@/components/shared/UserAvatar';
 import { CreateClientWizard } from '@/components/clientes/CreateClientWizard';
+import { PaginationWithPageSize } from '@/components/shared/PaginationWithPageSize';
 
 // ─── Types ───────────────────────────────────────────────────────
 interface Office {
@@ -907,33 +908,15 @@ export default function Clientes() {
             </Table>
 
             {/* ─── Pagination ──────────────────────────────── */}
-            <div className="flex items-center justify-between px-4 py-3 border-t border-border/50">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span>Mostrando {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, sorted.length)} de {sorted.length}</span>
-                <Select value={String(pageSize)} onValueChange={v => { setPageSize(Number(v)); setPage(1); }}>
-                  <SelectTrigger className="h-8 w-[70px]"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {[10, 25, 50, 100].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <span>por página</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Anterior</Button>
-                {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                  let pg: number;
-                  if (totalPages <= 5) pg = i + 1;
-                  else if (page <= 3) pg = i + 1;
-                  else if (page >= totalPages - 2) pg = totalPages - 4 + i;
-                  else pg = page - 2 + i;
-                  return (
-                    <Button key={pg} variant={pg === page ? 'default' : 'outline'} size="sm" className="w-8 h-8 p-0" onClick={() => setPage(pg)}>
-                      {pg}
-                    </Button>
-                  );
-                })}
-                <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Próximo</Button>
-              </div>
+            <div className="px-4 border-t border-border/50">
+              <PaginationWithPageSize
+                totalItems={sorted.length}
+                currentPage={page}
+                pageSize={pageSize}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                itemLabel="clientes"
+              />
             </div>
           </>
         )}
