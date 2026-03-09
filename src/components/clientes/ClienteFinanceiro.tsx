@@ -30,6 +30,7 @@ interface Payment {
   isOverdue: boolean;
   isPending: boolean;
   isCancelled: boolean;
+  isDeleted: boolean;
   daysOverdue: number;
   statusLabel: string;
 }
@@ -100,7 +101,7 @@ const billingTypeLabel: Record<string, string> = {
   BOLETO: 'Boleto', PIX: 'PIX', CREDIT_CARD: 'Cartão', DEBIT_CARD: 'Débito', UNDEFINED: '—', TRANSFER: 'Transferência', DEPOSIT: 'Depósito',
 };
 
-type StatusFilter = 'all' | 'paid' | 'pending' | 'overdue' | 'cancelled';
+type StatusFilter = 'all' | 'paid' | 'pending' | 'overdue' | 'cancelled' | 'deleted';
 type PeriodFilter = 'all' | '1m' | '3m' | '6m' | '1y';
 
 export function ClienteFinanceiro({ officeId, cnpj }: Props) {
@@ -172,7 +173,8 @@ export function ClienteFinanceiro({ officeId, cnpj }: Props) {
   if (statusFilter === 'paid') filtered = filtered.filter(p => p.isPaid);
   if (statusFilter === 'pending') filtered = filtered.filter(p => p.isPending);
   if (statusFilter === 'overdue') filtered = filtered.filter(p => p.isOverdue);
-  if (statusFilter === 'cancelled') filtered = filtered.filter(p => p.isCancelled);
+  if (statusFilter === 'cancelled') filtered = filtered.filter(p => p.isCancelled && !p.isDeleted);
+  if (statusFilter === 'deleted') filtered = filtered.filter(p => p.isDeleted);
 
   if (periodFilter !== 'all') {
     const now = new Date();
@@ -189,6 +191,7 @@ export function ClienteFinanceiro({ officeId, cnpj }: Props) {
     if (p.isPaid) return <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-0">{p.statusLabel}</Badge>;
     if (p.isOverdue) return <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 border-0">{p.statusLabel}</Badge>;
     if (p.isPending) return <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 border-0">{p.statusLabel}</Badge>;
+    if (p.isDeleted) return <Badge className="bg-gray-100 text-gray-500 dark:bg-gray-900/30 dark:text-gray-400 border-0">{p.statusLabel}</Badge>;
     return <Badge variant="secondary">{p.statusLabel}</Badge>;
   };
 
@@ -265,6 +268,7 @@ export function ClienteFinanceiro({ officeId, cnpj }: Props) {
               <SelectItem value="pending">Pendentes</SelectItem>
               <SelectItem value="overdue">Vencidas</SelectItem>
               <SelectItem value="cancelled">Canceladas</SelectItem>
+              <SelectItem value="deleted">Excluídas</SelectItem>
             </SelectContent>
           </Select>
           <Select value={periodFilter} onValueChange={(v) => { setPeriodFilter(v as PeriodFilter); setPage(1); }}>

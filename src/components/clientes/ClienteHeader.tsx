@@ -117,7 +117,8 @@ export function ClienteHeader({
   const activeContract = contracts?.find((c: any) => c.status === 'ativo');
   const ltv = contracts?.reduce((sum: number, c: any) => sum + (c.value || 0), 0) || 0;
   const officeMrr = Number(office.faturamento_mensal) || (activeContract?.monthly_value || 0);
-  const overdueInstallments = activeContract?.installments_overdue || 0;
+  // Inadimplência lida de offices (sincronizado do Asaas)
+  const overdueInstallments = (office as any).installments_overdue || 0;
   const renewalDays = office.cycle_end_date ? differenceInDays(new Date(office.cycle_end_date), new Date()) : null;
 
   // Build visible header badges (Line 2)

@@ -45,7 +45,7 @@ export default function PortalContrato() {
                 <div><span className="text-muted-foreground">Início:</span><p className="font-medium">{c.start_date ? format(new Date(c.start_date), 'dd/MM/yyyy') : '—'}</p></div>
                 <div><span className="text-muted-foreground">Fim:</span><p className="font-medium">{c.end_date ? format(new Date(c.end_date), 'dd/MM/yyyy') : '—'}</p></div>
                 <div><span className="text-muted-foreground">Renovação:</span><p className="font-medium">{c.renewal_date ? format(new Date(c.renewal_date), 'dd/MM/yyyy') : '—'}</p></div>
-                <div><span className="text-muted-foreground">Parcelas vencidas:</span><p className="font-medium">{c.installments_overdue || 0}</p></div>
+                <div><span className="text-muted-foreground">Parcelas totais:</span><p className="font-medium">{c.installments_total || 0}</p></div>
               </div>
             </CardContent>
           </Card>

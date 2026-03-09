@@ -113,10 +113,17 @@ Deno.serve(async (req) => {
     const ninetyDaysAgo = new Date(now.getTime() - 90 * 86400000).toISOString();
 
     // Pre-fetch all data sources in parallel
+    // Fetch office-level overdue data (synced from Asaas)
+    const { data: officeOverdue } = await sc
+      .from("offices")
+      .select("installments_overdue, total_overdue_value")
+      .eq("id", office_id)
+      .single();
+
     const [meetingsRes, contractRes, actionPlansRes, activitiesRes, eventsInvitedRes, eventsParticipatedRes, formSubmissionsRes] =
       await Promise.all([
         sc.from("meetings").select("id, scheduled_at, status").eq("office_id", office_id).eq("status", "completed").order("scheduled_at", { ascending: false }).limit(50),
-        sc.from("contracts").select("installments_overdue, status").eq("office_id", office_id).eq("status", "ativo").limit(1),
+        sc.from("contracts").select("status").eq("office_id", office_id).eq("status", "ativo").limit(1),
         sc.from("action_plans").select("id, status").eq("office_id", office_id),
         sc.from("activities").select("id, completed_at, created_at").eq("office_id", office_id).gte("created_at", thirtyDaysAgo),
         sc.from("event_participants").select("id, status").eq("office_id", office_id),
@@ -165,8 +172,8 @@ Deno.serve(async (req) => {
 
         case "contracts": {
           if (key === "installments_overdue" || key === "inadimplencia") {
-            if (!activeContract) return { score: 0, hasData: false };
-            const overdue = activeContract.installments_overdue || 0;
+            // Use office-level overdue from Asaas sync (single source of truth)
+            const overdue = officeOverdue?.installments_overdue || 0;
             if (overdue === 0) return { score: 100, hasData: true };
             if (overdue <= 1) return { score: 60, hasData: true };
             if (overdue <= 2) return { score: 30, hasData: true };
@@ -310,7 +317,7 @@ Deno.serve(async (req) => {
     const daysSinceLastMeeting = meetings.length > 0
       ? Math.floor((now.getTime() - new Date(meetings[0].scheduled_at).getTime()) / 86400000)
       : 999;
-    const installmentsOverdue = activeContract?.installments_overdue || 0;
+    const installmentsOverdue = officeOverdue?.installments_overdue || 0;
 
     for (const override of overrides || []) {
       let conditionMet = false;

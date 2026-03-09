@@ -90,13 +90,14 @@ export default function Jornada() {
     setLoading(true);
     const stageIds = (await supabase.from('journey_stages').select('id').eq('product_id', selectedProduct)).data?.map(s => s.id) || [];
 
-    const [stagesRes, journeysRes, healthRes, contractsRes] = await Promise.all([
+    const [stagesRes, journeysRes, healthRes, contractsRes, officesOverdueRes] = await Promise.all([
       supabase.from('journey_stages').select('*').eq('product_id', selectedProduct).order('position'),
       stageIds.length > 0
         ? supabase.from('office_journey').select('*, offices!office_journey_office_id_fkey(id, name, status, city, state, csm_id, activation_date, whatsapp, active_product_id)').in('journey_stage_id', stageIds)
         : Promise.resolve({ data: [] }),
       supabase.from('health_scores').select('office_id, score, band'),
-      supabase.from('contracts').select('office_id, renewal_date, installments_overdue, monthly_value').eq('status', 'ativo'),
+      supabase.from('contracts').select('office_id, renewal_date, monthly_value').eq('status', 'ativo'),
+      supabase.from('offices').select('id, installments_overdue'),
     ]);
 
     setStages((stagesRes.data as any[]) || []);
@@ -107,8 +108,13 @@ export default function Jornada() {
     (healthRes.data || []).forEach((h: any) => { hMap[h.office_id] = { score: h.score, band: h.band }; });
     setHealthScores(hMap);
 
+    // Merge contract data with office-level overdue from Asaas
+    const overdueMap: Record<string, number> = {};
+    (officesOverdueRes.data || []).forEach((o: any) => { overdueMap[o.id] = o.installments_overdue || 0; });
     const cMap: Record<string, any> = {};
-    (contractsRes.data || []).forEach((c: any) => { cMap[c.office_id] = c; });
+    (contractsRes.data || []).forEach((c: any) => {
+      cMap[c.office_id] = { ...c, installments_overdue: overdueMap[c.office_id] || 0 };
+    });
     setContracts(cMap);
 
     const officeIds = journeys.map((oj: any) => oj.office_id);

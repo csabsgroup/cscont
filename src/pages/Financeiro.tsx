@@ -15,8 +15,8 @@ export default function Financeiro() {
   useEffect(() => {
     (async () => {
       const [c, o] = await Promise.all([
-        supabase.from('contracts').select('*, offices(name), products:product_id(name)'),
-        supabase.from('offices').select('id, name, asaas_total_overdue'),
+        supabase.from('contracts').select('*, offices(name, installments_overdue, total_overdue_value), products:product_id(name)'),
+        supabase.from('offices').select('id, name, installments_overdue, total_overdue_value'),
       ]);
       setContracts(c.data || []);
       setOffices(o.data || []);
@@ -26,9 +26,11 @@ export default function Financeiro() {
 
   const activeContracts = contracts.filter(c => c.status === 'ativo');
   const mrr = activeContracts.reduce((s, c) => s + (c.monthly_value || 0), 0);
-  const totalOverdue = activeContracts.reduce((s, c) => s + (c.installments_overdue || 0), 0);
-  const overdueValue = offices.reduce((s, o) => s + (o.asaas_total_overdue || 0), 0);
-  const overdueContracts = activeContracts.filter(c => (c.installments_overdue || 0) > 0);
+  // Inadimplência total vem das offices (sincronizado do Asaas)
+  const totalOverdue = offices.reduce((s, o) => s + (o.installments_overdue || 0), 0);
+  const overdueValue = offices.reduce((s, o) => s + (o.total_overdue_value || 0), 0);
+  // Escritórios com inadimplência
+  const overdueOffices = offices.filter(o => (o.installments_overdue || 0) > 0);
 
   if (loading) {
     return (
@@ -70,7 +72,7 @@ export default function Financeiro() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-destructive">{totalOverdue}</div>
-            <p className="text-xs text-muted-foreground">{overdueContracts.length} contratos com atraso</p>
+            <p className="text-xs text-muted-foreground">{overdueOffices.length} escritórios com atraso</p>
           </CardContent>
         </Card>
         <Card>
@@ -85,26 +87,24 @@ export default function Financeiro() {
         </Card>
       </div>
 
-      {overdueContracts.length > 0 && (
+      {overdueOffices.length > 0 && (
         <Card>
-          <CardHeader><CardTitle className="text-base">Contratos com Inadimplência</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">Escritórios com Inadimplência</CardTitle></CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Cliente</TableHead>
-                  <TableHead>Produto</TableHead>
-                  <TableHead>Valor Mensal</TableHead>
                   <TableHead>Parcelas Vencidas</TableHead>
+                  <TableHead>Valor em Atraso</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {overdueContracts.map(c => (
-                  <TableRow key={c.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/clientes/${c.office_id}`)}>
-                    <TableCell className="font-medium">{c.offices?.name}</TableCell>
-                    <TableCell className="text-muted-foreground">{c.products?.name}</TableCell>
-                    <TableCell>R$ {(c.monthly_value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
-                    <TableCell><Badge variant="destructive">{c.installments_overdue}</Badge></TableCell>
+                {overdueOffices.map(o => (
+                  <TableRow key={o.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/clientes/${o.id}`)}>
+                    <TableCell className="font-medium">{o.name}</TableCell>
+                    <TableCell><Badge variant="destructive">{o.installments_overdue}</Badge></TableCell>
+                    <TableCell>R$ {(o.total_overdue_value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

@@ -255,7 +255,8 @@ export function ClienteContratos({ officeId, contracts, onRefresh }: Props) {
         </div>
         <div className="space-y-2">
           <Label>Parcelas Vencidas</Label>
-          <Input type="number" value={formData.installments_overdue} onChange={e => setFormData({ ...formData, installments_overdue: e.target.value })} />
+          <Input type="number" value={formData.installments_overdue} disabled placeholder="Sincronizado do Asaas" />
+          <p className="text-[10px] text-muted-foreground">Este campo é atualizado automaticamente pelo Asaas</p>
         </div>
       </div>
       <div className="space-y-2">

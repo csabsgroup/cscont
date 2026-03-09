@@ -240,7 +240,7 @@ export default function Clientes() {
       supabase.from('offices').select('*, products:active_product_id(name)').order('name'),
       supabase.from('contacts').select('name, office_id').eq('is_main_contact', true),
       supabase.from('health_scores').select('office_id, score, band').order('calculated_at', { ascending: false }),
-      supabase.from('contracts').select('office_id, monthly_value, value, installments_overdue, renewal_date, status'),
+      supabase.from('contracts').select('office_id, monthly_value, value, renewal_date, status'),
       supabase.from('meetings').select('office_id, scheduled_at, status').eq('status', 'completed'),
       supabase.from('journey_stages').select('id, name, product_id'),
       supabase.from('office_journey').select('office_id, journey_stage_id'),
@@ -285,14 +285,12 @@ export default function Clientes() {
       }
     });
 
-    // LTV, installments, renewal
+    // LTV, renewal (overdue now comes from offices table, synced from Asaas)
     const ltvMap: Record<string, number> = {};
-    const installmentsMap: Record<string, number> = {};
     const renewalMap: Record<string, number | null> = {};
     (contractsRes.data || []).forEach(c => {
       ltvMap[c.office_id] = (ltvMap[c.office_id] || 0) + (c.value || 0);
       if (c.status === 'ativo') {
-        installmentsMap[c.office_id] = (installmentsMap[c.office_id] || 0) + (c.installments_overdue || 0);
         if (c.renewal_date) {
           const d = differenceInDays(new Date(c.renewal_date), new Date());
           if (renewalMap[c.office_id] == null || d < (renewalMap[c.office_id] as number)) renewalMap[c.office_id] = d;
@@ -315,7 +313,7 @@ export default function Clientes() {
         healthScore: h?.score ?? null,
         healthBand: h?.band ?? null,
         ltv: ltvMap[o.id] || 0,
-        installmentsOverdue: installmentsMap[o.id] || 0,
+        installmentsOverdue: o.installments_overdue || 0,
         daysToRenewal: renewalMap[o.id] ?? null,
         lastMeeting: lastMeetingMap[o.id] || null,
         journeyStage: stg?.name || null,
