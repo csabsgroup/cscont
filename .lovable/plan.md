@@ -1,71 +1,63 @@
 
 
-# Plan: Pastas para Playbooks e Automações
+# Diagnosis and Fix Plan
 
-## Resumo
-Criar sistema de pastas manuais livres com UI de accordion colapsável, separado para Playbooks e Automações.
+## Root Causes Found
 
-## Database
+### Problem 1 — Webhook mapping not filling fields
+The webhook_logs table confirms the error: `"supabase.from(...).insert(...).catch is not a function"`. The last two webhooks (March 5 and March 6) both crashed with this error BEFORE reaching office creation. The `.catch()` fix was applied in code but the webhooks arrived before deployment completed. The mapping paths are correct, the company data exists at root level with all expected fields. This problem is already fixed in code — just needs a new webhook to test.
 
-**Nova tabela: `config_folders`**
+### Problem 2 — Only 3 of 17 create_activity actions succeeded
+**This is the critical finding.** The `activity_type` database enum has these valid values:
+`task, follow_up, onboarding, renewal, other, ligacao, check_in, email, whatsapp, planejamento`
+
+It does NOT include `"meeting"`. The automation rule "[ELT] Delegação automática" has 14 actions with `activity_type: "meeting"` — every one of those fails silently because the INSERT violates the enum constraint. The `handleAction` function doesn't capture the error from `supabase.from("activities").insert(...)`.
+
+Evidence: automation_logs shows 19 `actions_executed` entries, but only 3 `create_activity` have an `id` (the ones with type "task" or "email"). The other 14 have no `id` — they failed silently.
+
+### Problem 3 — Webhook doesn't trigger automations
+Same root cause as Problem 1 — the webhook crashed before reaching the automation invocation lines (419-430). Once the webhook stops crashing, automations will be invoked via `supabase.functions.invoke()`.
+
+## Fixes
+
+### Fix A — Add "meeting" to activity_type enum (database migration)
 ```sql
-CREATE TABLE public.config_folders (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name text NOT NULL,
-  scope text NOT NULL CHECK (scope IN ('playbooks', 'automations')),
-  sort_order integer NOT NULL DEFAULT 0,
-  created_by uuid NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-ALTER TABLE public.config_folders ENABLE ROW LEVEL SECURITY;
--- Admin full access
-CREATE POLICY "Admin can manage config_folders" ON public.config_folders FOR ALL USING (has_role(auth.uid(), 'admin'::app_role));
--- Authenticated read
-CREATE POLICY "Authenticated can view config_folders" ON public.config_folders FOR SELECT USING (true);
+ALTER TYPE activity_type ADD VALUE IF NOT EXISTS 'meeting';
 ```
+This is the correct fix because:
+- The automation builder UI offers "meeting" as an option
+- Users have configured rules with this type
+- 14 activities are waiting to be created with this type
 
-**Novas colunas:**
-- `playbook_templates.folder_id uuid REFERENCES config_folders(id) ON DELETE SET NULL`
-- `automation_rules_v2.folder_id uuid REFERENCES config_folders(id) ON DELETE SET NULL`
+### Fix B — Add error handling in handleAction (execute-automations)
+In the `create_activity` case (line 46-47), capture and log the error:
+```javascript
+const { data: act, error: actErr } = await supabase.from("activities").insert(payload).select("id").single();
+if (actErr) {
+  console.error('[AUTOMATIONS] Activity insert error:', actErr.message, 'payload:', JSON.stringify(payload));
+  return { type: "create_activity", error: actErr.message };
+}
+```
+Apply similar error capture to ALL action types that do database inserts (send_notification, add_note, create_action_plan, etc.).
 
-## UI — Componente compartilhado
+### Fix C — Ensure webhook deployment is current
+The piperun-webhook code already has the `.catch()` fix from the previous iteration. Verify the edge function redeploys by checking logs after saving. No code change needed — just confirmation.
 
-**Novo arquivo: `src/components/configuracoes/FolderAccordion.tsx`**
+### Fix D — Add company fallback in webhook (safety)
+In `piperun-webhook/index.ts` line 341, add fallback to `person.company`:
+```javascript
+let companyData = deal.company || deal.person?.company;
+```
+This handles edge cases where the Piperun payload structure varies.
 
-Componente reutilizável que recebe:
-- `scope: 'playbooks' | 'automations'`
-- `items: any[]` (playbooks ou regras)
-- `renderItem: (item) => ReactNode`
-- `onMoveItem: (itemId, folderId | null) => void`
+## Files Modified
+- `supabase/functions/execute-automations/index.ts` — error handling in handleAction
+- `supabase/functions/piperun-webhook/index.ts` — company fallback
+- Database migration: add `meeting` to `activity_type` enum
 
-Comportamento:
-- Lista pastas como seções colapsáveis com chevron + nome + badge com contagem
-- Seção "Sem pasta" no final para itens sem `folder_id`
-- Botão "Nova pasta" no topo — inline input para digitar nome
-- Cada pasta tem menu (renomear, excluir)
-- Excluir pasta move itens para "Sem pasta" (ON DELETE SET NULL)
-- Cada item dentro de pasta tem opção "Mover para pasta" via dropdown no menu de ações
-
-## Mudanças nos componentes existentes
-
-### `PlaybooksTab.tsx`
-- Fetch `config_folders` com `scope = 'playbooks'`
-- Agrupar playbooks por `folder_id`
-- Renderizar via `FolderAccordion` em vez da tabela flat
-- Adicionar campo "Pasta" no editor dialog (Select dropdown)
-- Ao salvar playbook, incluir `folder_id` no payload
-
-### `AutomationRulesTab.tsx`
-- Fetch `config_folders` com `scope = 'automations'`
-- Agrupar regras por `folder_id`
-- Renderizar via `FolderAccordion` em vez da listagem flat
-- Adicionar campo "Pasta" no editor de regra (Select dropdown)
-- Ao salvar regra, incluir `folder_id` no payload
-
-## Fluxo do usuário
-1. Abre Configurações > Playbooks (ou Automações)
-2. Clica "Nova pasta" → digita nome → Enter
-3. Abre playbook/regra existente → seleciona pasta no dropdown → salva
-4. Novos itens podem já ser criados dentro de uma pasta
-5. Pastas colapsam/expandem com clique no header
+## Expected Result After Fix
+- All 17 `create_activity` actions succeed (activities created with correct types)
+- Webhook creates office with all mapped fields populated
+- Webhook triggers automations that execute all 19 actions
+- automation_logs show complete execution with all action IDs
 
