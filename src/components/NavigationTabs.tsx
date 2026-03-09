@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Home, CheckSquare, Building2, FileText, DollarSign, Phone, Kanban, BarChart3, ClipboardList } from 'lucide-react';
+import { Home, CheckSquare, Building2, FileText, DollarSign, Phone, Kanban, BarChart3, ClipboardList, FileEdit } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const tabs = [
@@ -10,6 +10,7 @@ const tabs = [
   { label: 'Financeiro', icon: DollarSign, path: '/financeiro' },
   { label: 'Contatos', icon: Phone, path: '/contatos' },
   { label: 'Jornada', icon: Kanban, path: '/jornada' },
+  { label: 'Formulários', icon: FileEdit, path: '/formularios' },
   { label: 'Performance', icon: BarChart3, path: '/relatorios' },
   { label: 'Tarefas', icon: ClipboardList, path: '/tarefas-internas' },
 ];
