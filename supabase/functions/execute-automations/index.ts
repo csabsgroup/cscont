@@ -1151,20 +1151,34 @@ Deno.serve(async (req) => {
 
     // ========== runNowAll ==========
     if (action === "runNowAll") {
-      const { rule_id } = body;
+      const { rule_id, batch_offset, skip_idempotency } = body;
       if (!rule_id) throw new Error("rule_id required");
+      const BATCH_SIZE = 15;
+      const offset = batch_offset || 0;
 
       const { data: rule } = await supabase.from("automation_rules_v2").select("*").eq("id", rule_id).single();
       if (!rule) throw new Error("Rule not found");
 
       let officeQuery = supabase.from("offices").select("id, csm_id, status, active_product_id")
-        .in("status", ["ativo", "upsell", "bonus_elite"]);
+        .in("status", ["ativo", "upsell", "bonus_elite"])
+        .order("id");
       if (rule.product_id) officeQuery = officeQuery.eq("active_product_id", rule.product_id);
-      const { data: offices } = await officeQuery;
+      const { data: allOffices } = await officeQuery;
+      const totalOffices = (allOffices || []).length;
+
+      // If skip_idempotency, clear previous execution records for this rule so they can re-run
+      if (skip_idempotency && offset === 0) {
+        console.log(`[AUTOMATIONS] runNowAll: Clearing previous executions for rule ${rule_id} (skip_idempotency=true)`);
+        await supabase.from("automation_executions").delete().eq("rule_id", rule_id);
+      }
+
+      // Slice the batch
+      const batch = (allOffices || []).slice(offset, offset + BATCH_SIZE);
+      console.log(`[AUTOMATIONS] runNowAll: Processing batch offset=${offset}, batch_size=${batch.length}, total=${totalOffices}`);
 
       let executed = 0;
       let errors = 0;
-      for (const office of (offices || [])) {
+      for (const office of batch) {
         try {
           await executeV2Rules(supabase, rule.trigger_type, office.id, office.csm_id, userId, { force_rule_id: rule_id });
           executed++;
@@ -1174,7 +1188,28 @@ Deno.serve(async (req) => {
         }
       }
 
-      return new Response(JSON.stringify({ success: true, executed, errors, total: (offices || []).length }), {
+      const nextOffset = offset + BATCH_SIZE;
+      const hasMore = nextOffset < totalOffices;
+
+      // Fire-and-forget next batch if more offices remain
+      if (hasMore) {
+        console.log(`[AUTOMATIONS] runNowAll: Scheduling next batch at offset=${nextOffset}`);
+        const selfUrl = `${url}/functions/v1/execute-automations`;
+        fetch(selfUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${serviceRoleKey}`,
+          },
+          body: JSON.stringify({ action: "runNowAll", rule_id, batch_offset: nextOffset, skip_idempotency: false }),
+        }).catch(e => console.error('[AUTOMATIONS] Self-invoke failed:', e));
+      }
+
+      return new Response(JSON.stringify({
+        success: true, executed, errors, total: totalOffices,
+        batch_offset: offset, batch_size: batch.length,
+        has_more: hasMore, next_offset: hasMore ? nextOffset : null,
+      }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
