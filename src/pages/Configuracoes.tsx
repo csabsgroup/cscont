@@ -299,6 +299,7 @@ function UsersTab() {
     setEditName(u.full_name || '');
     setEditRole(u.role || 'csm');
     setEditProductId(u.product_id || '');
+    setEditWhatsapp(u.whatsapp || '');
     setEditPassword('');
     setEditPasswordConfirm('');
     setEditTab('dados');
