@@ -111,7 +111,7 @@ export function ClienteOKR({ officeId }: Props) {
 
   const removeObj = async (id: string) => {
     await supabase.from('okr_objectives').delete().eq('id', id);
-    toast.success('Objetivo removido!'); fetchAll();
+    toast.success('Objetivo removido!'); setDeleteTarget(null); fetchAll();
   };
 
   // KR CRUD
