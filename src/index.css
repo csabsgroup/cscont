@@ -223,3 +223,43 @@ html.transitioning * {
   background-size: 200% 100%;
   animation: shimmer 1.5s ease-in-out infinite;
 }
+
+/* Prose / Rich Text styles */
+.prose {
+  color: hsl(var(--foreground));
+  line-height: 1.65;
+}
+.prose h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-top: 1.25em;
+  margin-bottom: 0.5em;
+  color: hsl(var(--foreground));
+}
+.prose h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-top: 1em;
+  margin-bottom: 0.4em;
+  color: hsl(var(--foreground));
+}
+.prose p {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+.prose strong { font-weight: 700; }
+.prose em { font-style: italic; }
+.prose u { text-decoration: underline; }
+.prose s { text-decoration: line-through; color: hsl(var(--muted-foreground)); }
+.prose ul {
+  list-style-type: disc;
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+.prose ol {
+  list-style-type: decimal;
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+.prose li { margin: 0.2em 0; }
+.prose-sm { font-size: 0.875rem; }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { usePortal } from '@/contexts/PortalContext';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -10,11 +10,16 @@ import { format, isFuture, isPast, subDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { PortalCalendar } from '@/components/portal/PortalCalendar';
 import { PaginationWithPageSize } from '@/components/shared/PaginationWithPageSize';
+import { RichTextDisplay } from '@/components/ui/rich-text-editor';
 import { toast } from 'sonner';
 
 const CATEGORY_LABELS: Record<string, string> = {
   encontro: 'Encontro', imersao: 'Imersão', workshop: 'Workshop',
   treinamento: 'Treinamento', confraternizacao: 'Confraternização', outro: 'Outro',
+};
+
+const TYPE_LABELS: Record<string, string> = {
+  presencial: 'Presencial', online: 'Online', hibrido: 'Híbrido',
 };
 
 export default function PortalEventos() {
@@ -97,9 +102,9 @@ export default function PortalEventos() {
     })),
   ];
 
-  const getStatusBadge = (eventId: string, isUpcoming: boolean) => {
+  const getStatusBadge = (eventId: string) => {
     const p = participation[eventId];
-    if (!p) return <Badge variant="outline" className="text-xs">Sem convite</Badge>;
+    if (!p) return null;
     switch (p.status) {
       case 'confirmado': return <Badge className="bg-emerald-500 text-white border-0 text-xs">Confirmado</Badge>;
       case 'nao_vai': return <Badge variant="destructive" className="text-xs">Não vai</Badge>;
@@ -140,30 +145,48 @@ export default function PortalEventos() {
                   return (
                     <Card
                       key={ev.id}
-                      className={`cursor-pointer transition-all hover:shadow-lg overflow-hidden ${!isUpcoming ? 'opacity-70' : ''}`}
+                      className={`cursor-pointer overflow-hidden transition-all hover:shadow-lg hover:scale-[1.01] group ${!isUpcoming ? 'opacity-60' : ''}`}
                       onClick={() => setSelectedEvent(ev)}
                     >
-                      {ev.cover_url && (
-                        <div className="h-32 w-full overflow-hidden">
-                          <img src={ev.cover_url} alt={ev.title} className="h-full w-full object-cover" />
-                        </div>
-                      )}
-                      <CardHeader className={ev.cover_url ? 'pt-3' : ''}>
-                        <div className="flex items-center justify-between gap-2">
-                          <CardTitle className="text-base">{ev.title}</CardTitle>
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            {getStatusBadge(ev.id, isUpcoming)}
-                            <Badge variant={isUpcoming ? 'default' : 'secondary'}>{ev.type === 'online' ? 'Online' : 'Presencial'}</Badge>
+                      {/* Cover image */}
+                      <div className="relative h-40 w-full overflow-hidden bg-gradient-to-br from-primary/20 to-primary/5">
+                        {ev.cover_url ? (
+                          <img src={ev.cover_url} alt={ev.title} className="h-full w-full object-cover transition-transform group-hover:scale-105" />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center">
+                            <Calendar className="h-12 w-12 text-primary/30" />
                           </div>
+                        )}
+                        {/* Badges overlay */}
+                        <div className="absolute top-2 right-2 flex gap-1.5">
+                          <Badge variant="secondary" className="text-xs backdrop-blur-sm bg-background/80">
+                            {TYPE_LABELS[ev.type] || ev.type}
+                          </Badge>
+                          <Badge variant="outline" className="text-xs backdrop-blur-sm bg-background/80">
+                            {CATEGORY_LABELS[ev.category] || ev.category}
+                          </Badge>
                         </div>
-                        <p className="text-sm text-muted-foreground">{format(new Date(ev.event_date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
-                      </CardHeader>
-                      {(ev.description || ev.location) && (
-                        <CardContent className="text-sm text-muted-foreground space-y-1 pt-0">
-                          {ev.description && <p className="line-clamp-2">{ev.description}</p>}
-                          {ev.location && <p>📍 {ev.location}</p>}
-                        </CardContent>
-                      )}
+                        {/* Status badge overlay bottom-left */}
+                        {getStatusBadge(ev.id) && (
+                          <div className="absolute bottom-2 left-2">
+                            {getStatusBadge(ev.id)}
+                          </div>
+                        )}
+                      </div>
+
+                      <CardContent className="p-4 space-y-2">
+                        <h3 className="font-semibold text-base line-clamp-1">{ev.title}</h3>
+                        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                          <Calendar className="h-3.5 w-3.5 shrink-0" />
+                          {format(new Date(ev.event_date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                        </div>
+                        {ev.location && (
+                          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                            <MapPin className="h-3.5 w-3.5 shrink-0" />
+                            <span className="line-clamp-1">{ev.location}</span>
+                          </div>
+                        )}
+                      </CardContent>
                     </Card>
                   );
                 })}
@@ -196,9 +219,9 @@ export default function PortalEventos() {
               </DialogHeader>
               <div className="space-y-4">
                 <div className="flex flex-wrap gap-2">
-                  <Badge variant="secondary">{selectedEvent.type === 'online' ? 'Online' : selectedEvent.type === 'hibrido' ? 'Híbrido' : 'Presencial'}</Badge>
+                  <Badge variant="secondary">{TYPE_LABELS[selectedEvent.type] || selectedEvent.type}</Badge>
                   <Badge variant="outline">{CATEGORY_LABELS[selectedEvent.category] || selectedEvent.category}</Badge>
-                  {getStatusBadge(selectedEvent.id, isFuture(new Date(selectedEvent.event_date)))}
+                  {getStatusBadge(selectedEvent.id)}
                 </div>
 
                 <div className="space-y-2 text-sm">
@@ -218,7 +241,7 @@ export default function PortalEventos() {
                 </div>
 
                 {selectedEvent.description && (
-                  <p className="text-sm text-muted-foreground">{selectedEvent.description}</p>
+                  <RichTextDisplay html={selectedEvent.description} className="text-sm" />
                 )}
 
                 {selectedEvent.observations && (
