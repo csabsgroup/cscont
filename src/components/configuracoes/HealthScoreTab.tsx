@@ -108,6 +108,7 @@ function PillarsSection({ productId }: { productId: string }) {
   };
 
   const deletePillar = async (id: string) => {
+    if (!window.confirm('Tem certeza que deseja remover este pilar e todos os seus indicadores?')) return;
     await supabase.from('health_pillars').delete().eq('id', id);
     toast.success('Pilar removido!'); fetch();
   };
