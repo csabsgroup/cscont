@@ -199,7 +199,15 @@ export default function Jornada() {
   const filteredJourneys = officeJourneys.filter(oj => {
     if (filterHealth && healthScores[oj.office_id]?.band !== filterHealth) return false;
     if (filterStatus && oj.offices.status !== filterStatus) return false;
-    if (filterCsm && oj.offices.csm_id !== filterCsm) return false;
+    if (filterCsm) {
+      const selectedProfile = csmList.find((c: any) => c.id === filterCsm);
+      if ((selectedProfile as any)?._role === 'manager') {
+        const subordinates = managerCsmLinks.filter(l => l.manager_id === filterCsm).map(l => l.csm_id);
+        if (!subordinates.includes(oj.offices.csm_id)) return false;
+      } else {
+        if (oj.offices.csm_id !== filterCsm) return false;
+      }
+    }
     return true;
   });
 
