@@ -56,7 +56,8 @@ export default function Eventos() {
   const [category, setCategory] = useState('encontro');
   const [maxParticipants, setMaxParticipants] = useState('');
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
-
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const fetchEvents = useCallback(async () => {
     setLoading(true);
     const [eventsRes, participantsRes] = await Promise.all([
