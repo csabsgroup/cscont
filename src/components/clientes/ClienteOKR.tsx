@@ -144,7 +144,7 @@ export function ClienteOKR({ officeId }: Props) {
 
   const removeKr = async (id: string) => {
     await supabase.from('action_plans').delete().eq('id', id);
-    toast.success('KR removida!'); fetchAll();
+    toast.success('KR removida!'); setDeleteTarget(null); fetchAll();
   };
 
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>;
