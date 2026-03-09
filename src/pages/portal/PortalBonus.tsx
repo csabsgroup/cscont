@@ -70,6 +70,8 @@ export default function PortalBonus() {
   const [selectedItem, setSelectedItem] = useState('');
   const [qty, setQty] = useState('1');
   const [notes, setNotes] = useState('');
+  const [reqPage, setReqPage] = useState(1);
+  const [reqPageSize, setReqPageSize] = useState(25);
 
   const fetchAll = useCallback(async () => {
     if (!officeId) { setLoading(false); return; }
