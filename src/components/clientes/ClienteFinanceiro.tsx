@@ -86,15 +86,17 @@ function useFinancialData(officeId: string, cnpj: string | null) {
     setLoading(false);
   }, [officeId, cnpj, data]);
 
-  useEffect(() => { fetchData(); }, [officeId]);
+  useEffect(() => { fetchData(); }, [officeId, cnpj]);
 
   return { data, loading, error, refresh: () => fetchData(true) };
 }
 
 const fmtCurrency = (v: number) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
 const fmtDate = (d: string) => {
+  if (!d || !d.includes('-')) return d || '—';
   const [y, m, day] = d.split('-');
-  return `${day}/${m}/${y?.slice(2)}`;
+  if (!y || !m || !day) return d;
+  return `${day}/${m}/${y.slice(2)}`;
 };
 
 const billingTypeLabel: Record<string, string> = {

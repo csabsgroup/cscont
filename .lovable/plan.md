@@ -1,81 +1,63 @@
 
 
-# Auditoria de Qualidade: Bugs e Inconsistências Identificadas
+# Diagnosis and Fix Plan
 
-## Resumo Executivo
+## Root Causes Found
 
-Após inspeção profunda de front-end, back-end (edge functions), RLS e fluxo de dados, foram encontrados **7 bugs concretos** e **3 melhorias de robustez** que afetam diretamente a precisão dos dados financeiros e a experiência do cliente.
+### Problem 1 — Webhook mapping not filling fields
+The webhook_logs table confirms the error: `"supabase.from(...).insert(...).catch is not a function"`. The last two webhooks (March 5 and March 6) both crashed with this error BEFORE reaching office creation. The `.catch()` fix was applied in code but the webhooks arrived before deployment completed. The mapping paths are correct, the company data exists at root level with all expected fields. This problem is already fixed in code — just needs a new webhook to test.
 
----
+### Problem 2 — Only 3 of 17 create_activity actions succeeded
+**This is the critical finding.** The `activity_type` database enum has these valid values:
+`task, follow_up, onboarding, renewal, other, ligacao, check_in, email, whatsapp, planejamento`
 
-## Bugs Críticos (dados incorretos em produção)
+It does NOT include `"meeting"`. The automation rule "[ELT] Delegação automática" has 14 actions with `activity_type: "meeting"` — every one of those fails silently because the INSERT violates the enum constraint. The `handleAction` function doesn't capture the error from `supabase.from("activities").insert(...)`.
 
-### BUG 1 — Edge Function `integration-asaas`: webhook atualiza coluna errada
-**Arquivo:** `supabase/functions/integration-asaas/index.ts` (linha 75)
-**Problema:** A action `webhook` atualiza `asaas_total_overdue` (coluna legada) em vez de `installments_overdue` + `total_overdue_value`.
-**Impacto:** Quando o Asaas envia webhook de pagamento, os dados de inadimplência do escritório não são atualizados corretamente. Todos os indicadores do sistema ficam desatualizados até que alguém abra a aba Financeiro manualmente.
-**Correção:** Reescrever a lógica do webhook para buscar count + valor total de OVERDUE e gravar em `installments_overdue` e `total_overdue_value`.
+Evidence: automation_logs shows 19 `actions_executed` entries, but only 3 `create_activity` have an `id` (the ones with type "task" or "email"). The other 14 have no `id` — they failed silently.
 
-### BUG 2 — Edge Function `integration-asaas`: syncAll atualiza coluna errada
-**Arquivo:** `supabase/functions/integration-asaas/index.ts` (linha 274)
-**Problema:** A action `syncAll` atualiza `asaas_total_overdue` em vez das colunas corretas.
-**Impacto:** Sincronização em massa não reflete nos indicadores do sistema.
-**Correção:** Mesma lógica: gravar em `installments_overdue` (count) e `total_overdue_value` (soma).
+### Problem 3 — Webhook doesn't trigger automations
+Same root cause as Problem 1 — the webhook crashed before reaching the automation invocation lines (419-430). Once the webhook stops crashing, automations will be invoked via `supabase.functions.invoke()`.
 
-### BUG 3 — Edge Function `execute-automations`: fallback para coluna legada
-**Arquivo:** `supabase/functions/execute-automations/index.ts` (linha 842)
-**Problema:** `installments_overdue: activeContract?.installments_overdue || office.asaas_total_overdue || 0` — ainda faz fallback para `asaas_total_overdue` e lê do contrato (manual) primeiro.
-**Impacto:** Regras de automação que usam condição de inadimplência podem disparar com dados incorretos.
-**Correção:** Usar `office.installments_overdue || 0` como fonte única.
+## Fixes
 
-### BUG 4 — `ClienteContratos`: formulário ainda salva installments_overdue no contrato
-**Arquivo:** `src/components/clientes/ClienteContratos.tsx` (linhas 101, 162)
-**Problema:** O campo está `disabled` na UI, mas o `handleSave` e `handleEditSave` ainda enviam `installments_overdue` para a tabela `contracts`. Como o valor é string vazia (`''`), vira `null` no banco — mas isso pode sobrescrever dados manuais antigos e gera confusão.
-**Correção:** Remover `installments_overdue` do payload de insert e update.
+### Fix A — Add "meeting" to activity_type enum (database migration)
+```sql
+ALTER TYPE activity_type ADD VALUE IF NOT EXISTS 'meeting';
+```
+This is the correct fix because:
+- The automation builder UI offers "meeting" as an option
+- Users have configured rules with this type
+- 14 activities are waiting to be created with this type
 
-### BUG 5 — `ImportWizard`: importação CSV ainda grava installments_overdue no contrato
-**Arquivo:** `src/components/import-export/ImportWizard.tsx` (linha 877)
-**Problema:** `installments_overdue: Number(row.installments_overdue) || 0` — importação grava no contrato, criando fonte de dados divergente.
-**Correção:** Remover do payload de importação ou ignorar coluna.
+### Fix B — Add error handling in handleAction (execute-automations)
+In the `create_activity` case (line 46-47), capture and log the error:
+```javascript
+const { data: act, error: actErr } = await supabase.from("activities").insert(payload).select("id").single();
+if (actErr) {
+  console.error('[AUTOMATIONS] Activity insert error:', actErr.message, 'payload:', JSON.stringify(payload));
+  return { type: "create_activity", error: actErr.message };
+}
+```
+Apply similar error capture to ALL action types that do database inserts (send_notification, add_note, create_action_plan, etc.).
 
-### BUG 6 — `ContratosGlobal`: possível double-count de inadimplência
-**Arquivo:** `src/pages/ContratosGlobal.tsx` (linha 82)
-**Problema:** `const vencidos = contracts.reduce((sum, c) => sum + (c.installments_overdue || 0), 0)` — como o valor é sobrescrito do office para cada contrato, se um escritório tem 2 contratos, a inadimplência do office é contada 2x.
-**Correção:** Calcular inadimplência total usando `Set` de office_ids para evitar duplicação.
+### Fix C — Ensure webhook deployment is current
+The piperun-webhook code already has the `.catch()` fix from the previous iteration. Verify the edge function redeploys by checking logs after saving. No code change needed — just confirmation.
 
-### BUG 7 — `Relatorios`: campo `diasAtraso` sempre 0
-**Arquivo:** `src/pages/Relatorios.tsx` (linha 387)
-**Problema:** `diasAtraso: 0` — hardcoded, nunca calculado. A tabela de inadimplentes mostra "0 dias" para todos.
-**Correção:** Esse dado não está disponível sem chamar o Asaas. Remover a coluna da tabela ou deixar como "—".
+### Fix D — Add company fallback in webhook (safety)
+In `piperun-webhook/index.ts` line 341, add fallback to `person.company`:
+```javascript
+let companyData = deal.company || deal.person?.company;
+```
+This handles edge cases where the Piperun payload structure varies.
 
----
+## Files Modified
+- `supabase/functions/execute-automations/index.ts` — error handling in handleAction
+- `supabase/functions/piperun-webhook/index.ts` — company fallback
+- Database migration: add `meeting` to `activity_type` enum
 
-## Melhorias de Robustez
-
-### MELHORIA 1 — Remover campo "Parcelas Vencidas" do formulário de contrato
-O campo está `disabled` mas ainda aparece. Remover completamente do formulário (tanto criar quanto editar) para evitar confusão do usuário.
-
-### MELHORIA 2 — `ClienteFinanceiro`: useEffect dependency
-**Arquivo:** `src/components/clientes/ClienteFinanceiro.tsx` (linha 89)
-**Problema:** `useEffect(() => { fetchData(); }, [officeId])` — `fetchData` não está no array de dependências. Funciona porque `officeId` é a trigger real, mas pode causar stale closure se `cnpj` mudar.
-**Correção:** Adicionar `cnpj` como dependência.
-
-### MELHORIA 3 — `fmtDate` no ClienteFinanceiro pode falhar
-**Arquivo:** `src/components/clientes/ClienteFinanceiro.tsx` (linha 96-98)
-**Problema:** `const [y, m, day] = d.split('-')` — se a data vier em formato inesperado, exibe `undefined`.
-**Correção:** Adicionar fallback.
-
----
-
-## Arquivos a modificar
-
-| Arquivo | Mudança |
-|---|---|
-| `supabase/functions/integration-asaas/index.ts` | Corrigir webhook e syncAll para gravar nas colunas corretas |
-| `supabase/functions/execute-automations/index.ts` | Usar `office.installments_overdue` como fonte única |
-| `src/components/clientes/ClienteContratos.tsx` | Remover `installments_overdue` dos payloads e do formulário |
-| `src/components/import-export/ImportWizard.tsx` | Remover `installments_overdue` do payload de importação |
-| `src/pages/ContratosGlobal.tsx` | Corrigir double-count usando Set de office_ids |
-| `src/pages/Relatorios.tsx` | Remover coluna `diasAtraso` da tabela de inadimplentes |
-| `src/components/clientes/ClienteFinanceiro.tsx` | Ajustar dependências do useEffect + fallback no fmtDate |
+## Expected Result After Fix
+- All 17 `create_activity` actions succeed (activities created with correct types)
+- Webhook creates office with all mapped fields populated
+- Webhook triggers automations that execute all 19 actions
+- automation_logs show complete execution with all action IDs
 

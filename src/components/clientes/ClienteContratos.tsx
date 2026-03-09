@@ -98,7 +98,6 @@ export function ClienteContratos({ officeId, contracts, onRefresh }: Props) {
       end_date: form.end_date || null,
       renewal_date: form.renewal_date || null,
       installments_total: form.installments_total ? Number(form.installments_total) : null,
-      installments_overdue: form.installments_overdue ? Number(form.installments_overdue) : null,
       asaas_link: form.asaas_link || null,
       negotiation_notes: form.negotiation_notes || null,
     };
@@ -159,7 +158,6 @@ export function ClienteContratos({ officeId, contracts, onRefresh }: Props) {
       end_date: editForm.end_date || null,
       renewal_date: editForm.renewal_date || null,
       installments_total: editForm.installments_total ? Number(editForm.installments_total) : null,
-      installments_overdue: editForm.installments_overdue ? Number(editForm.installments_overdue) : null,
       asaas_link: editForm.asaas_link || null,
       negotiation_notes: editForm.negotiation_notes || null,
     };
@@ -248,16 +246,9 @@ export function ClienteContratos({ officeId, contracts, onRefresh }: Props) {
           <Input type="date" value={formData.renewal_date} onChange={e => setFormData({ ...formData, renewal_date: e.target.value })} />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>Parcelas Total</Label>
-          <Input type="number" value={formData.installments_total} onChange={e => setFormData({ ...formData, installments_total: e.target.value })} />
-        </div>
-        <div className="space-y-2">
-          <Label>Parcelas Vencidas</Label>
-          <Input type="number" value={formData.installments_overdue} disabled placeholder="Sincronizado do Asaas" />
-          <p className="text-[10px] text-muted-foreground">Este campo é atualizado automaticamente pelo Asaas</p>
-        </div>
+      <div className="space-y-2">
+        <Label>Parcelas Total</Label>
+        <Input type="number" value={formData.installments_total} onChange={e => setFormData({ ...formData, installments_total: e.target.value })} />
       </div>
       <div className="space-y-2">
         <Label>Link Asaas</Label>
