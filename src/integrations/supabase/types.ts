@@ -2187,6 +2187,7 @@ export type Database = {
           first_signature_date: string | null
           id: string
           instagram: string | null
+          installments_overdue: number | null
           last_csat: number | null
           last_meeting_date: string | null
           last_meeting_type: string | null
@@ -2206,6 +2207,7 @@ export type Database = {
           state: string | null
           status: Database["public"]["Enums"]["office_status"]
           tags: string[] | null
+          total_overdue_value: number | null
           updated_at: string
           visible_in_directory: boolean
           whatsapp: string | null
@@ -2234,6 +2236,7 @@ export type Database = {
           first_signature_date?: string | null
           id?: string
           instagram?: string | null
+          installments_overdue?: number | null
           last_csat?: number | null
           last_meeting_date?: string | null
           last_meeting_type?: string | null
@@ -2253,6 +2256,7 @@ export type Database = {
           state?: string | null
           status?: Database["public"]["Enums"]["office_status"]
           tags?: string[] | null
+          total_overdue_value?: number | null
           updated_at?: string
           visible_in_directory?: boolean
           whatsapp?: string | null
@@ -2281,6 +2285,7 @@ export type Database = {
           first_signature_date?: string | null
           id?: string
           instagram?: string | null
+          installments_overdue?: number | null
           last_csat?: number | null
           last_meeting_date?: string | null
           last_meeting_type?: string | null
@@ -2300,6 +2305,7 @@ export type Database = {
           state?: string | null
           status?: Database["public"]["Enums"]["office_status"]
           tags?: string[] | null
+          total_overdue_value?: number | null
           updated_at?: string
           visible_in_directory?: boolean
           whatsapp?: string | null
