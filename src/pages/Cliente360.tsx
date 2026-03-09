@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { FileText, Eye, ClipboardList, Paperclip, History, Phone, StickyNote, BarChart3, Target, Gift, PlayCircle } from 'lucide-react';
+import { FileText, Eye, ClipboardList, Paperclip, History, Phone, StickyNote, BarChart3, Target, Gift, PlayCircle, DollarSign } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -31,6 +31,7 @@ import { WhatsAppSendDialog } from '@/components/clientes/WhatsAppSendDialog';
 import { ClienteVisao360 } from '@/components/clientes/ClienteVisao360';
 import { ClienteArquivos } from '@/components/clientes/ClienteArquivos';
 import { StatusChangeModal } from '@/components/clientes/StatusChangeModal';
+import { ClienteFinanceiro } from '@/components/clientes/ClienteFinanceiro';
 import { ClientAccessDialog } from '@/components/clientes/ClientAccessDialog';
 import { ActivityCounterBadges, ActivityCounts } from '@/components/shared/ActivityCounterBadges';
 import { Constants } from '@/integrations/supabase/types';
@@ -280,6 +281,7 @@ export default function Cliente360() {
     { key: 'timeline', label: 'Atividades', icon: ClipboardList, count: activitiesCount },
     { key: 'arquivos', label: 'Arquivos', icon: Paperclip, count: filesCount },
     { key: 'contratos', label: 'Contratos', icon: FileText },
+    { key: 'financeiro', label: 'Financeiro', icon: DollarSign },
     
     { key: 'contatos', label: 'Contatos', icon: Phone, count: contacts.length },
     { key: 'notas', label: 'Notas', icon: StickyNote, count: notesLines },
@@ -384,6 +386,9 @@ export default function Cliente360() {
         <Card className="p-6"><ClienteContratos officeId={office.id} contracts={contracts} onRefresh={fetchAll} /></Card>
       )}
 
+      {activeTab === 'financeiro' && (
+        <ClienteFinanceiro officeId={office.id} cnpj={office.cnpj} />
+      )}
 
       {activeTab === 'contatos' && (
         <Card className="p-6"><ClienteContatos officeId={office.id} contacts={contacts} onRefresh={fetchAll} /></Card>

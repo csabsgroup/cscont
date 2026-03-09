@@ -1,70 +1,63 @@
 
 
-# Plano: Integração Asaas por CNPJ + Aba Financeiro no Cliente 360
+# Diagnosis and Fix Plan
 
-## Resumo
+## Root Causes Found
 
-Atualizar a edge function `integration-asaas` com a action `getFinancialByOffice` que busca pelo CNPJ, criar o componente `ClienteFinanceiro` com cards de resumo + tabela paginada de cobranças, e adicionar a aba "Financeiro" no Cliente 360.
+### Problem 1 — Webhook mapping not filling fields
+The webhook_logs table confirms the error: `"supabase.from(...).insert(...).catch is not a function"`. The last two webhooks (March 5 and March 6) both crashed with this error BEFORE reaching office creation. The `.catch()` fix was applied in code but the webhooks arrived before deployment completed. The mapping paths are correct, the company data exists at root level with all expected fields. This problem is already fixed in code — just needs a new webhook to test.
 
----
+### Problem 2 — Only 3 of 17 create_activity actions succeeded
+**This is the critical finding.** The `activity_type` database enum has these valid values:
+`task, follow_up, onboarding, renewal, other, ligacao, check_in, email, whatsapp, planejamento`
 
-## 1 — Migration: colunas na tabela offices
+It does NOT include `"meeting"`. The automation rule "[ELT] Delegação automática" has 14 actions with `activity_type: "meeting"` — every one of those fails silently because the INSERT violates the enum constraint. The `handleAction` function doesn't capture the error from `supabase.from("activities").insert(...)`.
 
-A coluna `asaas_customer_id` já existe. Adicionar apenas as que faltam:
+Evidence: automation_logs shows 19 `actions_executed` entries, but only 3 `create_activity` have an `id` (the ones with type "task" or "email"). The other 14 have no `id` — they failed silently.
 
+### Problem 3 — Webhook doesn't trigger automations
+Same root cause as Problem 1 — the webhook crashed before reaching the automation invocation lines (419-430). Once the webhook stops crashing, automations will be invoked via `supabase.functions.invoke()`.
+
+## Fixes
+
+### Fix A — Add "meeting" to activity_type enum (database migration)
 ```sql
-ALTER TABLE offices ADD COLUMN IF NOT EXISTS installments_overdue integer DEFAULT 0;
-ALTER TABLE offices ADD COLUMN IF NOT EXISTS total_overdue_value numeric DEFAULT 0;
+ALTER TYPE activity_type ADD VALUE IF NOT EXISTS 'meeting';
 ```
+This is the correct fix because:
+- The automation builder UI offers "meeting" as an option
+- Users have configured rules with this type
+- 14 activities are waiting to be created with this type
 
----
+### Fix B — Add error handling in handleAction (execute-automations)
+In the `create_activity` case (line 46-47), capture and log the error:
+```javascript
+const { data: act, error: actErr } = await supabase.from("activities").insert(payload).select("id").single();
+if (actErr) {
+  console.error('[AUTOMATIONS] Activity insert error:', actErr.message, 'payload:', JSON.stringify(payload));
+  return { type: "create_activity", error: actErr.message };
+}
+```
+Apply similar error capture to ALL action types that do database inserts (send_notification, add_note, create_action_plan, etc.).
 
-## 2 — Edge Function `integration-asaas/index.ts`
+### Fix C — Ensure webhook deployment is current
+The piperun-webhook code already has the `.catch()` fix from the previous iteration. Verify the edge function redeploys by checking logs after saving. No code change needed — just confirmation.
 
-Adicionar ao handler existente:
+### Fix D — Add company fallback in webhook (safety)
+In `piperun-webhook/index.ts` line 341, add fallback to `person.company`:
+```javascript
+let companyData = deal.company || deal.person?.company;
+```
+This handles edge cases where the Piperun payload structure varies.
 
-- **`translateAsaasStatus()`** — função auxiliar de tradução pt-BR
-- **Action `getFinancialByOffice`** — recebe `office_id`, busca CNPJ do escritório, normaliza para dígitos, busca customer no Asaas por `cpfCnpj`, cacheia `asaas_customer_id`, pagina todas as cobranças, classifica (paga/pendente/vencida/cancelada), calcula resumo, atualiza `installments_overdue` e `total_overdue_value` no offices, retorna tudo
+## Files Modified
+- `supabase/functions/execute-automations/index.ts` — error handling in handleAction
+- `supabase/functions/piperun-webhook/index.ts` — company fallback
+- Database migration: add `meeting` to `activity_type` enum
 
-Manter todas as actions existentes (`testConnection`, `searchCustomer`, `getPayments`, `syncAll`, `webhook`).
-
----
-
-## 3 — Novo componente `ClienteFinanceiro.tsx`
-
-### Hook interno `useFinancialData`
-- Cache de 5 minutos via state (`lastFetch` timestamp)
-- Botão "Atualizar" força refresh
-- Loading com skeletons
-
-### Layout
-- 4 cards no topo: Pagas (verde), A Vencer (amarelo), Vencidas (vermelho), Inadimplência (vermelho escuro)
-- Seção "Próxima parcela" e "Parcela mais atrasada" (destaques)
-- Tabela paginada com filtros de status e período
-- Colunas: Vencimento, Valor, Status (badge colorido), Pagamento, Dias atraso, Tipo, Ações (links boleto/fatura)
-- Paginação usando `PaginationWithPageSize`
-
-### Estados especiais
-- Sem CNPJ: mensagem orientativa
-- CNPJ não encontrado no Asaas: mensagem clara com o CNPJ
-- Loading: skeleton shimmer
-
----
-
-## 4 — Aba no Cliente360.tsx
-
-- Adicionar `{ key: 'financeiro', label: 'Financeiro', icon: DollarSign }` no array `tabs360` (após "Contratos")
-- Renderizar `<ClienteFinanceiro officeId={office.id} cnpj={office.cnpj} />` quando `activeTab === 'financeiro'`
-- Import do ícone `DollarSign` do lucide-react
-
----
-
-## Arquivos modificados
-
-| Arquivo | Ação |
-|---|---|
-| `supabase/migrations/new` | Adicionar `installments_overdue` e `total_overdue_value` |
-| `supabase/functions/integration-asaas/index.ts` | Adicionar action `getFinancialByOffice` + `translateAsaasStatus` |
-| `src/components/clientes/ClienteFinanceiro.tsx` | **Novo** — aba completa com cards, filtros, tabela paginada |
-| `src/pages/Cliente360.tsx` | Adicionar aba "Financeiro" nas tabs e renderização |
+## Expected Result After Fix
+- All 17 `create_activity` actions succeed (activities created with correct types)
+- Webhook creates office with all mapped fields populated
+- Webhook triggers automations that execute all 19 actions
+- automation_logs show complete execution with all action IDs
 
