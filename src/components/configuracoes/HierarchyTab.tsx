@@ -91,6 +91,7 @@ export function HierarchyTab() {
   };
 
   const removeLink = async (linkId: string) => {
+    if (!window.confirm('Remover este vínculo?')) return;
     const { error } = await supabase.from('manager_csm_links').delete().eq('id', linkId);
     if (error) { toast.error('Erro: ' + error.message); return; }
     toast.success('Vínculo removido!');

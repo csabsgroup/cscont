@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -12,7 +12,8 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
-import { ArrowLeft, Upload, Loader2, Trash2, Save, Calendar, MapPin, Users, FileText, Plus, X } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { ArrowLeft, Upload, Loader2, Trash2, Save, Calendar, MapPin, Users, FileText, Paperclip, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -47,18 +48,27 @@ export default function EventoDetalhe() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [dirty, setDirty] = useState(false);
 
   // Files tab state
   const [files, setFiles] = useState<any[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
   const [fileUploading, setFileUploading] = useState(false);
 
+  const initialFormRef = useRef<any>(null);
+
+  const updateForm = (patch: any) => {
+    setForm((prev: any) => ({ ...prev, ...patch }));
+    setDirty(true);
+  };
+
   const fetchEvent = useCallback(async () => {
     if (!id) return;
+    setLoading(true);
     const { data, error } = await supabase.from('events').select('*').eq('id', id).single();
     if (error || !data) { toast.error('Evento não encontrado'); navigate('/eventos'); return; }
     setEvent(data);
-    setForm({
+    const formData = {
       title: data.title || '',
       description: data.description || '',
       event_date: data.event_date ? new Date(data.event_date).toISOString().slice(0, 16) : '',
@@ -68,10 +78,13 @@ export default function EventoDetalhe() {
       category: data.category || 'encontro',
       observations: data.observations || '',
       confirmation_deadline_days: data.confirmation_deadline_days ?? 3,
-      max_participants: data.max_participants || '',
+      max_participants: data.max_participants ?? '',
       eligible_product_ids: data.eligible_product_ids || [],
       cover_url: data.cover_url || '',
-    });
+    };
+    setForm(formData);
+    initialFormRef.current = formData;
+    setDirty(false);
     setLoading(false);
   }, [id, navigate]);
 
@@ -90,13 +103,21 @@ export default function EventoDetalhe() {
     fetchFiles();
   }, [fetchEvent, fetchFiles]);
 
+  // Warn on unsaved changes
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (dirty) { e.preventDefault(); }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [dirty]);
+
   const toggleProduct = (pid: string) => {
-    setForm((prev: any) => ({
-      ...prev,
-      eligible_product_ids: prev.eligible_product_ids.includes(pid)
-        ? prev.eligible_product_ids.filter((p: string) => p !== pid)
-        : [...prev.eligible_product_ids, pid],
-    }));
+    updateForm({
+      eligible_product_ids: form.eligible_product_ids.includes(pid)
+        ? form.eligible_product_ids.filter((p: string) => p !== pid)
+        : [...form.eligible_product_ids, pid],
+    });
   };
 
   const handleUploadCover = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -106,10 +127,14 @@ export default function EventoDetalhe() {
     const ext = file.name.split('.').pop();
     const path = `${event.id}.${ext}`;
     const { error } = await supabase.storage.from('event-covers').upload(path, file, { upsert: true });
-    if (error) { toast.error('Erro no upload: ' + error.message); setUploading(false); return; }
+    if (error) {
+      toast.error('Não foi possível enviar a imagem. Tente novamente.');
+      setUploading(false);
+      return;
+    }
     const { data: urlData } = supabase.storage.from('event-covers').getPublicUrl(path);
     const coverUrl = urlData.publicUrl + '?t=' + Date.now();
-    setForm((prev: any) => ({ ...prev, cover_url: coverUrl }));
+    updateForm({ cover_url: coverUrl });
     await supabase.from('events').update({ cover_url: coverUrl }).eq('id', event.id);
     setUploading(false);
     toast.success('Capa atualizada!');
@@ -117,28 +142,58 @@ export default function EventoDetalhe() {
 
   const handleSave = async () => {
     if (!event) return;
+
+    // Validation
+    if (!form.title.trim()) {
+      toast.error('O título é obrigatório.');
+      return;
+    }
+    if (!form.event_date) {
+      toast.error('A data de início é obrigatória.');
+      return;
+    }
+    const startDate = new Date(form.event_date);
+    if (isNaN(startDate.getTime())) {
+      toast.error('Data de início inválida.');
+      return;
+    }
+    if (form.end_date) {
+      const endDate = new Date(form.end_date);
+      if (isNaN(endDate.getTime())) {
+        toast.error('Data de fim inválida.');
+        return;
+      }
+      if (endDate <= startDate) {
+        toast.error('A data de fim deve ser posterior à data de início.');
+        return;
+      }
+    }
+
     setSaving(true);
     const { error } = await supabase.from('events').update({
-      title: form.title,
+      title: form.title.trim(),
       description: form.description || null,
-      event_date: new Date(form.event_date).toISOString(),
+      event_date: startDate.toISOString(),
       end_date: form.end_date ? new Date(form.end_date).toISOString() : null,
       location: form.location || null,
       type: form.type,
       category: form.category,
       observations: form.observations || null,
       confirmation_deadline_days: form.confirmation_deadline_days || 3,
-      max_participants: form.max_participants ? parseInt(form.max_participants) : null,
+      max_participants: form.max_participants !== '' ? parseInt(form.max_participants) : null,
       eligible_product_ids: form.eligible_product_ids.length > 0 ? form.eligible_product_ids : null,
       cover_url: form.cover_url || null,
     }).eq('id', event.id);
     if (error) toast.error('Erro: ' + error.message);
-    else toast.success('Evento salvo!');
+    else {
+      toast.success('Evento salvo!');
+      setDirty(false);
+    }
     setSaving(false);
   };
 
   const handleDelete = async () => {
-    if (!event || !confirm('Tem certeza que deseja excluir este evento?')) return;
+    if (!event) return;
     const { error } = await supabase.from('events').delete().eq('id', event.id);
     if (error) toast.error('Erro: ' + error.message);
     else { toast.success('Evento excluído!'); navigate('/eventos'); }
@@ -148,11 +203,11 @@ export default function EventoDetalhe() {
     const fileList = e.target.files;
     if (!fileList || !event || !session?.user?.id) return;
     setFileUploading(true);
+    let successCount = 0;
     for (const file of Array.from(fileList)) {
-      const ext = file.name.split('.').pop();
       const path = `${event.id}/${Date.now()}-${file.name}`;
       const { error } = await supabase.storage.from('event-files').upload(path, file);
-      if (error) { toast.error(`Erro ao enviar ${file.name}: ${error.message}`); continue; }
+      if (error) { toast.error(`Erro ao enviar ${file.name}`); continue; }
       const { data: urlData } = supabase.storage.from('event-files').getPublicUrl(path);
       await supabase.from('event_files').insert({
         event_id: event.id,
@@ -162,15 +217,17 @@ export default function EventoDetalhe() {
         mime_type: file.type,
         uploaded_by: session.user.id,
       });
+      successCount++;
     }
     setFileUploading(false);
-    toast.success('Arquivo(s) enviado(s)!');
+    if (successCount > 0) {
+      toast.success(`${successCount} arquivo(s) enviado(s)!`);
+    }
     fetchFiles();
     e.target.value = '';
   };
 
   const handleDeleteFile = async (fileId: string, fileUrl: string) => {
-    // Extract path from URL for storage deletion
     const urlParts = fileUrl.split('/event-files/');
     if (urlParts[1]) {
       const storagePath = decodeURIComponent(urlParts[1].split('?')[0]);
@@ -193,10 +250,15 @@ export default function EventoDetalhe() {
 
   const categoryLabel = CATEGORIES.find(c => c.value === form.category)?.label || form.category;
 
+  const handleBack = () => {
+    if (dirty && !window.confirm('Você tem alterações não salvas. Deseja sair mesmo assim?')) return;
+    navigate('/eventos');
+  };
+
   return (
     <div className="space-y-6">
       {/* Back button */}
-      <Button variant="ghost" size="sm" onClick={() => navigate('/eventos')} className="gap-2">
+      <Button variant="ghost" size="sm" onClick={handleBack} className="gap-2">
         <ArrowLeft className="h-4 w-4" /> Voltar para Eventos
       </Button>
 
@@ -255,7 +317,7 @@ export default function EventoDetalhe() {
             <Users className="h-4 w-4" /> Confirmação de Presença
           </TabsTrigger>
           <TabsTrigger value="arquivos" className="gap-1.5">
-            <Plus className="h-4 w-4" /> Arquivos
+            <Paperclip className="h-4 w-4" /> Arquivos
           </TabsTrigger>
         </TabsList>
 
@@ -266,29 +328,29 @@ export default function EventoDetalhe() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label>Título</Label>
-                  <Input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} disabled={readOnly} />
+                  <Input value={form.title} onChange={e => updateForm({ title: e.target.value })} disabled={readOnly} />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Local</Label>
-                  <Input value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} disabled={readOnly} />
+                  <Input value={form.location} onChange={e => updateForm({ location: e.target.value })} disabled={readOnly} />
                 </div>
               </div>
               <div className="space-y-1.5">
                 <Label>Descrição</Label>
-                <RichTextEditor value={form.description} onChange={v => setForm({ ...form, description: v })} readOnly={readOnly} />
+                <RichTextEditor value={form.description} onChange={v => updateForm({ description: v })} readOnly={readOnly} />
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="space-y-1.5">
                   <Label>Início</Label>
-                  <Input type="datetime-local" value={form.event_date} onChange={e => setForm({ ...form, event_date: e.target.value })} disabled={readOnly} />
+                  <Input type="datetime-local" value={form.event_date} onChange={e => updateForm({ event_date: e.target.value })} disabled={readOnly} />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Fim</Label>
-                  <Input type="datetime-local" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })} disabled={readOnly} />
+                  <Input type="datetime-local" value={form.end_date} onChange={e => updateForm({ end_date: e.target.value })} disabled={readOnly} />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Tipo</Label>
-                  <Select value={form.type} onValueChange={v => setForm({ ...form, type: v })} disabled={readOnly}>
+                  <Select value={form.type} onValueChange={v => updateForm({ type: v })} disabled={readOnly}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="presencial">Presencial</SelectItem>
@@ -299,7 +361,7 @@ export default function EventoDetalhe() {
                 </div>
                 <div className="space-y-1.5">
                   <Label>Categoria</Label>
-                  <Select value={form.category} onValueChange={v => setForm({ ...form, category: v })} disabled={readOnly}>
+                  <Select value={form.category} onValueChange={v => updateForm({ category: v })} disabled={readOnly}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {CATEGORIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
@@ -310,16 +372,16 @@ export default function EventoDetalhe() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label>Prazo confirmação (dias antes)</Label>
-                  <Input type="number" value={form.confirmation_deadline_days} onChange={e => setForm({ ...form, confirmation_deadline_days: parseInt(e.target.value) || 0 })} disabled={readOnly} />
+                  <Input type="number" value={form.confirmation_deadline_days} onChange={e => updateForm({ confirmation_deadline_days: parseInt(e.target.value) || 0 })} disabled={readOnly} />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Máx. participantes</Label>
-                  <Input type="number" value={form.max_participants} onChange={e => setForm({ ...form, max_participants: e.target.value })} disabled={readOnly} />
+                  <Input type="number" value={form.max_participants} onChange={e => updateForm({ max_participants: e.target.value })} disabled={readOnly} />
                 </div>
               </div>
               <div className="space-y-1.5">
                 <Label>Observações (visível ao cliente)</Label>
-                <Textarea value={form.observations} onChange={e => setForm({ ...form, observations: e.target.value })} rows={2} disabled={readOnly} />
+                <Textarea value={form.observations} onChange={e => updateForm({ observations: e.target.value })} rows={2} disabled={readOnly} />
               </div>
               <div className="space-y-1.5">
                 <Label>Produtos Elegíveis</Label>
@@ -343,9 +405,27 @@ export default function EventoDetalhe() {
                     {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />}
                     Salvar
                   </Button>
-                  <Button variant="destructive" size="icon" onClick={handleDelete}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructive" size="icon">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Excluir evento</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Tem certeza que deseja excluir o evento "{form.title}"? Esta ação não pode ser desfeita.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                          Excluir
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               )}
             </CardContent>
@@ -373,10 +453,10 @@ export default function EventoDetalhe() {
               {!readOnly && (
                 <div>
                   <label className="cursor-pointer inline-block">
-                    <Button variant="outline" className="pointer-events-none gap-2" disabled={fileUploading}>
-                      {fileUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                    <span className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors">
+                      {fileUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
                       {fileUploading ? 'Enviando...' : 'Enviar Arquivos'}
-                    </Button>
+                    </span>
                     <input type="file" multiple className="hidden" onChange={handleFileUpload} disabled={fileUploading} />
                   </label>
                 </div>

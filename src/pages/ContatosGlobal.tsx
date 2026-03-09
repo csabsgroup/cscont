@@ -10,6 +10,7 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Plus, Users, Search, Star, Mail, Phone, Instagram, Edit2, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -99,9 +100,13 @@ export default function ContatosGlobal() {
     setSaving(false); setDialogOpen(false); fetchAll();
   };
 
-  const handleDelete = async (id: string) => {
-    const { error } = await supabase.from('contacts').delete().eq('id', id);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    const { error } = await supabase.from('contacts').delete().eq('id', deleteId);
     if (error) toast.error('Erro: ' + error.message); else { toast.success('Contato removido!'); fetchAll(); }
+    setDeleteId(null);
   };
 
   const filtered = contacts.filter(c => {
@@ -209,7 +214,7 @@ export default function ContatosGlobal() {
                     <TableCell>
                       <div className="flex gap-1">
                         <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); openEdit(c); }}><Edit2 className="h-4 w-4" /></Button>
-                        <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); handleDelete(c.id); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                        <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setDeleteId(c.id); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                       </div>
                     </TableCell>
                   )}
@@ -251,6 +256,19 @@ export default function ContatosGlobal() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deleteId} onOpenChange={open => { if (!open) setDeleteId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir contato</AlertDialogTitle>
+            <AlertDialogDescription>Tem certeza que deseja excluir este contato? Esta ação não pode ser desfeita.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Excluir</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
