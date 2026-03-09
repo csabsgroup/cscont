@@ -4,21 +4,30 @@ import { usePortal } from '@/contexts/PortalContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, Calendar, List, Grid3x3 } from 'lucide-react';
-import { format, isFuture, isPast } from 'date-fns';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Loader2, Calendar, List, Grid3x3, MapPin, Clock, CheckCircle2, XCircle } from 'lucide-react';
+import { format, isFuture, isPast, subDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { PortalCalendar } from '@/components/portal/PortalCalendar';
 import { PaginationWithPageSize } from '@/components/shared/PaginationWithPageSize';
+import { toast } from 'sonner';
+
+const CATEGORY_LABELS: Record<string, string> = {
+  encontro: 'Encontro', imersao: 'Imersão', workshop: 'Workshop',
+  treinamento: 'Treinamento', confraternizacao: 'Confraternização', outro: 'Outro',
+};
 
 export default function PortalEventos() {
   const { officeId } = usePortal();
   const [events, setEvents] = useState<any[]>([]);
   const [meetings, setMeetings] = useState<any[]>([]);
-  const [participation, setParticipation] = useState<Record<string, { confirmed: boolean }>>({});
+  const [participation, setParticipation] = useState<Record<string, { status: string; id: string }>>({});
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'lista' | 'calendario'>('lista');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [selectedEvent, setSelectedEvent] = useState<any | null>(null);
+  const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     if (!officeId) { setLoading(false); return; }
@@ -28,12 +37,12 @@ export default function PortalEventos() {
 
       const [eventsRes, participantsRes, meetingsRes] = await Promise.all([
         supabase.from('events').select('*').order('event_date', { ascending: true }),
-        supabase.from('event_participants').select('event_id, confirmed').eq('office_id', officeId),
+        supabase.from('event_participants').select('id, event_id, status').eq('office_id', officeId),
         supabase.from('meetings').select('*').eq('office_id', officeId).eq('share_with_client', true).order('scheduled_at', { ascending: true }),
       ]);
 
-      const pMap: Record<string, { confirmed: boolean }> = {};
-      (participantsRes.data || []).forEach(p => { pMap[p.event_id] = { confirmed: p.confirmed }; });
+      const pMap: Record<string, { status: string; id: string }> = {};
+      (participantsRes.data || []).forEach(p => { pMap[p.event_id] = { status: p.status, id: p.id }; });
       setParticipation(pMap);
 
       const filtered = (eventsRes.data || []).filter(ev => {
@@ -49,6 +58,24 @@ export default function PortalEventos() {
     })();
   }, [officeId]);
 
+  const handleConfirm = async (eventId: string, newStatus: string) => {
+    const p = participation[eventId];
+    if (!p) return;
+    setConfirming(true);
+    const confirmed = newStatus === 'confirmado';
+    const { error } = await supabase.from('event_participants').update({ status: newStatus, confirmed }).eq('id', p.id);
+    if (error) { toast.error('Erro: ' + error.message); setConfirming(false); return; }
+    setParticipation(prev => ({ ...prev, [eventId]: { ...prev[eventId], status: newStatus } }));
+    toast.success(newStatus === 'confirmado' ? 'Presença confirmada!' : 'Resposta registrada.');
+    setConfirming(false);
+  };
+
+  const canConfirm = (ev: any) => {
+    const deadlineDays = ev.confirmation_deadline_days ?? 3;
+    const deadline = subDays(new Date(ev.event_date), deadlineDays);
+    return new Date() <= deadline;
+  };
+
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
 
   const upcoming = events.filter(e => isFuture(new Date(e.event_date)));
@@ -60,33 +87,26 @@ export default function PortalEventos() {
 
   const calendarItems = [
     ...events.map(ev => ({
-      id: ev.id,
-      title: ev.title,
-      date: new Date(ev.event_date),
-      type: 'event' as const,
-      subtype: ev.type === 'online' ? 'Online' : 'Presencial',
+      id: ev.id, title: ev.title, date: new Date(ev.event_date),
+      type: 'event' as const, subtype: ev.type === 'online' ? 'Online' : 'Presencial',
       location: ev.location || undefined,
     })),
     ...meetings.map(m => ({
-      id: m.id,
-      title: m.title,
-      date: new Date(m.scheduled_at),
-      type: 'meeting' as const,
-      subtype: `${m.duration_minutes || 30}min`,
+      id: m.id, title: m.title, date: new Date(m.scheduled_at),
+      type: 'meeting' as const, subtype: `${m.duration_minutes || 30}min`,
     })),
   ];
 
-  const getParticipationBadge = (eventId: string, isPastEvent: boolean) => {
+  const getStatusBadge = (eventId: string, isUpcoming: boolean) => {
     const p = participation[eventId];
-    if (!p) return <Badge variant="outline" className="text-xs">Convidado</Badge>;
-    if (isPastEvent) {
-      return p.confirmed
-        ? <Badge className="bg-emerald-500 text-white border-0 text-xs">Participou</Badge>
-        : <Badge variant="destructive" className="text-xs">Faltou</Badge>;
+    if (!p) return <Badge variant="outline" className="text-xs">Sem convite</Badge>;
+    switch (p.status) {
+      case 'confirmado': return <Badge className="bg-emerald-500 text-white border-0 text-xs">Confirmado</Badge>;
+      case 'nao_vai': return <Badge variant="destructive" className="text-xs">Não vai</Badge>;
+      case 'compareceu': return <Badge className="bg-emerald-500 text-white border-0 text-xs">Compareceu</Badge>;
+      case 'nao_compareceu': return <Badge variant="destructive" className="text-xs">Não compareceu</Badge>;
+      default: return <Badge variant="outline" className="text-xs">A confirmar</Badge>;
     }
-    return p.confirmed
-      ? <Badge className="bg-emerald-500 text-white border-0 text-xs">Confirmado</Badge>
-      : <Badge variant="outline" className="text-xs">Convidado</Badge>;
   };
 
   return (
@@ -118,12 +138,33 @@ export default function PortalEventos() {
                 {paginatedEvents.map(ev => {
                   const isUpcoming = isFuture(new Date(ev.event_date));
                   return (
-                    <EventCard
+                    <Card
                       key={ev.id}
-                      event={ev}
-                      upcoming={isUpcoming}
-                      participationBadge={getParticipationBadge(ev.id, !isUpcoming)}
-                    />
+                      className={`cursor-pointer transition-all hover:shadow-lg overflow-hidden ${!isUpcoming ? 'opacity-70' : ''}`}
+                      onClick={() => setSelectedEvent(ev)}
+                    >
+                      {ev.cover_url && (
+                        <div className="h-32 w-full overflow-hidden">
+                          <img src={ev.cover_url} alt={ev.title} className="h-full w-full object-cover" />
+                        </div>
+                      )}
+                      <CardHeader className={ev.cover_url ? 'pt-3' : ''}>
+                        <div className="flex items-center justify-between gap-2">
+                          <CardTitle className="text-base">{ev.title}</CardTitle>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {getStatusBadge(ev.id, isUpcoming)}
+                            <Badge variant={isUpcoming ? 'default' : 'secondary'}>{ev.type === 'online' ? 'Online' : 'Presencial'}</Badge>
+                          </div>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{format(new Date(ev.event_date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
+                      </CardHeader>
+                      {(ev.description || ev.location) && (
+                        <CardContent className="text-sm text-muted-foreground space-y-1 pt-0">
+                          {ev.description && <p className="line-clamp-2">{ev.description}</p>}
+                          {ev.location && <p>📍 {ev.location}</p>}
+                        </CardContent>
+                      )}
+                    </Card>
                   );
                 })}
               </div>
@@ -139,29 +180,87 @@ export default function PortalEventos() {
           )}
         </>
       )}
-    </div>
-  );
-}
 
-function EventCard({ event, upcoming, participationBadge }: { event: any; upcoming?: boolean; participationBadge: React.ReactNode }) {
-  return (
-    <Card className={upcoming ? '' : 'opacity-70'}>
-      <CardHeader>
-        <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-base">{event.title}</CardTitle>
-          <div className="flex items-center gap-1.5 shrink-0">
-            {participationBadge}
-            <Badge variant={upcoming ? 'default' : 'secondary'}>{event.type === 'online' ? 'Online' : 'Presencial'}</Badge>
-          </div>
-        </div>
-        <p className="text-sm text-muted-foreground">{format(new Date(event.event_date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
-      </CardHeader>
-      {(event.description || event.location) && (
-        <CardContent className="text-sm text-muted-foreground space-y-1">
-          {event.description && <p>{event.description}</p>}
-          {event.location && <p>📍 {event.location}</p>}
-        </CardContent>
-      )}
-    </Card>
+      {/* Event detail dialog */}
+      <Dialog open={!!selectedEvent} onOpenChange={open => !open && setSelectedEvent(null)}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          {selectedEvent && (
+            <>
+              {selectedEvent.cover_url && (
+                <div className="rounded-lg overflow-hidden -mx-6 -mt-6 mb-4">
+                  <img src={selectedEvent.cover_url} alt={selectedEvent.title} className="w-full h-48 object-cover" />
+                </div>
+              )}
+              <DialogHeader>
+                <DialogTitle className="text-xl">{selectedEvent.title}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="secondary">{selectedEvent.type === 'online' ? 'Online' : selectedEvent.type === 'hibrido' ? 'Híbrido' : 'Presencial'}</Badge>
+                  <Badge variant="outline">{CATEGORY_LABELS[selectedEvent.category] || selectedEvent.category}</Badge>
+                  {getStatusBadge(selectedEvent.id, isFuture(new Date(selectedEvent.event_date)))}
+                </div>
+
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <span>{format(new Date(selectedEvent.event_date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</span>
+                    {selectedEvent.end_date && (
+                      <span className="text-muted-foreground">até {format(new Date(selectedEvent.end_date), "HH:mm", { locale: ptBR })}</span>
+                    )}
+                  </div>
+                  {selectedEvent.location && (
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-4 w-4 text-muted-foreground" />
+                      <span>{selectedEvent.location}</span>
+                    </div>
+                  )}
+                </div>
+
+                {selectedEvent.description && (
+                  <p className="text-sm text-muted-foreground">{selectedEvent.description}</p>
+                )}
+
+                {selectedEvent.observations && (
+                  <div className="rounded-lg bg-muted/50 p-3">
+                    <p className="text-xs font-medium mb-1">Observações</p>
+                    <p className="text-sm text-muted-foreground">{selectedEvent.observations}</p>
+                  </div>
+                )}
+
+                {/* Confirmation section */}
+                {participation[selectedEvent.id] && isFuture(new Date(selectedEvent.event_date)) && (
+                  <div className="border-t pt-4 space-y-3">
+                    <p className="text-sm font-medium">Confirmar Presença</p>
+                    {canConfirm(selectedEvent) ? (
+                      <div className="flex gap-2">
+                        <Button
+                          className="flex-1"
+                          variant={participation[selectedEvent.id]?.status === 'confirmado' ? 'default' : 'outline'}
+                          onClick={() => handleConfirm(selectedEvent.id, 'confirmado')}
+                          disabled={confirming}
+                        >
+                          <CheckCircle2 className="h-4 w-4 mr-1" /> Vou participar
+                        </Button>
+                        <Button
+                          className="flex-1"
+                          variant={participation[selectedEvent.id]?.status === 'nao_vai' ? 'destructive' : 'outline'}
+                          onClick={() => handleConfirm(selectedEvent.id, 'nao_vai')}
+                          disabled={confirming}
+                        >
+                          <XCircle className="h-4 w-4 mr-1" /> Não vou
+                        </Button>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">Prazo para confirmação encerrado.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
