@@ -399,7 +399,7 @@ export default function Relatorios() {
       avgNps, npsDistribution, promoters, neutrals, detractors,
       completedInPeriod, completedPrev, coveragePct, noMeeting30, csmCoverage, noContactList, meetingFrequency,
       avgTimePerStage, churnByStage, funnel,
-      overdueContracts, totalOverdueValue, overduePct, overdueTable,
+      overdueOfficesList, totalOverdueValue, overduePct, overdueTable,
       newInPeriod, newPrev,
     };
   }, [filteredOffices, filteredContracts, filteredMeetings, filteredHealth, filteredJourneys, filteredHistory, stages, csmUsers, formSubmissions, profileMap, range]);
