@@ -235,10 +235,10 @@ export default function EventoDetalhe() {
           </div>
           {!readOnly && (
             <label className="cursor-pointer shrink-0">
-              <Button size="sm" variant="secondary" asChild disabled={uploading}>
-                {uploading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Upload className="h-4 w-4 mr-1" />}
+              <span className="inline-flex items-center gap-1 rounded-md bg-secondary text-secondary-foreground px-3 py-1.5 text-sm font-medium hover:bg-secondary/80 transition-colors">
+                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                 {uploading ? 'Enviando...' : 'Alterar capa'}
-              </Button>
+              </span>
               <input type="file" accept="image/*" className="hidden" onChange={handleUploadCover} disabled={uploading} />
             </label>
           )}
