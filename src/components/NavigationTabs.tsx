@@ -11,6 +11,7 @@ const tabs = [
   { label: 'Contatos', icon: Phone, path: '/contatos' },
   { label: 'Jornada', icon: Kanban, path: '/jornada' },
   { label: 'Performance', icon: BarChart3, path: '/relatorios' },
+  { label: 'Tarefas', icon: ClipboardList, path: '/tarefas-internas' },
 ];
 
 export function NavigationTabs() {

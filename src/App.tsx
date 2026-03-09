@@ -104,6 +104,7 @@ const App = () => (
             <Route path="/relatorios" element={<ProtectedRoute><Relatorios /></ProtectedRoute>} />
             <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
             <Route path="/auditoria" element={<ProtectedRoute><AuditLogs /></ProtectedRoute>} />
+            <Route path="/tarefas-internas" element={<ProtectedRoute><TarefasInternas /></ProtectedRoute>} />
             <Route path="/notificacoes" element={<ProtectedRoute><Notificacoes /></ProtectedRoute>} />
             {/* Portal do Cliente */}
             <Route path="/portal" element={<PortalRoute><PortalHome /></PortalRoute>} />
