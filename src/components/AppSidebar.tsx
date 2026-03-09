@@ -59,7 +59,7 @@ export function AppSidebar() {
   // Hide "Tarefas Internas" for clients
   const operationItems = useMemo(() => {
     if (role === 'client') {
-      return allOperationItems.filter(item => item.url !== '/tarefas-internas');
+      return allOperationItems.filter(item => item.url !== '/tarefas-internas' && item.url !== '/eventos');
     }
     return allOperationItems;
   }, [role]);
