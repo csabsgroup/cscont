@@ -528,6 +528,14 @@ export default function Cliente360() {
         contacts={contacts.filter((c: any) => c.phone)}
       />
 
+      {/* Client Access Dialog */}
+      <ClientAccessDialog
+        officeId={office.id}
+        officeName={office.name}
+        open={accessDialogOpen}
+        onOpenChange={setAccessDialogOpen}
+      />
+
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={showDeleteConfirm} onOpenChange={(open) => { setShowDeleteConfirm(open); if (!open) setDeleteConfirmText(''); }}>
         <AlertDialogContent>

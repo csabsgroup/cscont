@@ -98,14 +98,23 @@ Deno.serve(async (req) => {
       });
     }
 
-    // RBAC: manager can only manage csm/client
-    if (isManager && !isAdmin) {
+    // RBAC: manager can only manage csm/client; CSM can only manage client
+    if (!isAdmin) {
       const { data: targetRole } = await adminClient.from("user_roles").select("role").eq("user_id", user_id).single();
-      if (targetRole && !["csm", "client"].includes(targetRole.role)) {
-        return new Response(JSON.stringify({ error: "Managers can only manage CSM or client users" }), {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      if (isCSM && !isManager) {
+        if (targetRole && targetRole.role !== "client") {
+          return new Response(JSON.stringify({ error: "CSMs can only manage client users" }), {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      } else if (isManager) {
+        if (targetRole && !["csm", "client"].includes(targetRole.role)) {
+          return new Response(JSON.stringify({ error: "Managers can only manage CSM or client users" }), {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
       }
     }
 

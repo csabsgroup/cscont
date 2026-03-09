@@ -223,6 +223,11 @@ export function ClienteHeader({
               <DropdownMenuItem onClick={onQuickNote}>
                 <StickyNote className="mr-2 h-4 w-4" />Nota Rápida
               </DropdownMenuItem>
+              {onManageAccess && (
+                <DropdownMenuItem onClick={onManageAccess}>
+                  <KeyRound className="mr-2 h-4 w-4" />Gerenciar Acesso Portal
+                </DropdownMenuItem>
+              )}
               {(isAdmin || isManager) && onDelete && (
                 <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive focus:bg-destructive/10">
                   <Trash2 className="mr-2 h-4 w-4" />Excluir Cliente

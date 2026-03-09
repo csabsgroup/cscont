@@ -86,6 +86,17 @@ Deno.serve(async (req) => {
       );
     }
 
+    // CSMs can only create client roles
+    if (isCSM && !isAdmin && !isManager && role !== "client") {
+      return new Response(
+        JSON.stringify({ error: "CSMs can only create client users" }),
+        {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
     // Use service role to create user
     const adminClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
