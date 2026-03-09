@@ -9,15 +9,15 @@ import { toast } from 'sonner';
 import { isPast } from 'date-fns';
 
 const CONFIRMATION_OPTIONS = [
-  { value: 'a_confirmar', label: 'A Confirmar', color: 'bg-muted text-muted-foreground' },
-  { value: 'confirmado', label: 'Confirmado', color: 'bg-primary/10 text-primary' },
-  { value: 'nao_vai', label: 'Não Vai', color: 'bg-orange-500/10 text-orange-600' },
+  { value: 'a_confirmar', label: 'A Confirmar', color: 'bg-muted text-muted-foreground', dot: 'bg-muted-foreground' },
+  { value: 'confirmado', label: 'Confirmado', color: 'bg-primary/10 text-primary', dot: 'bg-primary' },
+  { value: 'nao_vai', label: 'Não Vai', color: 'bg-orange-500/10 text-orange-600', dot: 'bg-orange-500' },
 ];
 
 const ATTENDANCE_OPTIONS = [
-  { value: 'pendente', label: '—' },
-  { value: 'compareceu', label: 'Compareceu', color: 'bg-emerald-500/10 text-emerald-600' },
-  { value: 'nao_compareceu', label: 'Não Compareceu', color: 'bg-destructive/10 text-destructive' },
+  { value: 'pendente', label: '—', dot: '' },
+  { value: 'compareceu', label: 'Compareceu', color: 'bg-emerald-500/10 text-emerald-600', dot: 'bg-emerald-500' },
+  { value: 'nao_compareceu', label: 'Não Compareceu', color: 'bg-destructive/10 text-destructive', dot: 'bg-destructive' },
 ];
 
 interface Participant {
@@ -164,16 +164,29 @@ export function ParticipantManager({ eventId, eligibleProductIds, readOnly, even
                     </div>
                   </TableCell>
                   <TableCell>
-                    {readOnly ? (
-                      <Badge className={`text-xs ${getStatusBadge(confirmVal).color}`}>{getStatusBadge(confirmVal).label}</Badge>
+                  {readOnly ? (
+                      <Badge className={`text-xs ${getStatusBadge(confirmVal).color}`}>
+                        {getStatusBadge(confirmVal).dot && <span className={`h-2 w-2 rounded-full ${getStatusBadge(confirmVal).dot} mr-1.5 inline-block`} />}
+                        {getStatusBadge(confirmVal).label}
+                      </Badge>
                     ) : (
                       <Select value={confirmVal} onValueChange={val => updateConfirmation(p, val)}>
-                        <SelectTrigger className="w-[130px] h-8 text-xs">
-                          <SelectValue />
+                        <SelectTrigger className="w-[140px] h-8 text-xs">
+                          <span className="flex items-center gap-1.5">
+                            {CONFIRMATION_OPTIONS.find(o => o.value === confirmVal)?.dot && (
+                              <span className={`h-2 w-2 rounded-full shrink-0 ${CONFIRMATION_OPTIONS.find(o => o.value === confirmVal)?.dot}`} />
+                            )}
+                            <SelectValue />
+                          </span>
                         </SelectTrigger>
                         <SelectContent>
                           {CONFIRMATION_OPTIONS.map(s => (
-                            <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                            <SelectItem key={s.value} value={s.value}>
+                              <span className="flex items-center gap-1.5">
+                                <span className={`h-2 w-2 rounded-full shrink-0 ${s.dot}`} />
+                                {s.label}
+                              </span>
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -181,15 +194,30 @@ export function ParticipantManager({ eventId, eligibleProductIds, readOnly, even
                   </TableCell>
                   <TableCell>
                     {readOnly ? (
-                      attendVal !== 'pendente' ? <Badge className={`text-xs ${getStatusBadge(attendVal).color}`}>{getStatusBadge(attendVal).label}</Badge> : <span className="text-xs text-muted-foreground">—</span>
+                      attendVal !== 'pendente' ? (
+                        <Badge className={`text-xs ${getStatusBadge(attendVal).color}`}>
+                          {getStatusBadge(attendVal).dot && <span className={`h-2 w-2 rounded-full ${getStatusBadge(attendVal).dot} mr-1.5 inline-block`} />}
+                          {getStatusBadge(attendVal).label}
+                        </Badge>
+                      ) : <span className="text-xs text-muted-foreground">—</span>
                     ) : (
                       <Select value={attendVal} onValueChange={val => updateAttendance(p, val)} disabled={!eventIsPast}>
-                        <SelectTrigger className={`w-[150px] h-8 text-xs ${!eventIsPast ? 'opacity-50' : ''}`}>
-                          <SelectValue placeholder="—" />
+                        <SelectTrigger className={`w-[160px] h-8 text-xs ${!eventIsPast ? 'opacity-50' : ''}`}>
+                          <span className="flex items-center gap-1.5">
+                            {ATTENDANCE_OPTIONS.find(o => o.value === attendVal)?.dot && (
+                              <span className={`h-2 w-2 rounded-full shrink-0 ${ATTENDANCE_OPTIONS.find(o => o.value === attendVal)?.dot}`} />
+                            )}
+                            <SelectValue placeholder="—" />
+                          </span>
                         </SelectTrigger>
                         <SelectContent>
                           {ATTENDANCE_OPTIONS.map(s => (
-                            <SelectItem key={s.value || 'none'} value={s.value || 'none'}>{s.label}</SelectItem>
+                            <SelectItem key={s.value || 'none'} value={s.value || 'none'}>
+                              <span className="flex items-center gap-1.5">
+                                {s.dot && <span className={`h-2 w-2 rounded-full shrink-0 ${s.dot}`} />}
+                                {s.label}
+                              </span>
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
