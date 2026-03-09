@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { StatusDropdown } from './StatusDropdown';
 import { HealthScoreBars } from './HealthScoreBars';
 import { CustomFieldsDisplay } from './CustomFieldsDisplay';
-import { ArrowLeft, Pencil, MoreVertical, UserCog, RefreshCw, StickyNote, Eye, Camera, Phone, Trash2 } from 'lucide-react';
+import { ArrowLeft, Pencil, MoreVertical, UserCog, RefreshCw, StickyNote, Eye, Camera, Phone, Trash2, KeyRound } from 'lucide-react';
 import { UserAvatar } from '@/components/shared/UserAvatar';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
