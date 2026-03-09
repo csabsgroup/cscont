@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { ActivityPopup } from '@/components/atividades/ActivityPopup';
 import { ActivityEditDrawer } from '@/components/atividades/ActivityEditDrawer';
+import { PaginationWithPageSize } from '@/components/shared/PaginationWithPageSize';
 import { UserAvatar } from '@/components/shared/UserAvatar';
 
 interface Activity {
