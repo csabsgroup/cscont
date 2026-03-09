@@ -194,15 +194,30 @@ export function ParticipantManager({ eventId, eligibleProductIds, readOnly, even
                   </TableCell>
                   <TableCell>
                     {readOnly ? (
-                      attendVal !== 'pendente' ? <Badge className={`text-xs ${getStatusBadge(attendVal).color}`}>{getStatusBadge(attendVal).label}</Badge> : <span className="text-xs text-muted-foreground">—</span>
+                      attendVal !== 'pendente' ? (
+                        <Badge className={`text-xs ${getStatusBadge(attendVal).color}`}>
+                          {getStatusBadge(attendVal).dot && <span className={`h-2 w-2 rounded-full ${getStatusBadge(attendVal).dot} mr-1.5 inline-block`} />}
+                          {getStatusBadge(attendVal).label}
+                        </Badge>
+                      ) : <span className="text-xs text-muted-foreground">—</span>
                     ) : (
                       <Select value={attendVal} onValueChange={val => updateAttendance(p, val)} disabled={!eventIsPast}>
-                        <SelectTrigger className={`w-[150px] h-8 text-xs ${!eventIsPast ? 'opacity-50' : ''}`}>
-                          <SelectValue placeholder="—" />
+                        <SelectTrigger className={`w-[160px] h-8 text-xs ${!eventIsPast ? 'opacity-50' : ''}`}>
+                          <span className="flex items-center gap-1.5">
+                            {ATTENDANCE_OPTIONS.find(o => o.value === attendVal)?.dot && (
+                              <span className={`h-2 w-2 rounded-full shrink-0 ${ATTENDANCE_OPTIONS.find(o => o.value === attendVal)?.dot}`} />
+                            )}
+                            <SelectValue placeholder="—" />
+                          </span>
                         </SelectTrigger>
                         <SelectContent>
                           {ATTENDANCE_OPTIONS.map(s => (
-                            <SelectItem key={s.value || 'none'} value={s.value || 'none'}>{s.label}</SelectItem>
+                            <SelectItem key={s.value || 'none'} value={s.value || 'none'}>
+                              <span className="flex items-center gap-1.5">
+                                {s.dot && <span className={`h-2 w-2 rounded-full shrink-0 ${s.dot}`} />}
+                                {s.label}
+                              </span>
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
