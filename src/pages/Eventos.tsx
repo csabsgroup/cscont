@@ -11,9 +11,10 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Plus, Loader2, Calendar, ChevronDown, CalendarDays, List } from 'lucide-react';
+import { Plus, Loader2, Calendar, ChevronDown, CalendarDays, List, ImagePlus, X } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { isFuture, isPast } from 'date-fns';
+import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { toast } from 'sonner';
 import { EventCard } from '@/components/eventos/EventCard';
 import { EventCalendarView } from '@/components/eventos/EventCalendarView';
@@ -55,7 +56,8 @@ export default function Eventos() {
   const [category, setCategory] = useState('encontro');
   const [maxParticipants, setMaxParticipants] = useState('');
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
-
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const fetchEvents = useCallback(async () => {
     setLoading(true);
     const [eventsRes, participantsRes] = await Promise.all([
@@ -83,6 +85,19 @@ export default function Eventos() {
 
   const toggleProduct = (id: string) => {
     setSelectedProductIds(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
+  };
+
+  const handleCoverSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCoverFile(file);
+    setCoverPreview(URL.createObjectURL(file));
+  };
+
+  const removeCover = () => {
+    setCoverFile(null);
+    if (coverPreview) URL.revokeObjectURL(coverPreview);
+    setCoverPreview(null);
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -117,10 +132,22 @@ export default function Eventos() {
       toast.success('Evento criado!');
     }
 
+    // Upload cover if selected
+    if (coverFile && created) {
+      const ext = coverFile.name.split('.').pop() || 'jpg';
+      const path = `${created.id}.${ext}`;
+      const { error: upErr } = await supabase.storage.from('event-covers').upload(path, coverFile, { upsert: true });
+      if (!upErr) {
+        const { data: urlData } = supabase.storage.from('event-covers').getPublicUrl(path);
+        await supabase.from('events').update({ cover_url: urlData.publicUrl }).eq('id', created.id);
+      }
+    }
+
     setDialogOpen(false);
     setTitle(''); setDescription(''); setEventDate(''); setEndDate('');
     setLocation(''); setType('presencial'); setCategory('encontro');
     setMaxParticipants(''); setSelectedProductIds([]);
+    removeCover();
     fetchEvents();
     setCreating(false);
   };
@@ -171,13 +198,31 @@ export default function Eventos() {
               <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
                 <DialogHeader><DialogTitle>Novo Evento</DialogTitle></DialogHeader>
                 <form onSubmit={handleCreate} className="space-y-4">
+                  {/* Cover upload */}
+                  <div className="space-y-2">
+                    <Label>Imagem de Capa</Label>
+                    {coverPreview ? (
+                      <div className="relative rounded-lg overflow-hidden">
+                        <img src={coverPreview} alt="Capa" className="w-full h-40 object-cover" />
+                        <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2 h-7 w-7" onClick={removeCover}>
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <label className="flex flex-col items-center justify-center h-32 rounded-lg border-2 border-dashed border-border cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors">
+                        <ImagePlus className="h-8 w-8 text-muted-foreground mb-1" />
+                        <span className="text-sm text-muted-foreground">Clique para adicionar capa</span>
+                        <input type="file" accept="image/*" className="hidden" onChange={handleCoverSelect} />
+                      </label>
+                    )}
+                  </div>
                   <div className="space-y-2">
                     <Label>Título *</Label>
                     <Input value={title} onChange={e => setTitle(e.target.value)} required />
                   </div>
                   <div className="space-y-2">
                     <Label>Descrição</Label>
-                    <Textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} />
+                    <RichTextEditor value={description} onChange={setDescription} />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
