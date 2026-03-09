@@ -11,10 +11,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Plus, Loader2, Calendar, ChevronDown } from 'lucide-react';
+import { Plus, Loader2, Calendar, ChevronDown, CalendarDays, List } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { isFuture, isPast } from 'date-fns';
 import { toast } from 'sonner';
 import { EventCard } from '@/components/eventos/EventCard';
+import { EventCalendarView } from '@/components/eventos/EventCalendarView';
 
 const CATEGORIES = [
   { value: 'encontro', label: 'Encontro' },
