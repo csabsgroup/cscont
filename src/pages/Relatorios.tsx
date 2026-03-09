@@ -747,7 +747,7 @@ export default function Relatorios() {
           <div className="grid gap-4 md:grid-cols-3">
             <KPI label="Valor Total em Atraso" value={`R$ ${metrics.totalOverdueValue.toLocaleString('pt-BR')}`} negative />
             <KPI label="% Inadimplência" value={`${metrics.overduePct}%`} negative />
-            <KPI label="Contratos Inadimplentes" value={metrics.overdueContracts.length} />
+            <KPI label="Escritórios Inadimplentes" value={metrics.overdueOfficesList.length} />
           </div>
           {metrics.overdueTable.length > 0 && (
             <Card>
