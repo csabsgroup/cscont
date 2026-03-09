@@ -17,11 +17,13 @@ import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { Plus, Loader2, Trash2, Edit2, Zap, Clock, X, Copy, ArrowLeft, ChevronDown, ChevronUp, CalendarIcon, FileText, Play, Users } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Plus, Loader2, Trash2, Edit2, Zap, Clock, X, Copy, ArrowLeft, ChevronDown, ChevronUp, CalendarIcon, FileText, Play, Users, MoreHorizontal } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { FolderAccordion, useFolders, MoveToFolderMenu } from './FolderAccordion';
 
 // ─── Trigger definitions ─────────────────────────────────────
 interface TriggerDef {
