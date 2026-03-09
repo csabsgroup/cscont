@@ -79,6 +79,7 @@ export default function Cliente360() {
   const [playbookInstances, setPlaybookInstances] = useState<any[]>([]);
   const [selectedPlaybookId, setSelectedPlaybookId] = useState('');
   const [applyingPlaybook, setApplyingPlaybook] = useState(false);
+  const [accessDialogOpen, setAccessDialogOpen] = useState(false);
 
   const fetchAll = useCallback(async () => {
     if (!id) return;
