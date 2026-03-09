@@ -511,6 +511,16 @@ function UsersTab() {
                   <p className="text-xs text-muted-foreground">Define de qual produto este CSM é responsável</p>
                 </div>
               )}
+              <div className="space-y-2">
+                <Label>WhatsApp</Label>
+                <Input
+                  value={editWhatsapp}
+                  onChange={e => setEditWhatsapp(e.target.value.replace(/\D/g, ''))}
+                  placeholder="11999999999"
+                  maxLength={15}
+                />
+                <p className="text-xs text-muted-foreground">Número com DDD. O sistema adiciona o 55 automaticamente.</p>
+              </div>
               <Button onClick={handleSaveProfile} disabled={saving} className="w-full">
                 {saving ? 'Salvando...' : 'Salvar Alterações'}
               </Button>
