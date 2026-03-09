@@ -76,7 +76,7 @@ export function EventCard({ event, confirmedCount = 0, totalCount = 0, onClick, 
             <span>{confirmedCount} confirmado{confirmedCount !== 1 ? 's' : ''} / {totalCount}</span>
           </div>
           {event.description && (
-            <p className="text-xs text-muted-foreground line-clamp-1 max-w-[50%] text-right">{event.description}</p>
+            <p className="text-xs text-muted-foreground line-clamp-1 max-w-[50%] text-right">{event.description?.replace(/<[^>]*>/g, '')}</p>
           )}
         </div>
       </CardContent>
