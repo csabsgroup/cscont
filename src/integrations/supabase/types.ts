@@ -16,11 +16,14 @@ export type Database = {
     Tables: {
       action_plans: {
         Row: {
+          area: string
           created_at: string
           created_by: string
           description: string | null
           due_date: string | null
           id: string
+          kr_type: string
+          objective_id: string | null
           observations: string | null
           office_id: string
           status: Database["public"]["Enums"]["action_plan_status"]
@@ -28,11 +31,14 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          area?: string
           created_at?: string
           created_by: string
           description?: string | null
           due_date?: string | null
           id?: string
+          kr_type?: string
+          objective_id?: string | null
           observations?: string | null
           office_id: string
           status?: Database["public"]["Enums"]["action_plan_status"]
@@ -40,11 +46,14 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          area?: string
           created_at?: string
           created_by?: string
           description?: string | null
           due_date?: string | null
           id?: string
+          kr_type?: string
+          objective_id?: string | null
           observations?: string | null
           office_id?: string
           status?: Database["public"]["Enums"]["action_plan_status"]
@@ -52,6 +61,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "action_plans_objective_id_fkey"
+            columns: ["objective_id"]
+            isOneToOne: false
+            referencedRelation: "okr_objectives"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "action_plans_office_id_fkey"
             columns: ["office_id"]
@@ -2081,6 +2097,47 @@ export type Database = {
             columns: ["active_product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      okr_objectives: {
+        Row: {
+          area: string
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          office_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          area?: string
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          office_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          area?: string
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          office_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "okr_objectives_office_id_fkey"
+            columns: ["office_id"]
+            isOneToOne: false
+            referencedRelation: "offices"
             referencedColumns: ["id"]
           },
         ]
