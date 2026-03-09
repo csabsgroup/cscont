@@ -40,6 +40,7 @@ export default function Dashboard() {
   const [metricsHistory, setMetricsHistory] = useState<any[]>([]);
   const [meetings, setMeetings] = useState<any[]>([]);
   const [pinnedIndicators, setPinnedIndicators] = useState<SavedIndicator[]>([]);
+  const [managerCsmLinks, setManagerCsmLinks] = useState<any[]>([]);
   const PAGE_SIZE = 10;
 
   const fetchAll = useCallback(async () => {
