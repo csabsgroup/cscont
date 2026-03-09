@@ -65,7 +65,7 @@ interface ClienteHeaderProps {
 
 export function ClienteHeader({
   office, onEdit, onDelete, health, stageName, csmProfile,
-  onReassignCSM, onChangeStatus, onStatusSelect, canEditStatus, onQuickNote, onLogoUpdated, onPreviewOpen, onWhatsApp, contracts,
+  onReassignCSM, onChangeStatus, onStatusSelect, canEditStatus, onQuickNote, onLogoUpdated, onPreviewOpen, onWhatsApp, onManageAccess, contracts,
 }: ClienteHeaderProps) {
   const navigate = useNavigate();
   const { isViewer, isClient, isAdmin, isManager } = useAuth();
