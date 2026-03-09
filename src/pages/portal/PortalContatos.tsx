@@ -30,7 +30,7 @@ export default function PortalContatos() {
       // 1. Get CSM
       const { data: office } = await supabase.from('offices').select('csm_id').eq('id', officeId).single();
       const csmId = office?.csm_id;
-      if (!csmId) { setLoading(false); return; }
+      if (!csmId) { setContacts([]); setLoading(false); return; }
 
       // 2. Get Manager(s) of this CSM
       const { data: mLinks } = await supabase.from('manager_csm_links').select('manager_id').eq('csm_id', csmId);

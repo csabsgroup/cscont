@@ -98,7 +98,11 @@ export default function PortalMembros() {
                       <MessageCircle className="h-3 w-3" />{m.whatsapp}
                     </a>
                   )}
-                  {m.instagram && <p className="flex items-center gap-1"><Instagram className="h-3 w-3" />{m.instagram}</p>}
+                  {m.instagram && (
+                    <a href={`https://instagram.com/${m.instagram.replace('@', '')}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 hover:underline">
+                      <Instagram className="h-3 w-3" />{m.instagram}
+                    </a>
+                  )}
                 </div>
               </CardContent>
             </Card>

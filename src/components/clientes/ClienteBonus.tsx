@@ -110,8 +110,13 @@ export function ClienteBonus({ officeId }: { officeId: string }) {
     const request = requests.find(r => r.id === requestId);
     
     if (status === 'approved' && request) {
-      // Check available balance for the catalog item
-      const itemGrants = grants
+      // Re-fetch grants to avoid race conditions with stale state data
+      const { data: freshGrants } = await supabase.from('bonus_grants')
+        .select('*, bonus_catalog(name, unit)')
+        .eq('office_id', officeId)
+        .order('granted_at', { ascending: false });
+      
+      const itemGrants = (freshGrants || [])
         .filter(g => g.catalog_item_id === request.catalog_item_id && Number(g.available) > 0)
         .sort((a: any, b: any) => (a.expires_at || '9999') < (b.expires_at || '9999') ? -1 : 1);
       
