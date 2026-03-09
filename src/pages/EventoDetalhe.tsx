@@ -209,8 +209,8 @@ export default function EventoDetalhe() {
             Sem imagem de capa
           </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-        <div className="absolute bottom-4 left-5 right-5 flex items-end justify-between">
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
+        <div className="absolute bottom-4 left-5 right-5 flex items-end justify-between relative z-10">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold text-white drop-shadow-lg">{form.title}</h1>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
