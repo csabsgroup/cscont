@@ -26,6 +26,7 @@ const roleLabels: Record<string, string> = {
 export function UserProfileDialog({ open, onOpenChange }: Props) {
   const { user, profile, role, refreshProfile } = useAuth();
   const [fullName, setFullName] = useState(profile?.full_name || '');
+  const [whatsapp, setWhatsapp] = useState(profile?.whatsapp || '');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
