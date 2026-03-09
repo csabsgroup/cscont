@@ -123,7 +123,7 @@ export function ClienteMetricas({ officeId, officeOverdue }: Props) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-        officeOt-bold">{activeContract?.installments_overdue ?? 0}</p>
+        <p className="text-2xl font-bold">{officeOverdue ?? 0}</p>
             <p className="text-xs text-muted-foreground">Parcelas vencidas</p>
           </CardContent>
         </Card>
