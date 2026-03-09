@@ -346,6 +346,9 @@ export function AutomationRulesTab() {
   const [activeStep, setActiveStep] = useState(1);
   const [activeTab, setActiveTab] = useState('rules');
 
+  // Folders
+  const { folders, refetch: refetchFolders } = useFolders('automations');
+
   // Logs
   const [logs, setLogs] = useState<any[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
