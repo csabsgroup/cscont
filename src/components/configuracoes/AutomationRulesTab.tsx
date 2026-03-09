@@ -1198,53 +1198,70 @@ export function AutomationRulesTab() {
         </div>
 
         <TabsContent value="rules">
-        {rules.length === 0 ? (
-          <Card><CardContent className="py-12 text-center text-sm text-muted-foreground">Nenhuma regra de automação criada.</CardContent></Card>
-        ) : (
-          <Card>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>Trigger</TableHead>
-                  <TableHead>Condições</TableHead>
-                  <TableHead>Ações</TableHead>
-                  <TableHead>Ativa</TableHead>
-                  <TableHead></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rules.map((r: any) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="font-medium">{r.name}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1.5">
-                        <Badge variant="outline" className="text-xs">{getTriggerLabel(r.trigger_type)}</Badge>
-                        {r.trigger_type === 'client_contains' ? (
-                          <Badge variant="secondary" className="text-[10px] gap-0.5">🔄 Periódico</Badge>
-                        ) : getTriggerTiming(r.trigger_type) === 'cron' ? (
-                          <Badge variant="secondary" className="text-[10px] gap-0.5"><Clock className="h-3 w-3" />Cron</Badge>
-                        ) : (
-                          <Badge variant="secondary" className="text-[10px] gap-0.5"><Zap className="h-3 w-3" />Tempo real</Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">{countConditions(r)} condição(ões)</TableCell>
-                    <TableCell className="text-muted-foreground text-sm">{Array.isArray(r.actions) ? r.actions.length : 0} ação(ões)</TableCell>
-                    <TableCell><Switch checked={r.is_active} onCheckedChange={() => toggleActive(r.id, r.is_active)} /></TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Button size="sm" variant="ghost" onClick={() => openEdit(r)}><Edit2 className="h-4 w-4" /></Button>
-                        <Button size="sm" variant="ghost" onClick={() => handleDuplicate(r)} title="Duplicar"><Copy className="h-4 w-4 text-muted-foreground" /></Button>
-                        <Button size="sm" variant="ghost" onClick={() => handleDelete(r.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </Card>
-        )}
+          <FolderAccordion
+            scope="automations"
+            items={rules.map((r: any) => ({ ...r, folder_id: r.folder_id || null }))}
+            folders={folders}
+            renderItem={(r: any) => (
+              <div className="flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-sm truncate">{r.name}</span>
+                    <Badge variant={r.is_active ? 'default' : 'secondary'} className="text-xs">
+                      {r.is_active ? 'Ativa' : 'Inativa'}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
+                    <Badge variant="outline" className="text-[10px]">{getTriggerLabel(r.trigger_type)}</Badge>
+                    {r.trigger_type === 'client_contains' ? (
+                      <span className="flex items-center gap-0.5">🔄 Periódico</span>
+                    ) : getTriggerTiming(r.trigger_type) === 'cron' ? (
+                      <span className="flex items-center gap-0.5"><Clock className="h-3 w-3" />Cron</span>
+                    ) : (
+                      <span className="flex items-center gap-0.5"><Zap className="h-3 w-3" />Tempo real</span>
+                    )}
+                    <span>•</span>
+                    <span>{countConditions(r)} condições</span>
+                    <span>•</span>
+                    <span>{Array.isArray(r.actions) ? r.actions.length : 0} ações</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch 
+                    checked={r.is_active} 
+                    onCheckedChange={() => toggleActive(r.id, r.is_active)} 
+                    onClick={e => e.stopPropagation()}
+                  />
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="icon" variant="ghost" className="h-8 w-8">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => openEdit(r)}>
+                        <Edit2 className="mr-2 h-3 w-3" />Editar
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleDuplicate(r)}>
+                        <Copy className="mr-2 h-3 w-3" />Duplicar
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleDelete(r.id)} className="text-destructive">
+                        <Trash2 className="mr-2 h-3 w-3" />Excluir
+                      </DropdownMenuItem>
+                      <MoveToFolderMenu
+                        folders={folders}
+                        currentFolderId={r.folder_id || null}
+                        onMove={(fId) => handleMoveToFolder(r.id, fId)}
+                      />
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
+            )}
+            onMoveItem={handleMoveToFolder}
+            onFoldersChange={refetchFolders}
+            emptyMessage="Nenhuma regra de automação criada."
+          />
         </TabsContent>
 
         <TabsContent value="logs">
