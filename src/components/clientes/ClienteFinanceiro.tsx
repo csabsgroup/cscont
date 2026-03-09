@@ -173,7 +173,8 @@ export function ClienteFinanceiro({ officeId, cnpj }: Props) {
   if (statusFilter === 'paid') filtered = filtered.filter(p => p.isPaid);
   if (statusFilter === 'pending') filtered = filtered.filter(p => p.isPending);
   if (statusFilter === 'overdue') filtered = filtered.filter(p => p.isOverdue);
-  if (statusFilter === 'cancelled') filtered = filtered.filter(p => p.isCancelled);
+  if (statusFilter === 'cancelled') filtered = filtered.filter(p => p.isCancelled && !p.isDeleted);
+  if (statusFilter === 'deleted') filtered = filtered.filter(p => p.isDeleted);
 
   if (periodFilter !== 'all') {
     const now = new Date();
