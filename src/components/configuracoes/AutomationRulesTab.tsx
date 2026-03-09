@@ -587,6 +587,12 @@ export function AutomationRulesTab() {
     }
   };
 
+  const handleMoveToFolder = async (ruleId: string, newFolderId: string | null) => {
+    const { error } = await (supabase.from('automation_rules_v2' as any) as any).update({ folder_id: newFolderId }).eq('id', ruleId);
+    if (error) toast.error('Erro ao mover: ' + error.message);
+    else { toast.success('Regra movida!'); fetchRules(); }
+  };
+
   const fetchReachCount = async () => {
     setReachLoading(true);
     try {
