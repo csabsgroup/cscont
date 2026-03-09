@@ -235,7 +235,7 @@ export default function EventoDetalhe() {
           </div>
           {!readOnly && (
             <label className="cursor-pointer shrink-0">
-              <Button size="sm" variant="secondary" className="pointer-events-none" disabled={uploading}>
+              <Button size="sm" variant="secondary" asChild disabled={uploading}>
                 {uploading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Upload className="h-4 w-4 mr-1" />}
                 {uploading ? 'Enviando...' : 'Alterar capa'}
               </Button>
