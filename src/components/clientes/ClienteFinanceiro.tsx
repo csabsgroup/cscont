@@ -86,7 +86,7 @@ function useFinancialData(officeId: string, cnpj: string | null) {
     setLoading(false);
   }, [officeId, cnpj, data]);
 
-  useEffect(() => { fetchData(); }, [officeId]);
+  useEffect(() => { fetchData(); }, [officeId, cnpj]);
 
   return { data, loading, error, refresh: () => fetchData(true) };
 }
