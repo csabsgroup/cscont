@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Package, Route, Heart, FileText, Zap, Gift, Users, Link2, Globe, ArrowUpDown, ShieldX, Calendar, MessageSquare, CreditCard, Workflow, BarChart3, Eye, Bot, ClipboardList, ScrollText, ChevronRight } from 'lucide-react';
+import { Package, Route, Heart, FileText, Zap, Gift, Users, Link2, Globe, ArrowUpDown, ShieldX, Calendar, MessageSquare, CreditCard, Workflow, BarChart3, Eye, Bot, ClipboardList, ScrollText, ChevronRight, GitBranch } from 'lucide-react';
 import { ImportExportTab } from '@/components/configuracoes/ImportExportTab';
 import { HealthScoreTab } from '@/components/configuracoes/HealthScoreTab';
 import { FormTemplatesTab } from '@/components/configuracoes/FormTemplatesTab';
