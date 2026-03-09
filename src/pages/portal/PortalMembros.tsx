@@ -13,6 +13,7 @@ interface MemberContact {
   phone: string | null;
   instagram: string | null;
   role_title: string | null;
+  office_id: string;
 }
 
 interface Member {
@@ -37,22 +38,31 @@ export default function PortalMembros() {
   const [pageSize, setPageSize] = useState(50);
 
   useEffect(() => {
-    if (!officeId) { setLoading(false); return; }
+    if (!officeId) {
+      console.log('[PortalMembros] No officeId, skipping');
+      setLoading(false);
+      return;
+    }
+
     (async () => {
-      // Get current office's product
-      const { data: office } = await supabase
+      console.log('[PortalMembros] Starting fetch for officeId:', officeId);
+
+      // 1. Get current office's product
+      const { data: office, error: officeErr } = await supabase
         .from('offices')
         .select('active_product_id')
         .eq('id', officeId)
         .single();
 
+      if (officeErr) {
+        console.error('[PortalMembros] Error fetching own office:', officeErr);
+      }
+      console.log('[PortalMembros] Own office product:', office?.active_product_id);
+
+      // 2. Fetch directory offices (WITHOUT embed to avoid silent PostgREST failures)
       let query = supabase
         .from('offices')
-        .select(`
-          id, name, external_id, city, state, email, whatsapp,
-          logo_url, photo_url,
-          contacts!contacts_office_id_fkey(name, email, phone, instagram, role_title)
-        `)
+        .select('id, name, external_id, city, state, email, whatsapp, logo_url, photo_url')
         .eq('status', 'ativo')
         .eq('visible_in_directory', true)
         .neq('id', officeId)
@@ -62,9 +72,45 @@ export default function PortalMembros() {
         query = query.eq('active_product_id', office.active_product_id);
       }
 
-      const { data, error } = await query;
-      if (error) console.error('[PortalMembros] Query error:', error);
-      setMembers((data as any[]) || []);
+      const { data: offices, error: officesErr } = await query;
+      if (officesErr) {
+        console.error('[PortalMembros] Error fetching directory offices:', officesErr);
+      }
+      console.log('[PortalMembros] Directory offices found:', offices?.length ?? 0);
+
+      if (!offices || offices.length === 0) {
+        setMembers([]);
+        setLoading(false);
+        return;
+      }
+
+      // 3. Fetch contacts separately for these office IDs
+      const officeIds = offices.map(o => o.id);
+      const { data: contacts, error: contactsErr } = await supabase
+        .from('contacts')
+        .select('name, email, phone, instagram, role_title, office_id')
+        .in('office_id', officeIds)
+        .eq('is_main_contact', true);
+
+      if (contactsErr) {
+        console.error('[PortalMembros] Error fetching contacts:', contactsErr);
+      }
+      console.log('[PortalMembros] Contacts found:', contacts?.length ?? 0);
+
+      // 4. Merge contacts into offices
+      const contactsByOffice = new Map<string, MemberContact[]>();
+      (contacts || []).forEach(c => {
+        const list = contactsByOffice.get(c.office_id) || [];
+        list.push(c);
+        contactsByOffice.set(c.office_id, list);
+      });
+
+      const merged: Member[] = offices.map(o => ({
+        ...o,
+        contacts: contactsByOffice.get(o.id) || [],
+      }));
+
+      setMembers(merged);
       setLoading(false);
     })();
   }, [officeId]);
@@ -76,11 +122,9 @@ export default function PortalMembros() {
     m.name?.toLowerCase().includes(q) || m.city?.toLowerCase().includes(q)
   );
 
-  // Pagination
   const startIdx = (page - 1) * pageSize;
   const paginated = filtered.slice(startIdx, startIdx + pageSize);
 
-  // Reset page on search change
   const handleSearch = (val: string) => {
     setSearch(val);
     setPage(1);
