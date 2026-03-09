@@ -164,16 +164,29 @@ export function ParticipantManager({ eventId, eligibleProductIds, readOnly, even
                     </div>
                   </TableCell>
                   <TableCell>
-                    {readOnly ? (
-                      <Badge className={`text-xs ${getStatusBadge(confirmVal).color}`}>{getStatusBadge(confirmVal).label}</Badge>
+                  {readOnly ? (
+                      <Badge className={`text-xs ${getStatusBadge(confirmVal).color}`}>
+                        {getStatusBadge(confirmVal).dot && <span className={`h-2 w-2 rounded-full ${getStatusBadge(confirmVal).dot} mr-1.5 inline-block`} />}
+                        {getStatusBadge(confirmVal).label}
+                      </Badge>
                     ) : (
                       <Select value={confirmVal} onValueChange={val => updateConfirmation(p, val)}>
-                        <SelectTrigger className="w-[130px] h-8 text-xs">
-                          <SelectValue />
+                        <SelectTrigger className="w-[140px] h-8 text-xs">
+                          <span className="flex items-center gap-1.5">
+                            {CONFIRMATION_OPTIONS.find(o => o.value === confirmVal)?.dot && (
+                              <span className={`h-2 w-2 rounded-full shrink-0 ${CONFIRMATION_OPTIONS.find(o => o.value === confirmVal)?.dot}`} />
+                            )}
+                            <SelectValue />
+                          </span>
                         </SelectTrigger>
                         <SelectContent>
                           {CONFIRMATION_OPTIONS.map(s => (
-                            <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                            <SelectItem key={s.value} value={s.value}>
+                              <span className="flex items-center gap-1.5">
+                                <span className={`h-2 w-2 rounded-full shrink-0 ${s.dot}`} />
+                                {s.label}
+                              </span>
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
