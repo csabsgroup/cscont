@@ -73,7 +73,15 @@ export default function Dashboard() {
     const roles = rolesRes.data || [];
     const profiles = profilesRes.data || [];
     const csmUserIds = roles.filter(r => r.role === 'csm').map(r => r.user_id);
-    setCsmProfiles(profiles.filter(p => csmUserIds.includes(p.id)));
+    const managerUserIds = roles.filter(r => r.role === 'manager').map(r => r.user_id);
+    const csmAndManagerProfiles = profiles
+      .filter(p => csmUserIds.includes(p.id) || managerUserIds.includes(p.id))
+      .map(p => ({ ...p, _role: managerUserIds.includes(p.id) ? 'manager' : 'csm' }));
+    setCsmProfiles(csmAndManagerProfiles);
+
+    // Fetch manager->csm links for expansion
+    const { data: mcLinks } = await supabase.from('manager_csm_links').select('manager_id, csm_id');
+    setManagerCsmLinks(mcLinks || []);
     setLoading(false);
   }, []);
 
