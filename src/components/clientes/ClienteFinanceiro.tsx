@@ -101,7 +101,7 @@ const billingTypeLabel: Record<string, string> = {
   BOLETO: 'Boleto', PIX: 'PIX', CREDIT_CARD: 'Cartão', DEBIT_CARD: 'Débito', UNDEFINED: '—', TRANSFER: 'Transferência', DEPOSIT: 'Depósito',
 };
 
-type StatusFilter = 'all' | 'paid' | 'pending' | 'overdue' | 'cancelled';
+type StatusFilter = 'all' | 'paid' | 'pending' | 'overdue' | 'cancelled' | 'deleted';
 type PeriodFilter = 'all' | '1m' | '3m' | '6m' | '1y';
 
 export function ClienteFinanceiro({ officeId, cnpj }: Props) {
