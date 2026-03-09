@@ -28,12 +28,12 @@ interface Product { id: string; name: string; }
 
 export default function Eventos() {
   const { session, isViewer } = useAuth();
+  const navigate = useNavigate();
   const [events, setEvents] = useState<any[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [participantCounts, setParticipantCounts] = useState<Record<string, { confirmed: number; total: number }>>({});
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [detailEvent, setDetailEvent] = useState<any | null>(null);
   const [creating, setCreating] = useState(false);
   const [pastOpen, setPastOpen] = useState(false);
 
