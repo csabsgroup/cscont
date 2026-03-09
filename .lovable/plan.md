@@ -1,63 +1,57 @@
 
 
-# Diagnosis and Fix Plan
+# Fix: Automação duplicando atividades + Limpeza
 
-## Root Causes Found
+## Diagnóstico
 
-### Problem 1 — Webhook mapping not filling fields
-The webhook_logs table confirms the error: `"supabase.from(...).insert(...).catch is not a function"`. The last two webhooks (March 5 and March 6) both crashed with this error BEFORE reaching office creation. The `.catch()` fix was applied in code but the webhooks arrived before deployment completed. The mapping paths are correct, the company data exists at root level with all expected fields. This problem is already fixed in code — just needs a new webhook to test.
+O "Disparar agora" envia `skip_idempotency: true`, que **deleta todos os registros de execução** da regra (linha 1172). Isso significa que ao disparar pela segunda vez, o sistema esquece que já processou todos os clientes e roda tudo de novo. Resultado: 3 cópias de cada atividade (1 original + 2 re-execuções).
 
-### Problem 2 — Only 3 of 17 create_activity actions succeeded
-**This is the critical finding.** The `activity_type` database enum has these valid values:
-`task, follow_up, onboarding, renewal, other, ligacao, check_in, email, whatsapp, planejamento`
+**Dados confirmados:** 17.575 atividades nos últimos 2 dias, 7.450 grupos duplicados (3 cópias cada).
 
-It does NOT include `"meeting"`. The automation rule "[ELT] Delegação automática" has 14 actions with `activity_type: "meeting"` — every one of those fails silently because the INSERT violates the enum constraint. The `handleAction` function doesn't capture the error from `supabase.from("activities").insert(...)`.
+## Correções
 
-Evidence: automation_logs shows 19 `actions_executed` entries, but only 3 `create_activity` have an `id` (the ones with type "task" or "email"). The other 14 have no `id` — they failed silently.
+### Fix 1 — Remover limpeza de idempotência no "Disparar agora"
 
-### Problem 3 — Webhook doesn't trigger automations
-Same root cause as Problem 1 — the webhook crashed before reaching the automation invocation lines (419-430). Once the webhook stops crashing, automations will be invoked via `supabase.functions.invoke()`.
+**Arquivo:** `supabase/functions/execute-automations/index.ts` (linhas 1169-1173)
 
-## Fixes
+Trocar a lógica: em vez de deletar execuções anteriores, apenas **pular a verificação** de idempotência para offices que ainda NÃO foram processados. O `runNowAll` já filtra offices e chama `executeV2Rules` — basta não deletar os registros. Offices já processados serão naturalmente pulados pelo check na linha 654-665.
 
-### Fix A — Add "meeting" to activity_type enum (database migration)
-```sql
-ALTER TYPE activity_type ADD VALUE IF NOT EXISTS 'meeting';
-```
-This is the correct fix because:
-- The automation builder UI offers "meeting" as an option
-- Users have configured rules with this type
-- 14 activities are waiting to be created with this type
-
-### Fix B — Add error handling in handleAction (execute-automations)
-In the `create_activity` case (line 46-47), capture and log the error:
-```javascript
-const { data: act, error: actErr } = await supabase.from("activities").insert(payload).select("id").single();
-if (actErr) {
-  console.error('[AUTOMATIONS] Activity insert error:', actErr.message, 'payload:', JSON.stringify(payload));
-  return { type: "create_activity", error: actErr.message };
+Remover:
+```typescript
+if (skip_idempotency && offset === 0) {
+  await supabase.from("automation_executions").delete().eq("rule_id", rule_id);
 }
 ```
-Apply similar error capture to ALL action types that do database inserts (send_notification, add_note, create_action_plan, etc.).
 
-### Fix C — Ensure webhook deployment is current
-The piperun-webhook code already has the `.catch()` fix from the previous iteration. Verify the edge function redeploys by checking logs after saving. No code change needed — just confirmation.
+E remover o parâmetro `skip_idempotency` do frontend e da auto-invocação.
 
-### Fix D — Add company fallback in webhook (safety)
-In `piperun-webhook/index.ts` line 341, add fallback to `person.company`:
-```javascript
-let companyData = deal.company || deal.person?.company;
+### Fix 2 — Deletar atividades duplicadas
+
+Usar uma query para manter apenas a atividade mais antiga de cada grupo (title + office_id) criada nos últimos 2 dias, deletando as cópias extras. Isso será feito via ferramenta de dados (não migration).
+
+Lógica SQL:
+```sql
+DELETE FROM activities WHERE id IN (
+  SELECT id FROM (
+    SELECT id, ROW_NUMBER() OVER (PARTITION BY title, office_id ORDER BY created_at ASC) as rn
+    FROM activities
+    WHERE created_at > now() - interval '2 days'
+  ) sub WHERE rn > 1
+)
 ```
-This handles edge cases where the Piperun payload structure varies.
 
-## Files Modified
-- `supabase/functions/execute-automations/index.ts` — error handling in handleAction
-- `supabase/functions/piperun-webhook/index.ts` — company fallback
-- Database migration: add `meeting` to `activity_type` enum
+### Fix 3 — Frontend: Remover skip_idempotency
 
-## Expected Result After Fix
-- All 17 `create_activity` actions succeed (activities created with correct types)
-- Webhook creates office with all mapped fields populated
-- Webhook triggers automations that execute all 19 actions
-- automation_logs show complete execution with all action IDs
+**Arquivo:** `src/components/configuracoes/AutomationRulesTab.tsx` (linha 543)
+
+Remover `skip_idempotency: true` do body da invocação. O comportamento correto do "Disparar agora" é: processar apenas offices que ainda não foram atingidos por essa regra.
+
+### Opção de "Forçar re-execução"
+
+Adicionar um checkbox separado no editor ("Forçar re-execução em todos os clientes, mesmo os já atingidos") que, quando marcado, aí sim limpa as execuções. Isso evita duplicatas acidentais mas permite re-runs intencionais.
+
+## Arquivos modificados
+- `supabase/functions/execute-automations/index.ts` — remover delete de execuções
+- `src/components/configuracoes/AutomationRulesTab.tsx` — remover skip_idempotency, adicionar checkbox "Forçar"
+- Query de dados — deletar ~14.900 atividades duplicadas
 
