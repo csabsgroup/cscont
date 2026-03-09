@@ -38,6 +38,7 @@ function translateAsaasStatus(status: string): string {
     DUNNING_REQUESTED: "Negativação solicitada",
     DUNNING_RECEIVED: "Negativado",
     AWAITING_RISK_ANALYSIS: "Análise de risco",
+    DELETED: "Excluída",
   };
   return map[status] || status;
 }
