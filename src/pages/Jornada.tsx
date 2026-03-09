@@ -55,16 +55,29 @@ export default function Jornada() {
   // Activity counts for badges
   const [activityCounts, setActivityCounts] = useState<ActivityCounts>({ todas: 0, atrasadas: 0, vencemHoje: 0, aVencer: 0, concluidas: 0 });
 
+  const [managerCsmLinks, setManagerCsmLinks] = useState<any[]>([]);
+
   useEffect(() => {
     supabase.from('products').select('id, name').eq('is_active', true).order('name')
       .then(({ data }) => { const p = data || []; setProducts(p); if (p.length > 0) setSelectedProduct(p[0].id); });
     (async () => {
-      const { data: roles } = await supabase.from('user_roles').select('user_id').eq('role', 'csm');
-      if (roles && roles.length > 0) {
-        const ids = roles.map(r => r.user_id);
-        const { data: profiles } = await supabase.from('profiles').select('id, full_name').in('id', ids);
-        const list = (profiles || []).map(p => ({ id: p.id, full_name: p.full_name }));
-        setCsmList(list);
+      const [rolesRes, mcLinksRes] = await Promise.all([
+        supabase.from('user_roles').select('user_id, role').in('role', ['csm', 'manager']),
+        supabase.from('manager_csm_links').select('manager_id, csm_id'),
+      ]);
+      const roles = rolesRes.data || [];
+      setManagerCsmLinks(mcLinksRes.data || []);
+      const csmIds = roles.filter(r => r.role === 'csm').map(r => r.user_id);
+      const managerIds = roles.filter(r => r.role === 'manager').map(r => r.user_id);
+      const allIds = [...new Set([...csmIds, ...managerIds])];
+      if (allIds.length > 0) {
+        const { data: profiles } = await supabase.from('profiles').select('id, full_name').in('id', allIds);
+        const list = (profiles || []).map(p => ({
+          id: p.id,
+          full_name: p.full_name,
+          _role: managerIds.includes(p.id) ? 'manager' : 'csm',
+        }));
+        setCsmList(list as any);
         const map: Record<string, CsmProfile> = {};
         list.forEach(p => { map[p.id] = p; });
         setCsmProfiles(map);
@@ -186,7 +199,15 @@ export default function Jornada() {
   const filteredJourneys = officeJourneys.filter(oj => {
     if (filterHealth && healthScores[oj.office_id]?.band !== filterHealth) return false;
     if (filterStatus && oj.offices.status !== filterStatus) return false;
-    if (filterCsm && oj.offices.csm_id !== filterCsm) return false;
+    if (filterCsm) {
+      const selectedProfile = csmList.find((c: any) => c.id === filterCsm);
+      if ((selectedProfile as any)?._role === 'manager') {
+        const subordinates = managerCsmLinks.filter(l => l.manager_id === filterCsm).map(l => l.csm_id);
+        if (!subordinates.includes(oj.offices.csm_id)) return false;
+      } else {
+        if (oj.offices.csm_id !== filterCsm) return false;
+      }
+    }
     return true;
   });
 
@@ -256,8 +277,8 @@ export default function Jornada() {
           <Select value={filterCsm} onValueChange={v => setFilterCsm(v === 'all' ? '' : v)}>
             <SelectTrigger className="w-[160px]"><SelectValue placeholder="Responsável" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos CSMs</SelectItem>
-              {csmList.map(c => <SelectItem key={c.id} value={c.id}>{c.full_name || 'Sem nome'}</SelectItem>)}
+              <SelectItem value="all">Todos</SelectItem>
+              {csmList.map((c: any) => <SelectItem key={c.id} value={c.id}>{(c.full_name || 'Sem nome') + (c._role === 'manager' ? ' (Gestor)' : '')}</SelectItem>)}
             </SelectContent>
           </Select>
         )}

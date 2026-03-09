@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AppLayout } from "@/components/AppLayout";
 import { PortalLayout } from "@/components/portal/PortalLayout";
+import { PortalProvider } from "@/contexts/PortalContext";
 import Auth from "@/pages/Auth";
 import Dashboard from "@/pages/Dashboard";
 import Cliente360 from "@/pages/Cliente360";
@@ -70,7 +71,11 @@ function PortalRoute({ children }: { children: React.ReactNode }) {
   if (!session) return <Navigate to="/auth" replace />;
   if (!isClient) return <Navigate to="/" replace />;
 
-  return <PortalLayout>{children}</PortalLayout>;
+  return (
+    <PortalProvider>
+      <PortalLayout>{children}</PortalLayout>
+    </PortalProvider>
+  );
 }
 
 const App = () => (

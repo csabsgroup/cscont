@@ -40,6 +40,7 @@ export default function Dashboard() {
   const [metricsHistory, setMetricsHistory] = useState<any[]>([]);
   const [meetings, setMeetings] = useState<any[]>([]);
   const [pinnedIndicators, setPinnedIndicators] = useState<SavedIndicator[]>([]);
+  const [managerCsmLinks, setManagerCsmLinks] = useState<any[]>([]);
   const PAGE_SIZE = 10;
 
   const fetchAll = useCallback(async () => {
@@ -73,17 +74,37 @@ export default function Dashboard() {
     const roles = rolesRes.data || [];
     const profiles = profilesRes.data || [];
     const csmUserIds = roles.filter(r => r.role === 'csm').map(r => r.user_id);
-    setCsmProfiles(profiles.filter(p => csmUserIds.includes(p.id)));
+    const managerUserIds = roles.filter(r => r.role === 'manager').map(r => r.user_id);
+    const csmAndManagerProfiles = profiles
+      .filter(p => csmUserIds.includes(p.id) || managerUserIds.includes(p.id))
+      .map(p => ({ ...p, _role: managerUserIds.includes(p.id) ? 'manager' : 'csm' }));
+    setCsmProfiles(csmAndManagerProfiles);
+
+    // Fetch manager->csm links for expansion
+    const { data: mcLinks } = await supabase.from('manager_csm_links').select('manager_id, csm_id');
+    setManagerCsmLinks(mcLinks || []);
     setLoading(false);
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   // === FILTERED DATA ===
+  // Expand selected filter: if a manager is selected, include their subordinate CSMs
+  const expandedCsmIds = useMemo(() => {
+    if (selectedCsms.length === 0) return [];
+    const selected = selectedCsms[0];
+    const profile = csmProfiles.find(p => p.id === selected);
+    if (profile?._role === 'manager') {
+      const subordinates = managerCsmLinks.filter(l => l.manager_id === selected).map(l => l.csm_id);
+      return subordinates.length > 0 ? subordinates : [selected];
+    }
+    return [selected];
+  }, [selectedCsms, csmProfiles, managerCsmLinks]);
+
   const filteredOffices = useMemo(() => {
     let result = offices;
-    if (selectedCsms.length > 0) {
-      result = result.filter(o => selectedCsms.includes(o.csm_id));
+    if (expandedCsmIds.length > 0) {
+      result = result.filter(o => expandedCsmIds.includes(o.csm_id));
     }
     if (selectedProductId) {
       result = result.filter(o => o.active_product_id === selectedProductId);
@@ -250,7 +271,7 @@ export default function Dashboard() {
               <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Consolidado do time" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Consolidado do time</SelectItem>
-                {csmProfiles.map(c => <SelectItem key={c.id} value={c.id}>{c.full_name || 'Sem nome'}</SelectItem>)}
+                {csmProfiles.map(c => <SelectItem key={c.id} value={c.id}>{(c.full_name || 'Sem nome') + (c._role === 'manager' ? ' (Gestor)' : '')}</SelectItem>)}
               </SelectContent>
             </Select>
           )}
