@@ -429,6 +429,7 @@ export function AutomationRulesTab() {
     setForm({ ...EMPTY_FORM, condition_groups: [{ id: genId(), logic: 'and', conditions: [] }] });
     setActiveStep(1);
     setRunNow(false);
+    setForceRerun(false);
     setPreviewOffices(null);
     setEditorOpen(true);
   };
