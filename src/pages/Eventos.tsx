@@ -132,10 +132,22 @@ export default function Eventos() {
       toast.success('Evento criado!');
     }
 
+    // Upload cover if selected
+    if (coverFile && created) {
+      const ext = coverFile.name.split('.').pop() || 'jpg';
+      const path = `${created.id}.${ext}`;
+      const { error: upErr } = await supabase.storage.from('event-covers').upload(path, coverFile, { upsert: true });
+      if (!upErr) {
+        const { data: urlData } = supabase.storage.from('event-covers').getPublicUrl(path);
+        await supabase.from('events').update({ cover_url: urlData.publicUrl }).eq('id', created.id);
+      }
+    }
+
     setDialogOpen(false);
     setTitle(''); setDescription(''); setEventDate(''); setEndDate('');
     setLocation(''); setType('presencial'); setCategory('encontro');
     setMaxParticipants(''); setSelectedProductIds([]);
+    removeCover();
     fetchEvents();
     setCreating(false);
   };
