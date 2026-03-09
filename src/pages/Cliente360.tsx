@@ -159,7 +159,7 @@ export default function Cliente360() {
   useEffect(() => {
     if (!office?.cnpj || !id) return;
     supabase.functions.invoke('integration-asaas', {
-      body: { action: 'getFinancialByOffice', officeId: id },
+      body: { action: 'getFinancialByOffice', office_id: id },
     }).then(() => {
       // Silently refresh office data after sync
       supabase.from('offices').select('installments_overdue, total_overdue_value').eq('id', id).single()
