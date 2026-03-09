@@ -87,26 +87,24 @@ export default function Financeiro() {
         </Card>
       </div>
 
-      {overdueContracts.length > 0 && (
+      {overdueOffices.length > 0 && (
         <Card>
-          <CardHeader><CardTitle className="text-base">Contratos com Inadimplência</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">Escritórios com Inadimplência</CardTitle></CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Cliente</TableHead>
-                  <TableHead>Produto</TableHead>
-                  <TableHead>Valor Mensal</TableHead>
                   <TableHead>Parcelas Vencidas</TableHead>
+                  <TableHead>Valor em Atraso</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {overdueContracts.map(c => (
-                  <TableRow key={c.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/clientes/${c.office_id}`)}>
-                    <TableCell className="font-medium">{c.offices?.name}</TableCell>
-                    <TableCell className="text-muted-foreground">{c.products?.name}</TableCell>
-                    <TableCell>R$ {(c.monthly_value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
-                    <TableCell><Badge variant="destructive">{c.installments_overdue}</Badge></TableCell>
+                {overdueOffices.map(o => (
+                  <TableRow key={o.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/clientes/${o.id}`)}>
+                    <TableCell className="font-medium">{o.name}</TableCell>
+                    <TableCell><Badge variant="destructive">{o.installments_overdue}</Badge></TableCell>
+                    <TableCell>R$ {(o.total_overdue_value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
