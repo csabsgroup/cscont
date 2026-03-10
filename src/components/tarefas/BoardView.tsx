@@ -223,6 +223,7 @@ export function BoardView() {
         checklist: data.checklist || [],
         column_id: data.column_id || columns[0]?.id,
         sort_order: colCards.length,
+        priority: data.priority || 'medium',
         created_by: user?.id,
       }).select().single();
       if (error) { toast({ title: 'Erro ao criar tarefa', variant: 'destructive' }); return; }
