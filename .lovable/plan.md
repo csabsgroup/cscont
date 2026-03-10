@@ -1,75 +1,63 @@
 
 
-# Redesign do Sync Asaas: Armazenamento Local + Sync Diário
+# Diagnosis and Fix Plan
 
-## Problema Atual
-O `syncAll` tem timeout de ~50s e só consegue processar ~81 escritórios. Com 1000+ escritórios, é impossível sincronizar tudo em uma única execução.
+## Root Causes Found
 
-## Arquitetura Proposta
+### Problem 1 — Webhook mapping not filling fields
+The webhook_logs table confirms the error: `"supabase.from(...).insert(...).catch is not a function"`. The last two webhooks (March 5 and March 6) both crashed with this error BEFORE reaching office creation. The `.catch()` fix was applied in code but the webhooks arrived before deployment completed. The mapping paths are correct, the company data exists at root level with all expected fields. This problem is already fixed in code — just needs a new webhook to test.
 
-```text
-┌─────────────────────────────────────────────────────┐
-│                    SYNC FLOW                         │
-│                                                      │
-│  pg_cron (00:00)  ──►  integration-asaas             │
-│       ou                  action: syncBatch           │
-│  Botão manual            offset=0, batchSize=30       │
-│                              │                        │
-│                    ┌─────────▼──────────┐             │
-│                    │ Processa 30 offices │             │
-│                    │ Busca ALL payments  │             │
-│                    │ Upsert asaas_payments│            │
-│                    │ Atualiza offices     │            │
-│                    └─────────┬──────────┘             │
-│                              │                        │
-│                    offset < total?                     │
-│                    ├── Sim ──► auto-invoke próximo batch│
-│                    └── Não ──► FIM (log resultado)     │
-│                                                       │
-│  ─────────────────────────────────────────────────── │
-│                    READ FLOW                          │
-│                                                       │
-│  ClienteFinanceiro ──► SELECT asaas_payments          │
-│  Financeiro page   ──► SELECT offices (totais)        │
-│  (sem chamada API Asaas na leitura!)                  │
-└─────────────────────────────────────────────────────┘
+### Problem 2 — Only 3 of 17 create_activity actions succeeded
+**This is the critical finding.** The `activity_type` database enum has these valid values:
+`task, follow_up, onboarding, renewal, other, ligacao, check_in, email, whatsapp, planejamento`
+
+It does NOT include `"meeting"`. The automation rule "[ELT] Delegação automática" has 14 actions with `activity_type: "meeting"` — every one of those fails silently because the INSERT violates the enum constraint. The `handleAction` function doesn't capture the error from `supabase.from("activities").insert(...)`.
+
+Evidence: automation_logs shows 19 `actions_executed` entries, but only 3 `create_activity` have an `id` (the ones with type "task" or "email"). The other 14 have no `id` — they failed silently.
+
+### Problem 3 — Webhook doesn't trigger automations
+Same root cause as Problem 1 — the webhook crashed before reaching the automation invocation lines (419-430). Once the webhook stops crashing, automations will be invoked via `supabase.functions.invoke()`.
+
+## Fixes
+
+### Fix A — Add "meeting" to activity_type enum (database migration)
+```sql
+ALTER TYPE activity_type ADD VALUE IF NOT EXISTS 'meeting';
 ```
+This is the correct fix because:
+- The automation builder UI offers "meeting" as an option
+- Users have configured rules with this type
+- 14 activities are waiting to be created with this type
 
-## Mudanças
+### Fix B — Add error handling in handleAction (execute-automations)
+In the `create_activity` case (line 46-47), capture and log the error:
+```javascript
+const { data: act, error: actErr } = await supabase.from("activities").insert(payload).select("id").single();
+if (actErr) {
+  console.error('[AUTOMATIONS] Activity insert error:', actErr.message, 'payload:', JSON.stringify(payload));
+  return { type: "create_activity", error: actErr.message };
+}
+```
+Apply similar error capture to ALL action types that do database inserts (send_notification, add_note, create_action_plan, etc.).
 
-### 1. Nova tabela `asaas_payments`
-Armazena todas as parcelas localmente. Campos: `asaas_id` (unique), `office_id`, `value`, `net_value`, `due_date`, `payment_date`, `status`, `billing_type`, `description`, `invoice_url`, `bank_slip_url`, `synced_at`. RLS: leitura para offices visíveis, escrita só via service role.
+### Fix C — Ensure webhook deployment is current
+The piperun-webhook code already has the `.catch()` fix from the previous iteration. Verify the edge function redeploys by checking logs after saving. No code change needed — just confirmation.
 
-### 2. Coluna `asaas_last_sync` em `offices`
-Timestamp da última sincronização para exibir na UI e priorizar offices não sincronizados.
+### Fix D — Add company fallback in webhook (safety)
+In `piperun-webhook/index.ts` line 341, add fallback to `person.company`:
+```javascript
+let companyData = deal.company || deal.person?.company;
+```
+This handles edge cases where the Piperun payload structure varies.
 
-### 3. Edge Function `integration-asaas` -- nova action `syncBatch`
-- Recebe `offset` e `batchSize` (default 30)
-- Processa o batch: para cada office, busca TODOS os pagamentos (não só overdue) e faz upsert na tabela `asaas_payments`
-- Atualiza `offices.installments_overdue`, `total_overdue_value` e `asaas_last_sync`
-- Se ainda há offices pendentes, auto-invoca a própria function com `offset + batchSize` (via `fetch` para a URL da function, usando service role key)
-- Retorna imediatamente para o chamador com status parcial
+## Files Modified
+- `supabase/functions/execute-automations/index.ts` — error handling in handleAction
+- `supabase/functions/piperun-webhook/index.ts` — company fallback
+- Database migration: add `meeting` to `activity_type` enum
 
-### 4. `syncAll` vira wrapper
-Chama `syncBatch` com offset=0. O front recebe feedback imediato ("Sincronização iniciada") e não precisa esperar todos os batches.
-
-### 5. `getFinancialByOffice` lê do banco local
-Em vez de chamar a API Asaas, faz `SELECT * FROM asaas_payments WHERE office_id = X`. Mantém o mesmo formato de resposta para o frontend não precisar mudar.
-
-### 6. `ClienteFinanceiro` -- sem mudanças de interface
-O hook `useFinancialData` continua chamando `getFinancialByOffice`, mas agora a resposta vem do banco local (instantânea). O botão "Atualizar" dispara sync individual daquele office.
-
-### 7. pg_cron -- sync diário às 00:00
-Cron job que chama `syncBatch` com offset=0. A cadeia de auto-invocações processa todos os offices durante a madrugada.
-
-### 8. Página Financeiro
-- Adiciona indicador "Última sincronização: X" 
-- Botão "Sincronizar" agora mostra "Sincronização iniciada" e não trava
-
-### Arquivos afetados
-- **Migration SQL**: criar tabela `asaas_payments`, coluna `asaas_last_sync`, RLS, índices
-- **`supabase/functions/integration-asaas/index.ts`**: reescrever syncAll → syncBatch com auto-invocação; getFinancialByOffice lê do DB
-- **`src/pages/Financeiro.tsx`**: feedback de sync assíncrono, mostrar última sync
-- **`src/components/clientes/ClienteFinanceiro.tsx`**: ajustes mínimos (adicionar "última atualização")
-- **pg_cron**: INSERT via insert tool (não migration)
+## Expected Result After Fix
+- All 17 `create_activity` actions succeed (activities created with correct types)
+- Webhook creates office with all mapped fields populated
+- Webhook triggers automations that execute all 19 actions
+- automation_logs show complete execution with all action IDs
 

@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { DollarSign, AlertTriangle, TrendingUp, RefreshCw } from 'lucide-react';
+import { DollarSign, AlertTriangle, TrendingUp, RefreshCw, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -19,7 +19,7 @@ export default function Financeiro() {
     setLoading(true);
     const [c, o] = await Promise.all([
       supabase.from('contracts').select('*, offices(name, installments_overdue, total_overdue_value), products:product_id(name)'),
-      supabase.from('offices').select('id, name, cnpj, installments_overdue, total_overdue_value'),
+      supabase.from('offices').select('id, name, cnpj, installments_overdue, total_overdue_value, asaas_last_sync'),
     ]);
     setContracts(c.data || []);
     setOffices(o.data || []);
@@ -35,15 +35,11 @@ export default function Financeiro() {
         body: { action: 'syncAll' },
       });
       if (error) throw error;
-      const parts = [];
-      if (data?.synced) parts.push(`${data.synced} sincronizados`);
-      if (data?.notFound) parts.push(`${data.notFound} não encontrados no Asaas`);
-      if (data?.errors) parts.push(`${data.errors} erros`);
-      const suffix = data?.timedOut ? ' (interrompido por timeout — execute novamente para continuar)' : '';
-      toast.success(`Sincronização concluída (${data?.processed || 0}/${data?.total || 0} escritórios): ${parts.join(', ') || 'nenhum atualizado'}${suffix}`);
-      await fetchData();
+      toast.success('Sincronização iniciada em background. Os dados serão atualizados automaticamente.');
+      // Refresh data after a short delay to show initial progress
+      setTimeout(() => fetchData(), 5000);
     } catch (err: any) {
-      toast.error('Erro ao sincronizar: ' + (err.message || 'Erro desconhecido'));
+      toast.error('Erro ao iniciar sincronização: ' + (err.message || 'Erro desconhecido'));
     } finally {
       setSyncing(false);
     }
@@ -54,6 +50,26 @@ export default function Financeiro() {
   const totalOverdue = offices.reduce((s, o) => s + (o.installments_overdue || 0), 0);
   const overdueValue = offices.reduce((s, o) => s + (o.total_overdue_value || 0), 0);
   const overdueOffices = offices.filter(o => (o.installments_overdue || 0) > 0);
+
+  // Find most recent sync across all offices
+  const lastSyncDates = offices
+    .map(o => o.asaas_last_sync)
+    .filter(Boolean)
+    .sort((a: string, b: string) => b.localeCompare(a));
+  const lastSync = lastSyncDates[0] || null;
+
+  const formatLastSync = (iso: string | null) => {
+    if (!iso) return 'Nunca sincronizado';
+    const d = new Date(iso);
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffMin = Math.floor(diffMs / 60000);
+    if (diffMin < 1) return 'Agora';
+    if (diffMin < 60) return `${diffMin}min atrás`;
+    const diffH = Math.floor(diffMin / 60);
+    if (diffH < 24) return `${diffH}h atrás`;
+    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  };
 
   if (loading) {
     return (
@@ -77,10 +93,16 @@ export default function Financeiro() {
           <h1 className="text-2xl font-bold">Financeiro</h1>
           <p className="text-sm text-muted-foreground">Visão financeira consolidada dos contratos</p>
         </div>
-        <Button variant="outline" size="sm" onClick={handleSyncAll} disabled={syncing} className="gap-2">
-          <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
-          {syncing ? 'Sincronizando...' : 'Sincronizar Asaas'}
-        </Button>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground flex items-center gap-1">
+            <Clock className="h-3 w-3" />
+            {formatLastSync(lastSync)}
+          </span>
+          <Button variant="outline" size="sm" onClick={handleSyncAll} disabled={syncing} className="gap-2">
+            <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? 'Iniciando...' : 'Sincronizar Asaas'}
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">

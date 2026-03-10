@@ -203,6 +203,83 @@ export type Database = {
           },
         ]
       }
+      asaas_payments: {
+        Row: {
+          asaas_id: string
+          bank_slip_url: string | null
+          billing_type: string | null
+          days_overdue: number
+          description: string | null
+          due_date: string
+          id: string
+          invoice_url: string | null
+          is_cancelled: boolean
+          is_deleted: boolean
+          is_overdue: boolean
+          is_paid: boolean
+          is_pending: boolean
+          net_value: number | null
+          office_id: string
+          payment_date: string | null
+          status: string
+          status_label: string | null
+          synced_at: string
+          value: number
+        }
+        Insert: {
+          asaas_id: string
+          bank_slip_url?: string | null
+          billing_type?: string | null
+          days_overdue?: number
+          description?: string | null
+          due_date: string
+          id?: string
+          invoice_url?: string | null
+          is_cancelled?: boolean
+          is_deleted?: boolean
+          is_overdue?: boolean
+          is_paid?: boolean
+          is_pending?: boolean
+          net_value?: number | null
+          office_id: string
+          payment_date?: string | null
+          status: string
+          status_label?: string | null
+          synced_at?: string
+          value?: number
+        }
+        Update: {
+          asaas_id?: string
+          bank_slip_url?: string | null
+          billing_type?: string | null
+          days_overdue?: number
+          description?: string | null
+          due_date?: string
+          id?: string
+          invoice_url?: string | null
+          is_cancelled?: boolean
+          is_deleted?: boolean
+          is_overdue?: boolean
+          is_paid?: boolean
+          is_pending?: boolean
+          net_value?: number | null
+          office_id?: string
+          payment_date?: string | null
+          status?: string
+          status_label?: string | null
+          synced_at?: string
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "asaas_payments_office_id_fkey"
+            columns: ["office_id"]
+            isOneToOne: false
+            referencedRelation: "offices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action: string
@@ -2221,6 +2298,7 @@ export type Database = {
           active_product_id: string | null
           address: string | null
           asaas_customer_id: string | null
+          asaas_last_sync: string | null
           asaas_total_overdue: number | null
           cep: string | null
           churn_date: string | null
@@ -2270,6 +2348,7 @@ export type Database = {
           active_product_id?: string | null
           address?: string | null
           asaas_customer_id?: string | null
+          asaas_last_sync?: string | null
           asaas_total_overdue?: number | null
           cep?: string | null
           churn_date?: string | null
@@ -2319,6 +2398,7 @@ export type Database = {
           active_product_id?: string | null
           address?: string | null
           asaas_customer_id?: string | null
+          asaas_last_sync?: string | null
           asaas_total_overdue?: number | null
           cep?: string | null
           churn_date?: string | null
