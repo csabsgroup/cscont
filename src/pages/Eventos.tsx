@@ -34,7 +34,8 @@ interface Product { id: string; name: string; }
 export default function Eventos() {
   const { session, isViewer, role } = useAuth();
   const navigate = useNavigate();
-  const [view, setView] = useState<'list' | 'calendar'>('list');
+  const [view, setView] = useState<'list' | 'calendar' | 'year'>('list');
+  const [currentYear, setCurrentYear] = useState(new Date());
   const [events, setEvents] = useState<any[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [participantCounts, setParticipantCounts] = useState<Record<string, { confirmed: number; total: number }>>({});
