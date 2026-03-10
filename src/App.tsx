@@ -110,6 +110,7 @@ const App = () => (
             <Route path="/auditoria" element={<ProtectedRoute><AuditLogs /></ProtectedRoute>} />
             <Route path="/tarefas-internas" element={<ProtectedRoute><TarefasInternas /></ProtectedRoute>} />
             <Route path="/formularios" element={<ProtectedRoute><Formularios /></ProtectedRoute>} />
+            <Route path="/formularios/builder/:id" element={<ProtectedRoute><FormBuilder /></ProtectedRoute>} />
             <Route path="/notificacoes" element={<ProtectedRoute><Notificacoes /></ProtectedRoute>} />
             {/* Portal do Cliente */}
             <Route path="/portal" element={<PortalRoute><PortalHome /></PortalRoute>} />
