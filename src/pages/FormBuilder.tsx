@@ -126,47 +126,39 @@ export default function FormBuilder() {
     ...customFields.map(cf => ({ value: `custom_field:${cf.id}`, label: `📋 ${cf.name}` })),
   ], [customFields]);
 
-  // Build unified canvas items: sections interleaved with their fields
-  const canvasItems = useMemo((): CanvasItem[] => {
-    const items: CanvasItem[] = [];
-    const usedFieldIds = new Set<string>();
+  // Compute sorted sections and fields grouped by section
+  const sortedSections = useMemo(() => [...sections].sort((a, b) => a.order - b.order), [sections]);
 
-    // First, add fields without a section (in their natural order)
-    // Then for each section (in order), add the section header + its fields
-    const sortedSections = [...sections].sort((a, b) => a.order - b.order);
-
-    // Collect fields by section
-    const fieldsBySection = new Map<string, FormFieldDef[]>();
-    const unsectionedFields: FormFieldDef[] = [];
-
+  const { unsectionedFields, fieldsBySection } = useMemo(() => {
+    const bySection = new Map<string, FormFieldDef[]>();
+    const unsectioned: FormFieldDef[] = [];
     for (const f of fields) {
       if (f.section_id && sections.some(s => s.id === f.section_id)) {
-        const arr = fieldsBySection.get(f.section_id) || [];
+        const arr = bySection.get(f.section_id) || [];
         arr.push(f);
-        fieldsBySection.set(f.section_id, arr);
+        bySection.set(f.section_id, arr);
       } else {
-        unsectionedFields.push(f);
+        unsectioned.push(f);
       }
     }
+    return { unsectionedFields: unsectioned, fieldsBySection: bySection };
+  }, [fields, sections]);
 
-    // Add unsectioned fields first (intercalated freely at top)
+  // Build flat canvas items for save ordering only
+  const canvasItems = useMemo((): CanvasItem[] => {
+    const items: CanvasItem[] = [];
     for (const f of unsectionedFields) {
       items.push({ type: 'field', field: f, fieldIndex: fields.indexOf(f), draggableId: `field-${f.id}` });
-      usedFieldIds.add(f.id);
     }
-
-    // Add each section with its fields
     for (const sec of sortedSections) {
       items.push({ type: 'section', section: sec, draggableId: `section-${sec.id}` });
       const secFields = fieldsBySection.get(sec.id) || [];
       for (const f of secFields) {
         items.push({ type: 'field', field: f, fieldIndex: fields.indexOf(f), draggableId: `field-${f.id}` });
-        usedFieldIds.add(f.id);
       }
     }
-
     return items;
-  }, [fields, sections]);
+  }, [fields, sections, unsectionedFields, fieldsBySection, sortedSections]);
 
   const handleSave = async () => {
     if (!session?.user?.id || !name.trim()) { toast.error('Preencha o nome'); return; }
@@ -266,47 +258,48 @@ export default function FormBuilder() {
   // Unified drag & drop handler for both sections and fields
   const onDragEnd = (result: any) => {
     if (!result.destination) return;
-    const srcIdx = result.source.index;
-    const dstIdx = result.destination.index;
-    if (srcIdx === dstIdx) return;
+    const { source, destination, draggableId } = result;
+    if (source.droppableId === destination.droppableId && source.index === destination.index) return;
 
-    const dragId = result.draggableId as string;
+    const droppableId = source.droppableId;
 
-    if (dragId.startsWith('section-')) {
-      const sectionIndexAt = (canvasIdx: number) =>
-        canvasItems.slice(0, canvasIdx).filter(i => i.type === 'section').length;
+    // Reordering sections
+    if (droppableId === 'sections-list') {
+      const reordered = [...sortedSections];
+      const [moved] = reordered.splice(source.index, 1);
+      reordered.splice(destination.index, 0, moved);
+      setSections(reordered.map((s, i) => ({ ...s, order: i })));
+      return;
+    }
 
-      const srcSectionIdx = sectionIndexAt(srcIdx);
-      const dstSectionIdx = sectionIndexAt(dstIdx);
+    // Reordering unsectioned fields
+    if (droppableId === 'unsectioned-fields') {
+      const reordered = [...unsectionedFields];
+      const [moved] = reordered.splice(source.index, 1);
+      reordered.splice(destination.index, 0, moved);
+      // Rebuild full fields array: reordered unsectioned + sectioned in order
+      const sectionedFields = sortedSections.flatMap(s => fieldsBySection.get(s.id) || []);
+      setFields([...reordered, ...sectionedFields].map((f, i) => ({ ...f, order: i })));
+      return;
+    }
 
-      const sortedSections = [...sections].sort((a, b) => a.order - b.order);
-      const [moved] = sortedSections.splice(srcSectionIdx, 1);
-      sortedSections.splice(dstSectionIdx, 0, moved);
-      setSections(sortedSections.map((s, i) => ({ ...s, order: i })));
-    } else {
-      // Dragging a field: reorder in the unified canvas
-      const items = [...canvasItems];
-      const [moved] = items.splice(srcIdx, 1);
-      items.splice(dstIdx, 0, moved);
-
-      // Determine new section_id based on position: a field belongs to the section above it
-      const newFields: FormFieldDef[] = [];
-      let currentSectionId: string | null = null;
-
-      // Items before sections are unsectioned
-      for (const item of items) {
-        if (item.type === 'section') {
-          currentSectionId = item.section.id;
-        } else if (item.type === 'field') {
-          // If this is the moved field, update its section_id based on position
-          const updatedField = item.draggableId === dragId
-            ? { ...item.field, section_id: currentSectionId }
-            : item.field;
-          newFields.push(updatedField);
+    // Reordering fields within a section
+    if (droppableId.startsWith('section-fields-')) {
+      const sectionId = droppableId.replace('section-fields-', '');
+      const secFields = [...(fieldsBySection.get(sectionId) || [])];
+      const [moved] = secFields.splice(source.index, 1);
+      secFields.splice(destination.index, 0, moved);
+      // Rebuild full fields array
+      const newFields = [...unsectionedFields];
+      for (const sec of sortedSections) {
+        if (sec.id === sectionId) {
+          newFields.push(...secFields);
+        } else {
+          newFields.push(...(fieldsBySection.get(sec.id) || []));
         }
       }
-
       setFields(newFields.map((f, i) => ({ ...f, order: i })));
+      return;
     }
   };
 
@@ -319,6 +312,71 @@ export default function FormBuilder() {
       </div>
     );
   }
+
+  // Section block renderer
+  const renderSectionBlock = (sec: SectionDef, secIndex: number) => {
+    const secFields = fieldsBySection.get(sec.id) || [];
+    return (
+      <div className="space-y-2">
+        {/* Section header */}
+        <div className="flex items-center gap-2 p-3 bg-muted/60 rounded-lg border-2 border-dashed border-primary/30">
+          <Badge variant="outline" className="text-xs shrink-0">Seção {secIndex + 1}</Badge>
+          <Input
+            className="h-8 flex-1 text-sm font-semibold border-0 bg-transparent focus-visible:ring-0 focus-visible:border-b focus-visible:border-primary"
+            value={sec.title}
+            onChange={e => setSections(prev => prev.map(s => s.id === sec.id ? { ...s, title: e.target.value } : s))}
+            placeholder="Nome da seção"
+          />
+          <Input
+            className="h-8 flex-1 text-xs text-muted-foreground border-0 bg-transparent focus-visible:ring-0"
+            value={sec.description || ''}
+            onChange={e => setSections(prev => prev.map(s => s.id === sec.id ? { ...s, description: e.target.value } : s))}
+            placeholder="Descrição da seção (opcional)"
+          />
+          <Button size="sm" variant="ghost" className="h-7 w-7 p-0 shrink-0"
+            onClick={() => {
+              setFields(prev => prev.map(f => f.section_id === sec.id ? { ...f, section_id: null } : f));
+              setSections(prev => prev.filter(s => s.id !== sec.id).map((s, i) => ({ ...s, order: i })));
+            }}>
+            <Trash2 className="h-3.5 w-3.5 text-destructive" />
+          </Button>
+        </div>
+        {/* Section fields */}
+        <Droppable droppableId={`section-fields-${sec.id}`}>
+          {(provided) => (
+            <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-2 pl-4 border-l-2 border-primary/20 ml-2 min-h-[40px]">
+              {secFields.map((field, fIdx) => (
+                <Draggable key={`field-${field.id}`} draggableId={`field-${field.id}`} index={fIdx}>
+                  {(provided) => (
+                    <div ref={provided.innerRef} {...provided.draggableProps}>
+                      <FormItemCard
+                        field={field}
+                        index={fields.indexOf(field)}
+                        dragHandleProps={provided.dragHandleProps}
+                        sections={sections}
+                        allFields={fields}
+                        onUpdate={patch => updateField(field.id, patch)}
+                        onDelete={() => removeField(field.id)}
+                        onDuplicate={() => duplicateField(field.id)}
+                        isSelected={selectedFieldId === field.id}
+                        onSelect={() => setSelectedFieldId(field.id)}
+                        mappingTargets={allMappingTargets}
+                        onSectionChange={(sectionId) => handleFieldSectionChange(field.id, sectionId)}
+                      />
+                    </div>
+                  )}
+                </Draggable>
+              ))}
+              {provided.placeholder}
+              {secFields.length === 0 && (
+                <p className="text-xs text-muted-foreground py-2 text-center">Arraste perguntas para esta seção ou atribua via dropdown</p>
+              )}
+            </div>
+          )}
+        </Droppable>
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen">
@@ -364,60 +422,30 @@ export default function FormBuilder() {
           <TabsContent value="questions" className="mt-4">
             <div className="flex gap-4">
               {/* Canvas */}
-              <div className="flex-1 space-y-3">
+              <div className="flex-1 space-y-4">
                 <DragDropContext onDragEnd={onDragEnd}>
-                  <Droppable droppableId="form-canvas">
+                  {/* Unsectioned fields */}
+                  <Droppable droppableId="unsectioned-fields">
                     {(provided) => (
-                      <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-2">
-                        {canvasItems.map((item, idx) => (
-                          <Draggable key={item.draggableId} draggableId={item.draggableId} index={idx}>
+                      <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-2 min-h-[20px]">
+                        {unsectionedFields.map((field, idx) => (
+                          <Draggable key={`field-${field.id}`} draggableId={`field-${field.id}`} index={idx}>
                             {(provided) => (
                               <div ref={provided.innerRef} {...provided.draggableProps}>
-                                {item.type === 'section' ? (
-                                  <div className="flex items-center gap-2 p-3 bg-muted/60 rounded-lg border-2 border-dashed border-primary/30">
-                                    <div {...provided.dragHandleProps} className="cursor-grab text-muted-foreground">
-                                      <GripVertical className="h-4 w-4" />
-                                    </div>
-                                    <Badge variant="outline" className="text-xs shrink-0">
-                                      Seção {sections.sort((a, b) => a.order - b.order).findIndex(s => s.id === item.section.id) + 1}
-                                    </Badge>
-                                    <Input
-                                      className="h-8 flex-1 text-sm font-semibold border-0 bg-transparent focus-visible:ring-0 focus-visible:border-b focus-visible:border-primary"
-                                      value={item.section.title}
-                                      onChange={e => setSections(prev => prev.map(s => s.id === item.section.id ? { ...s, title: e.target.value } : s))}
-                                      placeholder="Nome da seção"
-                                    />
-                                    <Input
-                                      className="h-8 flex-1 text-xs text-muted-foreground border-0 bg-transparent focus-visible:ring-0"
-                                      value={item.section.description || ''}
-                                      onChange={e => setSections(prev => prev.map(s => s.id === item.section.id ? { ...s, description: e.target.value } : s))}
-                                      placeholder="Descrição da seção (opcional)"
-                                    />
-                                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 shrink-0"
-                                      onClick={() => {
-                                        // Remove section and unassign fields
-                                        setFields(prev => prev.map(f => f.section_id === item.section.id ? { ...f, section_id: null } : f));
-                                        setSections(prev => prev.filter(s => s.id !== item.section.id).map((s, i) => ({ ...s, order: i })));
-                                      }}>
-                                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                                    </Button>
-                                  </div>
-                                ) : (
-                                  <FormItemCard
-                                    field={item.field}
-                                    index={item.fieldIndex}
-                                    dragHandleProps={provided.dragHandleProps}
-                                    sections={sections}
-                                    allFields={fields}
-                                    onUpdate={patch => updateField(item.field.id, patch)}
-                                    onDelete={() => removeField(item.field.id)}
-                                    onDuplicate={() => duplicateField(item.field.id)}
-                                    isSelected={selectedFieldId === item.field.id}
-                                    onSelect={() => setSelectedFieldId(item.field.id)}
-                                    mappingTargets={allMappingTargets}
-                                    onSectionChange={(sectionId) => handleFieldSectionChange(item.field.id, sectionId)}
-                                  />
-                                )}
+                                <FormItemCard
+                                  field={field}
+                                  index={fields.indexOf(field)}
+                                  dragHandleProps={provided.dragHandleProps}
+                                  sections={sections}
+                                  allFields={fields}
+                                  onUpdate={patch => updateField(field.id, patch)}
+                                  onDelete={() => removeField(field.id)}
+                                  onDuplicate={() => duplicateField(field.id)}
+                                  isSelected={selectedFieldId === field.id}
+                                  onSelect={() => setSelectedFieldId(field.id)}
+                                  mappingTargets={allMappingTargets}
+                                  onSectionChange={(sectionId) => handleFieldSectionChange(field.id, sectionId)}
+                                />
                               </div>
                             )}
                           </Draggable>
@@ -426,9 +454,29 @@ export default function FormBuilder() {
                       </div>
                     )}
                   </Droppable>
+
+                  {/* Sections as draggable blocks */}
+                  {sortedSections.length > 0 && (
+                    <Droppable droppableId="sections-list">
+                      {(provided) => (
+                        <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-4">
+                          {sortedSections.map((sec, idx) => (
+                            <Draggable key={`section-${sec.id}`} draggableId={`section-${sec.id}`} index={idx}>
+                              {(provided) => (
+                                <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}>
+                                  {renderSectionBlock(sec, idx)}
+                                </div>
+                              )}
+                            </Draggable>
+                          ))}
+                          {provided.placeholder}
+                        </div>
+                      )}
+                    </Droppable>
+                  )}
                 </DragDropContext>
 
-                {canvasItems.length === 0 && (
+                {fields.length === 0 && sections.length === 0 && (
                   <div className="text-center py-16 text-muted-foreground">
                     <p className="text-sm">Clique nos botões à direita para adicionar perguntas</p>
                   </div>
