@@ -644,6 +644,11 @@ async function executeV2Rules(supabase: any, triggerType: string, office_id: str
 
   const { data: office } = await supabase.from("offices").select("*").eq("id", office_id).single();
 
+  // Fetch main contact for variable resolution
+  const { data: mainContact } = await supabase.from("contacts")
+    .select("name, email, phone, whatsapp")
+    .eq("office_id", office_id).eq("is_main_contact", true).limit(1).maybeSingle();
+
   const effectiveCsmId = csm_id || office?.csm_id;
   let csmProfile: any = null;
   if (effectiveCsmId) {
