@@ -26,6 +26,7 @@ import { ClienteJornada } from '@/components/clientes/ClienteJornada';
 import { ClienteMetricas } from '@/components/clientes/ClienteMetricas';
 import { EditOfficeDialog } from '@/components/clientes/EditOfficeDialog';
 import { ClienteBonus } from '@/components/clientes/ClienteBonus';
+import { ClienteHistorico } from '@/components/clientes/ClienteHistorico';
 import { PortalPreviewModal } from '@/components/clientes/PortalPreviewModal';
 import { WhatsAppSendDialog } from '@/components/clientes/WhatsAppSendDialog';
 import { ClienteVisao360 } from '@/components/clientes/ClienteVisao360';
