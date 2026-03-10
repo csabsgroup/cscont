@@ -206,7 +206,14 @@ export function FormItemCard({
           </div>
         )}
 
-        {/* Footer actions */}
+        {/* Number/Currency config */}
+        {isSelected && isNumericType && (
+          <div className="pl-6 text-xs text-muted-foreground">
+            {field.type === 'currency' ? '💰 Valor será tratado como moeda (R$)' : '🔢 Aceita apenas números'}
+          </div>
+        )}
+
+
         {isSelected && (
           <div className="space-y-3 pt-2 border-t">
             <div className="flex items-center justify-between">
