@@ -22,7 +22,7 @@ const allNavItems = [
   { to: '/portal/membros', label: 'Membros Ativos', icon: Users, settingKey: 'portal_show_members' },
 ];
 
-export function PortalLayout({ children }: { children: React.ReactNode }) {
+export function PortalLayout() {
   const { signOut, profile } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { officeName, officeLogo, settings, settingsLoading } = usePortal();
