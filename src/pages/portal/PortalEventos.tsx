@@ -34,6 +34,7 @@ export default function PortalEventos() {
   const [pageSize, setPageSize] = useState(25);
   const [selectedEvent, setSelectedEvent] = useState<any | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [filterCategory, setFilterCategory] = useState('__all__');
 
   useEffect(() => {
     if (!officeId) { setLoading(false); return; }
