@@ -32,6 +32,9 @@ interface FieldDef {
     rules: { field_id: string; operator: string; value: string }[];
     action: 'show' | 'skip_to_section';
     target_section_id: string | null;
+    routing_type?: 'answer_routing';
+    routes?: { answer_value: string; target_section_id: string }[];
+    default_target_section_id?: string | null;
   };
   controls_meeting_date?: boolean;
 }
