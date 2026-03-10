@@ -9,8 +9,35 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Loader2, Trash2, Edit2, Heart, AlertTriangle, BookOpen } from 'lucide-react';
+import { Plus, Loader2, Trash2, Edit2, Heart, AlertTriangle, BookOpen, Gauge } from 'lucide-react';
 import { toast } from 'sonner';
+
+// ─── Data source options ──────────────────────────────────
+const DATA_SOURCES = [
+  { value: 'meetings', label: 'Reuniões', keys: [
+    { value: 'days_since_last', label: 'Dias desde última reunião' },
+    { value: 'count_period', label: 'Qtd. no período (30 dias)' },
+  ]},
+  { value: 'contracts', label: 'Financeiro', keys: [
+    { value: 'installments_overdue', label: 'Parcelas vencidas' },
+  ]},
+  { value: 'form_submission', label: 'Formulários', keys: [
+    { value: 'nps', label: 'NPS' },
+    { value: 'csat', label: 'CSAT' },
+    { value: 'percepcao', label: 'Percepção' },
+  ]},
+  { value: 'events', label: 'Eventos', keys: [
+    { value: 'participation_rate', label: 'Taxa de participação' },
+  ]},
+  { value: 'action_plans', label: 'Planos de Ação', keys: [
+    { value: 'completion_rate', label: 'Taxa de conclusão' },
+  ]},
+  { value: 'activities', label: 'Atividades', keys: [
+    { value: 'completion_rate', label: 'Taxa de conclusão' },
+  ]},
+];
+
+type ScoringRule = { min: number; max: number; score: number };
 
 export function HealthScoreTab() {
   const [products, setProducts] = useState<any[]>([]);
@@ -44,14 +71,158 @@ export function HealthScoreTab() {
         <Tabs defaultValue="pillars" className="space-y-4">
           <TabsList>
             <TabsTrigger value="pillars" className="gap-1"><Heart className="h-3.5 w-3.5" />Pilares</TabsTrigger>
+            <TabsTrigger value="bands" className="gap-1"><Gauge className="h-3.5 w-3.5" />Faixas</TabsTrigger>
             <TabsTrigger value="overrides" className="gap-1"><AlertTriangle className="h-3.5 w-3.5" />Overrides</TabsTrigger>
             <TabsTrigger value="playbooks" className="gap-1"><BookOpen className="h-3.5 w-3.5" />Playbooks</TabsTrigger>
           </TabsList>
           <TabsContent value="pillars"><PillarsSection productId={selectedProduct} /></TabsContent>
+          <TabsContent value="bands"><BandConfigSection productId={selectedProduct} /></TabsContent>
           <TabsContent value="overrides"><OverridesSection productId={selectedProduct} /></TabsContent>
           <TabsContent value="playbooks"><PlaybooksSection productId={selectedProduct} /></TabsContent>
         </Tabs>
       )}
+    </div>
+  );
+}
+
+// ─── Scoring Rules Editor ─────────────────────────────────
+function ScoringRulesEditor({ rules, onChange }: { rules: ScoringRule[]; onChange: (r: ScoringRule[]) => void }) {
+  const addRule = () => onChange([...rules, { min: 0, max: 10, score: 100 }]);
+  const removeRule = (i: number) => onChange(rules.filter((_, idx) => idx !== i));
+  const updateRule = (i: number, field: keyof ScoringRule, val: number) => {
+    const updated = [...rules];
+    updated[i] = { ...updated[i], [field]: val };
+    onChange(updated);
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Label className="text-xs font-medium">Faixas de pontuação</Label>
+        <Button type="button" size="sm" variant="outline" onClick={addRule} className="h-7 text-xs">
+          <Plus className="mr-1 h-3 w-3" />Faixa
+        </Button>
+      </div>
+      {rules.length === 0 && (
+        <p className="text-xs text-muted-foreground">Nenhuma faixa — será usada a lógica padrão da engine.</p>
+      )}
+      {rules.map((rule, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground whitespace-nowrap">De</span>
+          <Input type="number" className="w-20 h-8 text-xs" value={rule.min} onChange={e => updateRule(i, 'min', Number(e.target.value))} />
+          <span className="text-xs text-muted-foreground whitespace-nowrap">a</span>
+          <Input type="number" className="w-20 h-8 text-xs" value={rule.max} onChange={e => updateRule(i, 'max', Number(e.target.value))} />
+          <span className="text-xs text-muted-foreground whitespace-nowrap">= </span>
+          <Input type="number" className="w-20 h-8 text-xs" value={rule.score} onChange={e => updateRule(i, 'score', Number(e.target.value))} />
+          <span className="text-xs text-muted-foreground whitespace-nowrap">pts</span>
+          <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => removeRule(i)}>
+            <Trash2 className="h-3 w-3 text-destructive" />
+          </Button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Band Config Section ──────────────────────────────────
+function BandConfigSection({ productId }: { productId: string }) {
+  const [greenMin, setGreenMin] = useState('80');
+  const [yellowMin, setYellowMin] = useState('50');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [configId, setConfigId] = useState<string | null>(null);
+
+  const fetchConfig = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase
+      .from('health_band_config' as any)
+      .select('*')
+      .eq('product_id', productId)
+      .maybeSingle();
+    if (data) {
+      setGreenMin(String((data as any).green_min));
+      setYellowMin(String((data as any).yellow_min));
+      setConfigId((data as any).id);
+    } else {
+      setGreenMin('80');
+      setYellowMin('50');
+      setConfigId(null);
+    }
+    setLoading(false);
+  }, [productId]);
+
+  useEffect(() => { fetchConfig(); }, [fetchConfig]);
+
+  const save = async () => {
+    setSaving(true);
+    const gMin = parseInt(greenMin) || 80;
+    const yMin = parseInt(yellowMin) || 50;
+    if (configId) {
+      await supabase.from('health_band_config' as any).update({ green_min: gMin, yellow_min: yMin } as any).eq('id', configId);
+    } else {
+      await supabase.from('health_band_config' as any).insert({ product_id: productId, green_min: gMin, yellow_min: yMin } as any);
+    }
+    toast.success('Faixas de categorização salvas!');
+    setSaving(false);
+    fetchConfig();
+  };
+
+  if (loading) return <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>;
+
+  const gMin = parseInt(greenMin) || 80;
+  const yMin = parseInt(yellowMin) || 50;
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium">Faixas de Categorização</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-xs text-muted-foreground">
+            Defina os limites de pontuação para cada categoria do Health Score.
+          </p>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Saudável (verde) a partir de</Label>
+              <Input type="number" value={greenMin} onChange={e => setGreenMin(e.target.value)} min={0} max={100} />
+            </div>
+            <div className="space-y-2">
+              <Label>Em Risco (amarelo) a partir de</Label>
+              <Input type="number" value={yellowMin} onChange={e => setYellowMin(e.target.value)} min={0} max={100} />
+            </div>
+          </div>
+
+          {/* Visual preview */}
+          <div className="space-y-1">
+            <Label className="text-xs">Visualização</Label>
+            <div className="flex h-8 rounded-md overflow-hidden border border-border text-xs font-medium">
+              <div
+                className="flex items-center justify-center text-destructive-foreground"
+                style={{ width: `${yMin}%`, backgroundColor: 'hsl(var(--destructive))' }}
+              >
+                Crítico (0-{yMin - 1})
+              </div>
+              <div
+                className="flex items-center justify-center"
+                style={{ width: `${gMin - yMin}%`, backgroundColor: 'hsl(45, 93%, 47%)' }}
+              >
+                Risco ({yMin}-{gMin - 1})
+              </div>
+              <div
+                className="flex items-center justify-center"
+                style={{ width: `${100 - gMin}%`, backgroundColor: 'hsl(142, 71%, 45%)' }}
+              >
+                Saudável ({gMin}-100)
+              </div>
+            </div>
+          </div>
+
+          <Button onClick={save} disabled={saving} className="w-full">
+            {saving ? 'Salvando...' : 'Salvar Faixas'}
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -75,8 +246,9 @@ function PillarsSection({ productId }: { productId: string }) {
   const [indWeight, setIndWeight] = useState('');
   const [indSource, setIndSource] = useState('');
   const [indKey, setIndKey] = useState('');
+  const [indScoringRules, setIndScoringRules] = useState<ScoringRule[]>([]);
 
-  const fetch = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     const [pRes, iRes] = await Promise.all([
       supabase.from('health_pillars').select('*').eq('product_id', productId).order('position'),
@@ -89,7 +261,7 @@ function PillarsSection({ productId }: { productId: string }) {
     setLoading(false);
   }, [productId]);
 
-  useEffect(() => { fetch(); }, [fetch]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   const openNewPillar = () => { setEditPillar(null); setName(''); setWeight(''); setPosition(String(pillars.length)); setDialogOpen(true); };
   const openEditPillar = (p: any) => { setEditPillar(p); setName(p.name); setWeight(String(p.weight)); setPosition(String(p.position)); setDialogOpen(true); };
@@ -104,21 +276,50 @@ function PillarsSection({ productId }: { productId: string }) {
       await supabase.from('health_pillars').insert(payload);
       toast.success('Pilar criado!');
     }
-    setSaving(false); setDialogOpen(false); fetch();
+    setSaving(false); setDialogOpen(false); fetchData();
   };
 
   const deletePillar = async (id: string) => {
     if (!window.confirm('Tem certeza que deseja remover este pilar e todos os seus indicadores?')) return;
     await supabase.from('health_pillars').delete().eq('id', id);
-    toast.success('Pilar removido!'); fetch();
+    toast.success('Pilar removido!'); fetchData();
   };
 
-  const openNewInd = (pillarId: string) => { setEditInd(null); setIndPillarId(pillarId); setIndName(''); setIndWeight(''); setIndSource(''); setIndKey(''); setIndDialogOpen(true); };
-  const openEditInd = (ind: any) => { setEditInd(ind); setIndPillarId(ind.pillar_id); setIndName(ind.name); setIndWeight(String(ind.weight)); setIndSource(ind.data_source || ''); setIndKey(ind.data_key || ''); setIndDialogOpen(true); };
+  const getKeysForSource = (source: string) => {
+    return DATA_SOURCES.find(s => s.value === source)?.keys || [];
+  };
+
+  const getSourceLabel = (source: string) => {
+    return DATA_SOURCES.find(s => s.value === source)?.label || source || '—';
+  };
+
+  const getKeyLabel = (source: string, key: string) => {
+    const sourceObj = DATA_SOURCES.find(s => s.value === source);
+    return sourceObj?.keys.find(k => k.value === key)?.label || key || '—';
+  };
+
+  const openNewInd = (pillarId: string) => {
+    setEditInd(null); setIndPillarId(pillarId); setIndName(''); setIndWeight(''); setIndSource(''); setIndKey(''); setIndScoringRules([]);
+    setIndDialogOpen(true);
+  };
+  const openEditInd = (ind: any) => {
+    setEditInd(ind); setIndPillarId(ind.pillar_id); setIndName(ind.name); setIndWeight(String(ind.weight));
+    setIndSource(ind.data_source || ''); setIndKey(ind.data_key || '');
+    const rules = Array.isArray(ind.scoring_rules) ? ind.scoring_rules : [];
+    setIndScoringRules(rules as ScoringRule[]);
+    setIndDialogOpen(true);
+  };
 
   const saveInd = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true);
-    const payload = { name: indName, weight: parseFloat(indWeight) || 0, pillar_id: indPillarId, data_source: indSource || null, data_key: indKey || null };
+    const payload: any = {
+      name: indName,
+      weight: parseFloat(indWeight) || 0,
+      pillar_id: indPillarId,
+      data_source: indSource || null,
+      data_key: indKey || null,
+      scoring_rules: indScoringRules.length > 0 ? indScoringRules : [],
+    };
     if (editInd) {
       await supabase.from('health_indicators').update(payload).eq('id', editInd.id);
       toast.success('Indicador atualizado!');
@@ -126,13 +327,13 @@ function PillarsSection({ productId }: { productId: string }) {
       await supabase.from('health_indicators').insert(payload);
       toast.success('Indicador criado!');
     }
-    setSaving(false); setIndDialogOpen(false); fetch();
+    setSaving(false); setIndDialogOpen(false); fetchData();
   };
 
   const deleteInd = async (id: string) => {
     if (!window.confirm('Tem certeza que deseja remover este indicador?')) return;
     await supabase.from('health_indicators').delete().eq('id', id);
-    toast.success('Indicador removido!'); fetch();
+    toast.success('Indicador removido!'); fetchData();
   };
 
   if (loading) return <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>;
@@ -183,23 +384,32 @@ function PillarsSection({ productId }: { productId: string }) {
                     <TableHead className="text-xs">Peso</TableHead>
                     <TableHead className="text-xs">Fonte</TableHead>
                     <TableHead className="text-xs">Chave</TableHead>
+                    <TableHead className="text-xs">Faixas</TableHead>
                     <TableHead></TableHead>
                   </TableRow></TableHeader>
                   <TableBody>
-                    {inds.map(ind => (
-                      <TableRow key={ind.id}>
-                        <TableCell className="text-sm">{ind.name}</TableCell>
-                        <TableCell className="text-sm">{ind.weight}%</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{ind.data_source || '—'}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{ind.data_key || '—'}</TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
-                            <Button size="sm" variant="ghost" onClick={() => openEditInd(ind)}><Edit2 className="h-3 w-3" /></Button>
-                            <Button size="sm" variant="ghost" onClick={() => deleteInd(ind.id)}><Trash2 className="h-3 w-3 text-destructive" /></Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {inds.map(ind => {
+                      const rules = Array.isArray(ind.scoring_rules) ? ind.scoring_rules : [];
+                      return (
+                        <TableRow key={ind.id}>
+                          <TableCell className="text-sm">{ind.name}</TableCell>
+                          <TableCell className="text-sm">{ind.weight}%</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{getSourceLabel(ind.data_source)}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{getKeyLabel(ind.data_source, ind.data_key)}</TableCell>
+                          <TableCell>
+                            <Badge variant={rules.length > 0 ? 'default' : 'outline'} className="text-xs">
+                              {rules.length > 0 ? `${rules.length} faixa(s)` : 'Padrão'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Button size="sm" variant="ghost" onClick={() => openEditInd(ind)}><Edit2 className="h-3 w-3" /></Button>
+                              <Button size="sm" variant="ghost" onClick={() => deleteInd(ind.id)}><Trash2 className="h-3 w-3 text-destructive" /></Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}
@@ -225,13 +435,39 @@ function PillarsSection({ productId }: { productId: string }) {
 
       {/* Indicator dialog */}
       <Dialog open={indDialogOpen} onOpenChange={setIndDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>{editInd ? 'Editar Indicador' : 'Novo Indicador'}</DialogTitle></DialogHeader>
           <form onSubmit={saveInd} className="space-y-4">
             <div className="space-y-2"><Label>Nome *</Label><Input value={indName} onChange={e => setIndName(e.target.value)} required /></div>
             <div className="space-y-2"><Label>Peso (%)</Label><Input type="number" value={indWeight} onChange={e => setIndWeight(e.target.value)} /></div>
-            <div className="space-y-2"><Label>Fonte de dados</Label><Input value={indSource} onChange={e => setIndSource(e.target.value)} placeholder="ex: form_submission, meetings" /></div>
-            <div className="space-y-2"><Label>Chave do dado</Label><Input value={indKey} onChange={e => setIndKey(e.target.value)} placeholder="ex: nps_score, satisfaction" /></div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Fonte de dados</Label>
+                <Select value={indSource} onValueChange={(v) => { setIndSource(v); setIndKey(''); }}>
+                  <SelectTrigger><SelectValue placeholder="Selecione a fonte" /></SelectTrigger>
+                  <SelectContent>
+                    {DATA_SOURCES.map(s => (
+                      <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Chave do dado</Label>
+                <Select value={indKey} onValueChange={setIndKey} disabled={!indSource}>
+                  <SelectTrigger><SelectValue placeholder="Selecione a chave" /></SelectTrigger>
+                  <SelectContent>
+                    {getKeysForSource(indSource).map(k => (
+                      <SelectItem key={k.value} value={k.value}>{k.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <ScoringRulesEditor rules={indScoringRules} onChange={setIndScoringRules} />
+
             <Button type="submit" className="w-full" disabled={saving}>{saving ? 'Salvando...' : 'Salvar'}</Button>
           </form>
         </DialogContent>
@@ -252,14 +488,14 @@ function OverridesSection({ productId }: { productId: string }) {
   const [reductionPoints, setReductionPoints] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const fetch = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase.from('health_overrides').select('*').eq('product_id', productId);
     setOverrides(data || []);
     setLoading(false);
   }, [productId]);
 
-  useEffect(() => { fetch(); }, [fetch]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   const openNew = () => { setEdit(null); setConditionType(''); setThreshold(''); setAction('force_red'); setReductionPoints(''); setDialogOpen(true); };
   const openEdit = (o: any) => { setEdit(o); setConditionType(o.condition_type); setThreshold(String(o.threshold)); setAction(o.action); setReductionPoints(String(o.reduction_points || '')); setDialogOpen(true); };
@@ -270,10 +506,10 @@ function OverridesSection({ productId }: { productId: string }) {
     if (edit) { await supabase.from('health_overrides').update(payload).eq('id', edit.id); }
     else { await supabase.from('health_overrides').insert(payload); }
     toast.success(edit ? 'Override atualizado!' : 'Override criado!');
-    setSaving(false); setDialogOpen(false); fetch();
+    setSaving(false); setDialogOpen(false); fetchData();
   };
 
-  const remove = async (id: string) => { if (!window.confirm('Remover este override?')) return; await supabase.from('health_overrides').delete().eq('id', id); toast.success('Removido!'); fetch(); };
+  const remove = async (id: string) => { if (!window.confirm('Remover este override?')) return; await supabase.from('health_overrides').delete().eq('id', id); toast.success('Removido!'); fetchData(); };
 
   if (loading) return <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>;
 
@@ -365,14 +601,14 @@ function PlaybooksSection({ productId }: { productId: string }) {
   const [actDays, setActDays] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const fetch = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase.from('health_playbooks').select('*').eq('product_id', productId);
     setPlaybooks(data || []);
     setLoading(false);
   }, [productId]);
 
-  useEffect(() => { fetch(); }, [fetch]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   const openNew = () => { setEdit(null); setBand('red'); setActTitle(''); setActType('task'); setActDays('3'); setDialogOpen(true); };
 
@@ -382,10 +618,10 @@ function PlaybooksSection({ productId }: { productId: string }) {
     if (edit) { await supabase.from('health_playbooks').update(payload).eq('id', edit.id); }
     else { await supabase.from('health_playbooks').insert(payload); }
     toast.success(edit ? 'Playbook atualizado!' : 'Playbook criado!');
-    setSaving(false); setDialogOpen(false); fetch();
+    setSaving(false); setDialogOpen(false); fetchData();
   };
 
-  const remove = async (id: string) => { if (!window.confirm('Remover este playbook?')) return; await supabase.from('health_playbooks').delete().eq('id', id); toast.success('Removido!'); fetch(); };
+  const remove = async (id: string) => { if (!window.confirm('Remover este playbook?')) return; await supabase.from('health_playbooks').delete().eq('id', id); toast.success('Removido!'); fetchData(); };
 
   if (loading) return <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>;
 
@@ -434,9 +670,9 @@ function PlaybooksSection({ productId }: { productId: string }) {
               <Select value={band} onValueChange={setBand}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="red">Vermelho (0-39)</SelectItem>
-                  <SelectItem value="yellow">Amarelo (40-69)</SelectItem>
-                  <SelectItem value="green">Verde (70-100)</SelectItem>
+                  <SelectItem value="red">Vermelho (Crítico)</SelectItem>
+                  <SelectItem value="yellow">Amarelo (Em Risco)</SelectItem>
+                  <SelectItem value="green">Verde (Saudável)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
