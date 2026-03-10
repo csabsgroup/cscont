@@ -179,7 +179,16 @@ export default function Cliente360() {
   const saveReassign = async () => {
     if (!selectedCsm) return;
     setActionSaving(true);
+    const oldCsmName = csmProfile?.full_name || '—';
+    const newCsmName = csmList.find(c => c.id === selectedCsm)?.full_name || selectedCsm;
     await supabase.from('offices').update({ csm_id: selectedCsm }).eq('id', id!);
+    // Log timeline event
+    await supabase.from('office_timeline_events' as any).insert({
+      office_id: id!, event_type: 'csm_reassign',
+      title: 'CSM reatribuído',
+      description: `${oldCsmName} → ${newCsmName}`,
+      created_by: user?.id,
+    });
     toast.success('CSM reatribuído!');
     setActionSaving(false); setShowReassign(false); fetchAll();
   };
