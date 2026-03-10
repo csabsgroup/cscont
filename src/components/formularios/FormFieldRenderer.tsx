@@ -83,6 +83,17 @@ export function FormFieldRenderer({ field, value, onChange, error, disabled }: P
           />
         );
 
+      case 'long_text':
+        return (
+          <Textarea
+            value={value || ''}
+            onChange={e => onChange(e.target.value)}
+            placeholder={field.placeholder || 'Digite seu texto aqui...'}
+            rows={6}
+            disabled={disabled}
+          />
+        );
+
       case 'multiple_choice': {
         const options = field.options?.filter(o => o.trim()) || [];
         return (
@@ -366,6 +377,9 @@ function resolveType(type: string): string {
 export const QUESTION_TYPES = [
   { value: 'short_answer', label: 'Texto curto', icon: '📝' },
   { value: 'paragraph', label: 'Parágrafo', icon: '📄' },
+  { value: 'long_text', label: 'Texto longo', icon: '📃' },
+  { value: 'number', label: 'Número', icon: '🔢' },
+  { value: 'currency', label: 'Moeda (R$)', icon: '💰' },
   { value: 'multiple_choice', label: 'Múltipla escolha', icon: '⊙' },
   { value: 'checkboxes', label: 'Caixas de seleção', icon: '☑️' },
   { value: 'dropdown', label: 'Menu suspenso', icon: '▼' },

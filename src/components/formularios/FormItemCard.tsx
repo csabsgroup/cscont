@@ -37,6 +37,7 @@ export function FormItemCard({
   const hasGridConfig = ['multiple_choice_grid', 'checkbox_grid'].includes(field.type);
   const hasScaleConfig = field.type === 'linear_scale';
   const hasRatingConfig = field.type === 'rating';
+  const isNumericType = ['number', 'currency'].includes(field.type);
   const supportsRouting = ['multiple_choice', 'checkboxes', 'dropdown', 'multi_select', 'boolean', 'rating_5', 'rating_nps'].includes(field.type);
 
   const getFieldOptions = (): string[] => {
@@ -205,7 +206,14 @@ export function FormItemCard({
           </div>
         )}
 
-        {/* Footer actions */}
+        {/* Number/Currency config */}
+        {isSelected && isNumericType && (
+          <div className="pl-6 text-xs text-muted-foreground">
+            {field.type === 'currency' ? '💰 Valor será tratado como moeda (R$)' : '🔢 Aceita apenas números'}
+          </div>
+        )}
+
+
         {isSelected && (
           <div className="space-y-3 pt-2 border-t">
             <div className="flex items-center justify-between">
@@ -349,7 +357,7 @@ export function FormItemCard({
             <div className="space-y-2">
               <Label className="text-xs font-medium">Validação</Label>
               <div className="grid grid-cols-2 gap-2">
-                {['short_answer', 'text', 'paragraph', 'textarea'].includes(field.type) && (
+                {['short_answer', 'text', 'paragraph', 'textarea', 'long_text'].includes(field.type) && (
                   <>
                     <div className="space-y-1">
                       <Label className="text-[10px]">Mín caracteres</Label>

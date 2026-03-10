@@ -255,16 +255,23 @@ export default function FormBuilder() {
     });
   };
 
+  // Helper to rebuild fields array from groups
+  const rebuildFields = (unsectioned: FormFieldDef[], sectionFieldsMap: Map<string, FormFieldDef[]>) => {
+    const newFields = [...unsectioned];
+    for (const sec of sortedSections) {
+      newFields.push(...(sectionFieldsMap.get(sec.id) || []));
+    }
+    return newFields.map((f, i) => ({ ...f, order: i }));
+  };
+
   // Unified drag & drop handler for both sections and fields
   const onDragEnd = (result: any) => {
     if (!result.destination) return;
-    const { source, destination, draggableId } = result;
+    const { source, destination, draggableId, type } = result;
     if (source.droppableId === destination.droppableId && source.index === destination.index) return;
 
-    const droppableId = source.droppableId;
-
     // Reordering sections
-    if (droppableId === 'sections-list') {
+    if (type === 'SECTION') {
       const reordered = [...sortedSections];
       const [moved] = reordered.splice(source.index, 1);
       reordered.splice(destination.index, 0, moved);
@@ -272,33 +279,64 @@ export default function FormBuilder() {
       return;
     }
 
-    // Reordering unsectioned fields
-    if (droppableId === 'unsectioned-fields') {
-      const reordered = [...unsectionedFields];
-      const [moved] = reordered.splice(source.index, 1);
-      reordered.splice(destination.index, 0, moved);
-      // Rebuild full fields array: reordered unsectioned + sectioned in order
-      const sectionedFields = sortedSections.flatMap(s => fieldsBySection.get(s.id) || []);
-      setFields([...reordered, ...sectionedFields].map((f, i) => ({ ...f, order: i })));
-      return;
-    }
+    // Field drag (same zone or cross-zone)
+    if (type === 'FIELD') {
+      const srcId = source.droppableId;
+      const dstId = destination.droppableId;
 
-    // Reordering fields within a section
-    if (droppableId.startsWith('section-fields-')) {
-      const sectionId = droppableId.replace('section-fields-', '');
-      const secFields = [...(fieldsBySection.get(sectionId) || [])];
-      const [moved] = secFields.splice(source.index, 1);
-      secFields.splice(destination.index, 0, moved);
-      // Rebuild full fields array
-      const newFields = [...unsectionedFields];
-      for (const sec of sortedSections) {
-        if (sec.id === sectionId) {
-          newFields.push(...secFields);
-        } else {
-          newFields.push(...(fieldsBySection.get(sec.id) || []));
+      // Get source list
+      const getFieldList = (droppableId: string): FormFieldDef[] => {
+        if (droppableId === 'unsectioned-fields') return [...unsectionedFields];
+        if (droppableId.startsWith('section-fields-')) {
+          const secId = droppableId.replace('section-fields-', '');
+          return [...(fieldsBySection.get(secId) || [])];
         }
+        return [];
+      };
+
+      const getSectionId = (droppableId: string): string | null => {
+        if (droppableId === 'unsectioned-fields') return null;
+        if (droppableId.startsWith('section-fields-')) return droppableId.replace('section-fields-', '');
+        return null;
+      };
+
+      const srcList = getFieldList(srcId);
+      const newSectionId = getSectionId(dstId);
+
+      if (srcId === dstId) {
+        // Same zone reorder
+        const [moved] = srcList.splice(source.index, 1);
+        srcList.splice(destination.index, 0, moved);
+        const newMap = new Map(fieldsBySection);
+        if (srcId === 'unsectioned-fields') {
+          setFields(rebuildFields(srcList, newMap));
+        } else {
+          const secId = srcId.replace('section-fields-', '');
+          newMap.set(secId, srcList);
+          setFields(rebuildFields([...unsectionedFields], newMap));
+        }
+      } else {
+        // Cross-zone move
+        const [moved] = srcList.splice(source.index, 1);
+        const movedField = { ...moved, section_id: newSectionId };
+        const dstList = getFieldList(dstId);
+        dstList.splice(destination.index, 0, movedField);
+
+        const newMap = new Map(fieldsBySection);
+        const srcSecId = getSectionId(srcId);
+        const dstSecId = getSectionId(dstId);
+
+        // Update source
+        if (srcSecId) newMap.set(srcSecId, srcList);
+        // Update destination
+        if (dstSecId) newMap.set(dstSecId, dstList);
+
+        const newUnsectioned = srcId === 'unsectioned-fields' ? srcList
+          : dstId === 'unsectioned-fields' ? dstList
+          : [...unsectionedFields];
+
+        setFields(rebuildFields(newUnsectioned, newMap));
       }
-      setFields(newFields.map((f, i) => ({ ...f, order: i })));
       return;
     }
   };
@@ -342,7 +380,7 @@ export default function FormBuilder() {
           </Button>
         </div>
         {/* Section fields */}
-        <Droppable droppableId={`section-fields-${sec.id}`}>
+        <Droppable droppableId={`section-fields-${sec.id}`} type="FIELD">
           {(provided) => (
             <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-2 pl-4 border-l-2 border-primary/20 ml-2 min-h-[40px]">
               {secFields.map((field, fIdx) => (
@@ -425,7 +463,7 @@ export default function FormBuilder() {
               <div className="flex-1 space-y-4">
                 <DragDropContext onDragEnd={onDragEnd}>
                   {/* Unsectioned fields */}
-                  <Droppable droppableId="unsectioned-fields">
+                  <Droppable droppableId="unsectioned-fields" type="FIELD">
                     {(provided) => (
                       <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-2 min-h-[20px]">
                         {unsectionedFields.map((field, idx) => (
@@ -457,7 +495,7 @@ export default function FormBuilder() {
 
                   {/* Sections as draggable blocks */}
                   {sortedSections.length > 0 && (
-                    <Droppable droppableId="sections-list">
+                    <Droppable droppableId="sections-list" type="SECTION">
                       {(provided) => (
                         <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-4">
                           {sortedSections.map((sec, idx) => (
