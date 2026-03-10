@@ -273,26 +273,15 @@ export default function FormBuilder() {
     const dragId = result.draggableId as string;
 
     if (dragId.startsWith('section-')) {
-      // Dragging a section: reorder sections array
-      const sectionId = dragId.replace('section-', '');
-      // Map canvas indices to section indices
-      const sectionItems = canvasItems.filter(i => i.type === 'section');
-      const srcSectionOrder = sectionItems.findIndex(i => i.type === 'section' && i.section.id === sectionId);
+      const sectionIndexAt = (canvasIdx: number) =>
+        canvasItems.slice(0, canvasIdx).filter(i => i.type === 'section').length;
 
-      // Count how many section-type items are before dstIdx
-      let dstSectionOrder = 0;
-      let count = 0;
-      for (let i = 0; i <= dstIdx && i < canvasItems.length; i++) {
-        if (canvasItems[i].type === 'section') {
-          if (i < dstIdx) dstSectionOrder = count;
-          count++;
-        }
-      }
-      if (dstIdx >= canvasItems.length - 1) dstSectionOrder = sectionItems.length - 1;
+      const srcSectionIdx = sectionIndexAt(srcIdx);
+      const dstSectionIdx = sectionIndexAt(dstIdx);
 
       const sortedSections = [...sections].sort((a, b) => a.order - b.order);
-      const [moved] = sortedSections.splice(srcSectionOrder, 1);
-      sortedSections.splice(dstSectionOrder, 0, moved);
+      const [moved] = sortedSections.splice(srcSectionIdx, 1);
+      sortedSections.splice(dstSectionIdx, 0, moved);
       setSections(sortedSections.map((s, i) => ({ ...s, order: i })));
     } else {
       // Dragging a field: reorder in the unified canvas
