@@ -352,7 +352,7 @@ export function FormFillDialog({ open, onOpenChange, officeId, meetingId, meetin
 
           <div className="space-y-2">
             <Label>Modelo de formulário</Label>
-            <Select value={selectedTemplate} onValueChange={v => { setSelectedTemplate(v); setFormData({}); }}>
+            <Select value={selectedTemplate} onValueChange={v => { setSelectedTemplate(v); setFormData({}); if (!isOfficeLocked) setSelectedOfficeId(''); }}>
               <SelectTrigger><SelectValue placeholder="Selecione o modelo" /></SelectTrigger>
               <SelectContent>
                 {templates.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
