@@ -463,7 +463,7 @@ export default function FormBuilder() {
               <div className="flex-1 space-y-4">
                 <DragDropContext onDragEnd={onDragEnd}>
                   {/* Unsectioned fields */}
-                  <Droppable droppableId="unsectioned-fields">
+                  <Droppable droppableId="unsectioned-fields" type="FIELD">
                     {(provided) => (
                       <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-2 min-h-[20px]">
                         {unsectionedFields.map((field, idx) => (
