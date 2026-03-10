@@ -919,6 +919,157 @@ export function FormTemplatesTab() {
   );
 }
 
+// ─── Conditional Rules Editor (legacy show/hide) ───
+
+function ConditionalRulesEditor({ field, fields, idx, updateField, sections }: {
+  field: FieldDef; fields: FieldDef[]; idx: number;
+  updateField: (idx: number, patch: Partial<FieldDef>) => void;
+  sections: SectionDef[];
+}) {
+  return (
+    <>
+      <div className="flex items-center gap-2">
+        <Label className="text-xs text-muted-foreground">Mostrar quando</Label>
+        <Select
+          value={field.conditional_logic.logic_operator}
+          onValueChange={val => updateField(idx, {
+            conditional_logic: { ...field.conditional_logic, logic_operator: val as 'and' | 'or' },
+          })}
+        >
+          <SelectTrigger className="h-6 w-20 text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="and">TODAS</SelectItem>
+            <SelectItem value="or">ALGUMA</SelectItem>
+          </SelectContent>
+        </Select>
+        <Label className="text-xs text-muted-foreground">regra(s) forem verdadeiras</Label>
+      </div>
+      {field.conditional_logic.rules.map((rule, rIdx) => {
+        const sourceField = fields.find(f => f.id === rule.field_id);
+        const sourceType = sourceField?.type || 'text';
+        const operators = CONDITION_OPERATORS[sourceType] || CONDITION_OPERATORS.text;
+        return (
+          <div key={rIdx} className="flex items-center gap-1">
+            <Select
+              value={rule.field_id}
+              onValueChange={val => {
+                const rules = [...field.conditional_logic.rules];
+                rules[rIdx] = { ...rules[rIdx], field_id: val };
+                updateField(idx, { conditional_logic: { ...field.conditional_logic, rules } });
+              }}
+            >
+              <SelectTrigger className="h-6 text-xs flex-1"><SelectValue placeholder="Campo" /></SelectTrigger>
+              <SelectContent>
+                {fields.filter(f => f.id !== field.id).map(f => (
+                  <SelectItem key={f.id} value={f.id}>{f.label || '(sem label)'}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={rule.operator}
+              onValueChange={val => {
+                const rules = [...field.conditional_logic.rules];
+                rules[rIdx] = { ...rules[rIdx], operator: val };
+                updateField(idx, { conditional_logic: { ...field.conditional_logic, rules } });
+              }}
+            >
+              <SelectTrigger className="h-6 text-xs w-28"><SelectValue placeholder="Operador" /></SelectTrigger>
+              <SelectContent>
+                {operators.map(op => <SelectItem key={op.value} value={op.value}>{op.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {!['is_filled', 'is_empty'].includes(rule.operator) && (
+              sourceField?.type === 'dropdown' || sourceField?.type === 'multi_select' ? (
+                <Select
+                  value={rule.value}
+                  onValueChange={val => {
+                    const rules = [...field.conditional_logic.rules];
+                    rules[rIdx] = { ...rules[rIdx], value: val };
+                    updateField(idx, { conditional_logic: { ...field.conditional_logic, rules } });
+                  }}
+                >
+                  <SelectTrigger className="h-6 text-xs flex-1"><SelectValue placeholder="Valor" /></SelectTrigger>
+                  <SelectContent>
+                    {(sourceField.options || []).map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              ) : sourceField?.type === 'boolean' ? (
+                <Select
+                  value={rule.value}
+                  onValueChange={val => {
+                    const rules = [...field.conditional_logic.rules];
+                    rules[rIdx] = { ...rules[rIdx], value: val };
+                    updateField(idx, { conditional_logic: { ...field.conditional_logic, rules } });
+                  }}
+                >
+                  <SelectTrigger className="h-6 text-xs w-20"><SelectValue placeholder="Valor" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="true">Sim</SelectItem>
+                    <SelectItem value="false">Não</SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  className="h-6 text-xs flex-1"
+                  placeholder="Valor"
+                  value={rule.value}
+                  onChange={e => {
+                    const rules = [...field.conditional_logic.rules];
+                    rules[rIdx] = { ...rules[rIdx], value: e.target.value };
+                    updateField(idx, { conditional_logic: { ...field.conditional_logic, rules } });
+                  }}
+                />
+              )
+            )}
+            <Button type="button" size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => {
+              const rules = field.conditional_logic.rules.filter((_, ri) => ri !== rIdx);
+              updateField(idx, { conditional_logic: { ...field.conditional_logic, rules } });
+            }}><Trash2 className="h-3 w-3" /></Button>
+          </div>
+        );
+      })}
+      <Button type="button" size="sm" variant="outline" className="h-6 text-xs" onClick={() => {
+        updateField(idx, {
+          conditional_logic: {
+            ...field.conditional_logic,
+            rules: [...field.conditional_logic.rules, { field_id: '', operator: 'equals', value: '' }],
+          },
+        });
+      }}>+ Regra</Button>
+
+      {/* Action type */}
+      <div className="flex items-center gap-2">
+        <Label className="text-xs text-muted-foreground">Ação:</Label>
+        <Select
+          value={field.conditional_logic.action}
+          onValueChange={val => updateField(idx, {
+            conditional_logic: { ...field.conditional_logic, action: val as 'show' | 'skip_to_section' },
+          })}
+        >
+          <SelectTrigger className="h-6 text-xs w-40"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="show">Mostrar campo</SelectItem>
+            <SelectItem value="skip_to_section">Pular para seção</SelectItem>
+          </SelectContent>
+        </Select>
+        {field.conditional_logic.action === 'skip_to_section' && sections.length > 0 && (
+          <Select
+            value={field.conditional_logic.target_section_id || ''}
+            onValueChange={val => updateField(idx, {
+              conditional_logic: { ...field.conditional_logic, target_section_id: val },
+            })}
+          >
+            <SelectTrigger className="h-6 text-xs flex-1"><SelectValue placeholder="Seção" /></SelectTrigger>
+            <SelectContent>
+              {sections.map(s => <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+    </>
+  );
+}
+
 // ─── Preview Component ───
 
 function FormPreview({ fields, sections }: { fields: FieldDef[]; sections: SectionDef[] }) {
