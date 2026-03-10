@@ -86,9 +86,24 @@ function useFinancialData(officeId: string, cnpj: string | null) {
     setLoading(false);
   }, [officeId, cnpj, data]);
 
+  const syncOffice = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const { error: syncErr } = await supabase.functions.invoke('integration-asaas', {
+      body: { action: 'syncOffice', office_id: officeId },
+    });
+    if (syncErr) {
+      setError({ message: syncErr.message || 'Erro ao sincronizar' });
+      setLoading(false);
+      return;
+    }
+    // After sync, fetch fresh data from local DB
+    await fetchData(true);
+  }, [officeId, fetchData]);
+
   useEffect(() => { fetchData(); }, [officeId, cnpj]);
 
-  return { data, loading, error, refresh: () => fetchData(true) };
+  return { data, loading, error, refresh: syncOffice };
 }
 
 const fmtCurrency = (v: number) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
