@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { ActivityEditDrawer } from './ActivityEditDrawer';
-import { MoreVertical, CheckCircle2, Pencil, Trash2, RotateCcw } from 'lucide-react';
+import { MoreVertical, CheckCircle2, XCircle, Pencil, Trash2, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Activity {
@@ -15,6 +15,7 @@ interface Activity {
   description: string | null;
   completed_at: string | null;
   observations?: string | null;
+  completion_outcome?: string | null;
 }
 
 interface Props {
@@ -28,26 +29,33 @@ export function ActivityPopup({ activity, onRefresh, readOnly }: Props) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [observations, setObservations] = useState('');
   const [saving, setSaving] = useState(false);
+  const [outcomeType, setOutcomeType] = useState<'success' | 'no_show'>('success');
 
   const handleComplete = async () => {
     if (!observations.trim()) {
-      toast.error('Observações são obrigatórias para concluir.');
+      toast.error('Observações são obrigatórias.');
       return;
     }
     setSaving(true);
     const { error } = await supabase.from('activities').update({
       completed_at: new Date().toISOString(),
       observations: observations,
+      completion_outcome: outcomeType,
     } as any).eq('id', activity.id);
     if (error) toast.error('Erro: ' + error.message);
-    else { toast.success('Atividade concluída!'); setCompleteOpen(false); onRefresh(); }
+    else {
+      toast.success(outcomeType === 'success' ? 'Atividade concluída!' : 'Atividade concluída sem êxito.');
+      setCompleteOpen(false);
+      onRefresh();
+    }
     setSaving(false);
   };
 
   const handleReopen = async () => {
     const { error } = await supabase.from('activities').update({
       completed_at: null,
-    }).eq('id', activity.id);
+      completion_outcome: null,
+    } as any).eq('id', activity.id);
     if (error) toast.error('Erro: ' + error.message);
     else { toast.success('Atividade reaberta!'); onRefresh(); }
   };
@@ -74,9 +82,14 @@ export function ActivityPopup({ activity, onRefresh, readOnly }: Props) {
             <Pencil className="h-4 w-4 mr-2" /> Detalhes
           </DropdownMenuItem>
           {!activity.completed_at ? (
-            <DropdownMenuItem onClick={() => setCompleteOpen(true)}>
-              <CheckCircle2 className="h-4 w-4 mr-2" /> Concluir
-            </DropdownMenuItem>
+            <>
+              <DropdownMenuItem onClick={() => { setOutcomeType('success'); setObservations(''); setCompleteOpen(true); }}>
+                <CheckCircle2 className="h-4 w-4 mr-2" /> Concluir
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => { setOutcomeType('no_show'); setObservations(''); setCompleteOpen(true); }}>
+                <XCircle className="h-4 w-4 mr-2" /> Sem êxito
+              </DropdownMenuItem>
+            </>
           ) : (
             <DropdownMenuItem onClick={handleReopen}>
               <RotateCcw className="h-4 w-4 mr-2" /> Reabrir
@@ -92,7 +105,9 @@ export function ActivityPopup({ activity, onRefresh, readOnly }: Props) {
       <Dialog open={completeOpen} onOpenChange={setCompleteOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Concluir: {activity.title}</DialogTitle>
+            <DialogTitle>
+              {outcomeType === 'success' ? '✅ Concluir' : '❌ Sem êxito'}: {activity.title}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -100,12 +115,20 @@ export function ActivityPopup({ activity, onRefresh, readOnly }: Props) {
               <Textarea
                 value={observations}
                 onChange={e => setObservations(e.target.value)}
-                placeholder="Descreva as observações sobre a conclusão (obrigatório)..."
+                placeholder={outcomeType === 'success'
+                  ? 'Descreva as observações sobre a conclusão (obrigatório)...'
+                  : 'Descreva o motivo (no-show, cancelamento, etc)...'
+                }
                 rows={4}
               />
             </div>
-            <Button onClick={handleComplete} className="w-full" disabled={saving || !observations.trim()}>
-              {saving ? 'Concluindo...' : 'Concluir Atividade'}
+            <Button
+              onClick={handleComplete}
+              className="w-full"
+              disabled={saving || !observations.trim()}
+              variant={outcomeType === 'no_show' ? 'destructive' : 'default'}
+            >
+              {saving ? 'Concluindo...' : outcomeType === 'success' ? 'Concluir Atividade' : 'Registrar sem êxito'}
             </Button>
           </div>
         </DialogContent>

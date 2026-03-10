@@ -346,6 +346,8 @@ export default function Atividades() {
 
 function ActivityCard({ activity, onRefresh, isViewer, navigate, onEdit }: { activity: Activity; onRefresh: () => void; isViewer?: boolean; navigate: (path: string) => void; onEdit: (id: string) => void }) {
   const isOverdue = activity.due_date && isPast(new Date(activity.due_date)) && !isToday(new Date(activity.due_date)) && !activity.completed_at;
+  const isNoShow = activity.completion_outcome === 'no_show';
+  const isSuccess = activity.completed_at && !isNoShow;
 
   return (
     <Card className={`transition-opacity cursor-pointer hover:bg-muted/30 ${activity.completed_at ? 'opacity-60' : ''}`} onClick={() => onEdit(activity.id)}>
@@ -353,9 +355,17 @@ function ActivityCard({ activity, onRefresh, isViewer, navigate, onEdit }: { act
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <UserAvatar userId={activity.user_id} size="xs" />
+            {isSuccess && <CheckSquare className="h-4 w-4 text-green-500 shrink-0" />}
+            {isNoShow && <AlertCircle className="h-4 w-4 text-destructive shrink-0" />}
             <span className={`text-sm font-medium ${activity.completed_at ? 'line-through' : ''}`}>
               {activity.title}
             </span>
+            {isNoShow && (
+              <Badge variant="destructive" className="text-xs">Sem êxito</Badge>
+            )}
+            {isSuccess && (
+              <Badge className="text-xs bg-green-500/10 text-green-600 border-green-500/30">Concluída</Badge>
+            )}
             <Badge variant="outline" className={`text-xs ${priorityColors[activity.priority] || ''}`}>
               {priorityLabels[activity.priority]}
             </Badge>
