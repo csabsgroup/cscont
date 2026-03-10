@@ -120,8 +120,21 @@ export default function PortalEventos() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold">Eventos</h1>
+        <div className="flex items-center gap-2">
+          <Select value={filterCategory} onValueChange={v => { setFilterCategory(v); setPage(1); }}>
+            <SelectTrigger className="h-8 w-[160px] text-xs">
+              <Filter className="mr-1 h-3.5 w-3.5 shrink-0" />
+              <SelectValue placeholder="Categoria" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">Todas categorias</SelectItem>
+              {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
+                <SelectItem key={k} value={k}>{v}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         <div className="flex gap-1 rounded-lg border p-0.5">
           <Button size="sm" variant={view === 'lista' ? 'default' : 'ghost'} className="h-7 px-2 text-xs" onClick={() => setView('lista')}>
             <List className="mr-1 h-3.5 w-3.5" /> Lista
