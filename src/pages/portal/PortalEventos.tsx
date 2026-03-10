@@ -143,6 +143,7 @@ export default function PortalEventos() {
             <Grid3x3 className="mr-1 h-3.5 w-3.5" /> Calendário
           </Button>
         </div>
+        </div>
       </div>
 
       {view === 'calendario' ? (
