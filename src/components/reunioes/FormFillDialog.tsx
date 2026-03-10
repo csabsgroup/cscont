@@ -87,7 +87,7 @@ export function FormFillDialog({ open, onOpenChange, officeId, meetingId, meetin
 
   useEffect(() => {
     if (open) {
-      supabase.from('form_templates').select('id, name, form_type, fields, sections, post_actions')
+      supabase.from('form_templates').select('id, name, form_type, product_id, fields, sections, post_actions')
         .eq('is_active', true)
         .then(({ data }) => {
           const internal = ((data as any[]) || []).filter(t => (t.form_type || 'internal') === 'internal');
