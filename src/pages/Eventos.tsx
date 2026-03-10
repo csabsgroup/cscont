@@ -179,7 +179,7 @@ export default function Eventos() {
         </div>
         <div className="flex items-center gap-3">
           {role && ['admin', 'manager', 'viewer'].includes(role) && (
-            <Tabs value={view} onValueChange={v => setView(v as 'list' | 'calendar')}>
+            <Tabs value={view} onValueChange={v => setView(v as 'list' | 'calendar' | 'year')}>
               <TabsList className="h-9">
                 <TabsTrigger value="list" className="gap-1.5 px-3">
                   <List className="h-3.5 w-3.5" />
@@ -187,7 +187,11 @@ export default function Eventos() {
                 </TabsTrigger>
                 <TabsTrigger value="calendar" className="gap-1.5 px-3">
                   <CalendarDays className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">Calendário</span>
+                  <span className="hidden sm:inline">Mensal</span>
+                </TabsTrigger>
+                <TabsTrigger value="year" className="gap-1.5 px-3">
+                  <Calendar className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Anual</span>
                 </TabsTrigger>
               </TabsList>
             </Tabs>
