@@ -25,7 +25,6 @@ interface FormTemplate {
 interface OfficeOption {
   id: string;
   name: string;
-  external_id?: string | null;
   cnpj?: string | null;
   office_code?: string | null;
 }
