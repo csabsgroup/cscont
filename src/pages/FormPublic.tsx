@@ -88,7 +88,8 @@ export default function FormPublic() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
-
+  const [currentSectionIdx, setCurrentSectionIdx] = useState(0);
+  const [sectionHistory, setSectionHistory] = useState<number[]>([0]);
   useEffect(() => {
     if (!formHash) { setError('Link inválido'); setLoading(false); return; }
 
