@@ -1,8 +1,15 @@
 import { useMemo } from 'react';
 import { format, isPast, isToday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Calendar, CheckSquare } from 'lucide-react';
+import { Calendar, CheckSquare, AlertTriangle, ArrowUp, ArrowDown, Minus } from 'lucide-react';
 import { UserAvatar } from '@/components/shared/UserAvatar';
+
+const priorityConfig: Record<string, { label: string; class: string; icon: React.ElementType }> = {
+  low: { label: 'Baixa', class: 'bg-muted text-muted-foreground', icon: ArrowDown },
+  medium: { label: 'Média', class: 'bg-primary/15 text-primary', icon: Minus },
+  high: { label: 'Alta', class: 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-400', icon: ArrowUp },
+  urgent: { label: 'Urgente', class: 'bg-destructive/15 text-destructive', icon: AlertTriangle },
+};
 
 export interface BoardCardData {
   id: string;
