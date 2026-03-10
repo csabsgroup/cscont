@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronUp, Heart, Calendar, Target, CreditCard, DollarSign, Shield, Clock, Info } from 'lucide-react';
@@ -71,6 +71,7 @@ export function ClienteVisao360({
   const healthColor = !health ? 'text-muted-foreground' : health.band === 'green' ? 'text-green-600' : health.band === 'yellow' ? 'text-yellow-600' : 'text-red-600';
 
   const saveField = async (column: string, value: string | number | null) => {
+    const oldValue = office[column];
     const updateData: Record<string, any> = { [column]: value };
 
     // If cycle_start_date changed, auto-recalculate cycle_end_date
@@ -82,6 +83,16 @@ export function ClienteVisao360({
 
     const { error } = await supabase.from('offices').update(updateData).eq('id', office.id);
     if (error) throw error;
+
+    // Log field change to timeline
+    await supabase.from('office_timeline_events' as any).insert({
+      office_id: office.id,
+      event_type: 'field_change',
+      title: `Campo "${column}" alterado`,
+      description: `${oldValue ?? '—'} → ${value ?? '—'}`,
+      metadata: { column, old_value: oldValue, new_value: value },
+    });
+
     toast.success('Campo atualizado!');
     onRefresh?.();
   };

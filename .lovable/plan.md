@@ -1,78 +1,113 @@
 
 
-# Nova Aba "Histórico" na Visão 360 do Cliente
+# Diagnóstico QA Completo da Plataforma
 
-## Resumo
-Criar uma nova aba dedicada no Cliente 360 que exibe uma timeline completa de todas as movimentações do cliente, agregando dados de múltiplas tabelas existentes e registrando novos eventos em uma tabela dedicada para capturar alterações de campos.
+## Problemas Identificados
 
-## Fonte de Dados (Híbrida)
+### 1. `confirm()` nativo usado em vez de AlertDialog (Violação do padrão UI)
+**Severidade: Média** -- Inconsistência visual, experiência ruim em mobile
 
-**Tabelas existentes a serem consultadas em tempo real:**
-- `office_stage_history` — mudanças de etapa na jornada
-- `activities` (completed_at IS NOT NULL) — atividades concluídas
-- `meetings` (status = completed) — reuniões realizadas
-- `contracts` — criação/alteração de contratos
-- `bonus_grants` — cashbacks concedidos
-- `bonus_requests` — cashbacks solicitados
-- `form_submissions` — formulários preenchidos
-- `audit_logs` (entity_id = office_id) — alterações auditadas (campos, exclusões, etc.)
+O padrão do sistema exige `AlertDialog` para todas as confirmações de exclusão, mas 10+ locais ainda usam `confirm()` nativo:
 
-**Nova tabela dedicada:**
-- `office_timeline_events` — para registrar eventos que não são capturados pelas tabelas acima (ex: alteração de campo do header, mudança de status, reatribuição de CSM). Também permite inserção retroativa se necessário.
+| Arquivo | Linha |
+|---------|-------|
+| `src/components/atividades/ActivityPopup.tsx` | 64 |
+| `src/components/atividades/ActivityEditDrawer.tsx` | 180 |
+| `src/components/clientes/ClienteTimeline.tsx` | 244 |
+| `src/components/clientes/ClienteContatos.tsx` | 95 |
+| `src/components/configuracoes/HierarchyTab.tsx` | 94 |
+| `src/components/configuracoes/BonusCatalogTab.tsx` | 80 |
+| `src/components/configuracoes/FolderAccordion.tsx` | 102 |
+| `src/components/configuracoes/FormTemplatesTab.tsx` | 55 |
+| `src/components/configuracoes/PlaybooksTab.tsx` | 140 |
+| `src/pages/Configuracoes.tsx` (JourneyStagesTab) | 166-168 |
 
-## Schema da Nova Tabela
+**Correção**: Substituir todos por `AlertDialog` com estado controlado.
 
-```sql
-CREATE TABLE public.office_timeline_events (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  office_id uuid NOT NULL REFERENCES public.offices(id) ON DELETE CASCADE,
-  event_type text NOT NULL, -- 'field_change', 'status_change', 'csm_reassign', 'note_added', etc.
-  title text NOT NULL,
-  description text,
-  metadata jsonb DEFAULT '{}'::jsonb,
-  created_by uuid,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
+---
 
-ALTER TABLE public.office_timeline_events ENABLE ROW LEVEL SECURITY;
+### 2. Warning: Badge sem forwardRef no FormTemplatesTab
+**Severidade: Baixa** -- Warning no console, potencial quebra futura
 
--- RLS: visível para quem tem acesso ao office
-CREATE POLICY "Users see timeline of visible offices"
-  ON public.office_timeline_events FOR SELECT TO authenticated
-  USING (office_id IN (SELECT get_visible_office_ids(auth.uid())));
+O componente `Badge` está recebendo ref no `FormTemplatesTab`, mas não suporta. Isso gera warnings repetidos no console.
 
-CREATE POLICY "Authenticated can insert timeline events"
-  ON public.office_timeline_events FOR INSERT TO authenticated
-  WITH CHECK (true);
+**Correção**: Verificar se o Badge está sendo usado como child de componente que passa ref (ex: Tooltip). Provavelmente basta envolver o Badge em `<span>`.
 
-CREATE POLICY "Admin can manage timeline events"
-  ON public.office_timeline_events FOR ALL TO authenticated
-  USING (has_role(auth.uid(), 'admin'));
-```
+---
 
-## Componente: `ClienteHistorico.tsx`
+### 3. Dependência faltante no useMemo do Dashboard
+**Severidade: Média** -- Filtro de CSM pode não reagir corretamente
 
-Novo componente com:
-- **Chips de filtro** por tipo de evento: Todos, Etapas, Atividades, Reuniões, Contratos, Cashbacks, Formulários, Alterações de Campo
-- **Timeline visual vertical** com ícones coloridos por tipo, data formatada, descrição e autor
-- **Paginação** (carregar mais) para performance
-- Consulta todas as fontes em paralelo, unifica em uma lista ordenada por data (mais recente primeiro)
+Em `src/pages/Dashboard.tsx` linha 113, o `filteredOffices` depende de `[offices, selectedCsms, selectedProductId]` mas usa `expandedCsmIds` (derivado de `selectedCsms`). Deveria depender de `expandedCsmIds` em vez de `selectedCsms`.
 
-## Integração de Registro de Eventos
+**Correção**: Trocar `selectedCsms` por `expandedCsmIds` na lista de dependências.
 
-Pontos no código onde inserir na `office_timeline_events`:
-1. **`Cliente360.tsx` / `ClienteVisao360.tsx`** — ao salvar campos via `saveField` (status, cidade, estado, etc.)
-2. **`Cliente360.tsx`** — ao reatribuir CSM (`saveReassign`), adicionar nota rápida (`saveQuickNote`), alterar status (`StatusChangeModal`)
-3. **`ClienteBonus.tsx`** — ao aprovar/rejeitar cashback
+---
 
-## Nova Aba no `Cliente360.tsx`
+### 4. JourneyStagesTab: exclusão sem confirmação
+**Severidade: Alta** -- Dados podem ser excluídos acidentalmente
 
-Adicionar `{ key: 'historico', label: 'Histórico', icon: History }` ao array `tabs360`, posicionado após "Visão 360".
+Em `Configuracoes.tsx` linha 166-168, `handleDelete` exclui a etapa de jornada diretamente sem nenhuma confirmação (nem `confirm()` nem `AlertDialog`).
 
-## Arquivos Afetados
-1. **Nova migração SQL** — criar tabela `office_timeline_events`
-2. **Novo** `src/components/clientes/ClienteHistorico.tsx` — componente da timeline
-3. **Editar** `src/pages/Cliente360.tsx` — adicionar aba e renderizar componente
-4. **Editar** `src/components/clientes/ClienteVisao360.tsx` — inserir eventos ao salvar campos
-5. **Editar** `src/components/clientes/ClienteBonus.tsx` — inserir eventos ao aprovar/rejeitar
+**Correção**: Adicionar AlertDialog antes da exclusão.
+
+---
+
+### 5. `.catch()` em builder de query Supabase
+**Severidade: Média** -- Pode causar TypeError em runtime
+
+Dois locais violam o padrão do projeto:
+- `src/pages/Cliente360.tsx` linha 169
+- `src/components/configuracoes/AutomationRulesTab.tsx` linha 550
+
+**Correção**: Substituir por `const { error } = await ...` pattern.
+
+---
+
+### 6. useEffect com dependência `[]` em componentes que dependem de sessão
+**Severidade: Baixa** -- Dados podem não recarregar se sessão mudar
+
+Arquivos como `FormTemplatesTab`, `Formularios`, `Financeiro` fazem fetch no mount com `[]` mas não reagem a mudanças de sessão/auth. Se o usuário trocar de conta sem reload, dados ficam stale.
+
+**Correção**: Baixa prioridade, mas idealmente depender de `session?.user?.id`.
+
+---
+
+### 7. Configuracoes.tsx é um arquivo monolítico de 883 linhas
+**Severidade: Baixa (manutenção)** -- Dificulta manutenção, mas funcional
+
+Contém `ProductsTab`, `JourneyStagesTab`, `UsersTab` inline. Não é um bug, mas é debt técnico.
+
+---
+
+## Plano de Correção (ordenado por impacto)
+
+### Fase 1 -- Bugs críticos
+1. **JourneyStagesTab**: Adicionar AlertDialog para exclusão de etapas
+2. **`.catch()` patterns**: Converter para `{ error }` pattern nos 2 arquivos
+
+### Fase 2 -- Consistência UI (confirm → AlertDialog)
+3. Substituir `confirm()` nativo por `AlertDialog` em todos os 10 componentes listados acima. Para cada um:
+   - Adicionar estado `deleteId` ou `showDeleteConfirm`
+   - Renderizar `AlertDialog` controlado
+   - Mover a lógica de delete para o callback do AlertDialog
+
+### Fase 3 -- Warnings e polish
+4. **Badge ref warning**: Envolver Badge em `<span>` no FormTemplatesTab onde necessário
+5. **Dashboard useMemo deps**: Corrigir dependência de `expandedCsmIds`
+
+### Arquivos afetados (total: ~14 arquivos)
+- `src/pages/Configuracoes.tsx` (JourneyStagesTab + exclusão)
+- `src/pages/Cliente360.tsx` (.catch pattern)
+- `src/pages/Dashboard.tsx` (useMemo deps)
+- `src/components/atividades/ActivityPopup.tsx`
+- `src/components/atividades/ActivityEditDrawer.tsx`
+- `src/components/clientes/ClienteTimeline.tsx`
+- `src/components/clientes/ClienteContatos.tsx`
+- `src/components/configuracoes/HierarchyTab.tsx`
+- `src/components/configuracoes/BonusCatalogTab.tsx`
+- `src/components/configuracoes/FolderAccordion.tsx`
+- `src/components/configuracoes/FormTemplatesTab.tsx`
+- `src/components/configuracoes/PlaybooksTab.tsx`
+- `src/components/configuracoes/AutomationRulesTab.tsx`
 

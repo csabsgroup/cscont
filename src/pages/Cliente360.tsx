@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { FileText, Eye, ClipboardList, Paperclip, History, Phone, StickyNote, BarChart3, Target, Gift, PlayCircle, DollarSign } from 'lucide-react';
+import { FileText, Eye, ClipboardList, Paperclip, History, Phone, StickyNote, BarChart3, Target, Gift, PlayCircle, DollarSign, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -26,6 +26,7 @@ import { ClienteJornada } from '@/components/clientes/ClienteJornada';
 import { ClienteMetricas } from '@/components/clientes/ClienteMetricas';
 import { EditOfficeDialog } from '@/components/clientes/EditOfficeDialog';
 import { ClienteBonus } from '@/components/clientes/ClienteBonus';
+import { ClienteHistorico } from '@/components/clientes/ClienteHistorico';
 import { PortalPreviewModal } from '@/components/clientes/PortalPreviewModal';
 import { WhatsAppSendDialog } from '@/components/clientes/WhatsAppSendDialog';
 import { ClienteVisao360 } from '@/components/clientes/ClienteVisao360';
@@ -178,7 +179,16 @@ export default function Cliente360() {
   const saveReassign = async () => {
     if (!selectedCsm) return;
     setActionSaving(true);
+    const oldCsmName = csmProfile?.full_name || '—';
+    const newCsmName = csmList.find(c => c.id === selectedCsm)?.full_name || selectedCsm;
     await supabase.from('offices').update({ csm_id: selectedCsm }).eq('id', id!);
+    // Log timeline event
+    await supabase.from('office_timeline_events' as any).insert({
+      office_id: id!, event_type: 'csm_reassign',
+      title: 'CSM reatribuído',
+      description: `${oldCsmName} → ${newCsmName}`,
+      created_by: user?.id,
+    });
     toast.success('CSM reatribuído!');
     setActionSaving(false); setShowReassign(false); fetchAll();
   };
@@ -192,6 +202,13 @@ export default function Cliente360() {
     const timestamp = format(new Date(), "dd/MM/yyyy HH:mm");
     const updated = `[${timestamp}] ${quickNoteText.trim()}\n\n${current}`;
     await supabase.from('offices').update({ notes: updated }).eq('id', id!);
+    // Log timeline event
+    await supabase.from('office_timeline_events' as any).insert({
+      office_id: id!, event_type: 'note_added',
+      title: 'Nota adicionada',
+      description: quickNoteText.trim().substring(0, 200),
+      created_by: user?.id,
+    });
     toast.success('Nota adicionada!');
     setActionSaving(false); setShowQuickNote(false); setQuickNoteText(''); fetchAll();
   };
@@ -233,6 +250,7 @@ export default function Cliente360() {
         'health_scores', 'health_playbook_executions', 'office_stage_history',
         'office_journey', 'automation_executions', 'event_participants',
         'client_office_links', 'office_files', 'office_notes', 'custom_field_values',
+        'office_timeline_events',
       ] as const;
       for (const table of directTables) {
         await supabase.from(table).delete().eq('office_id', id);
@@ -290,6 +308,7 @@ export default function Cliente360() {
 
   const tabs360 = [
     { key: 'visao360', label: 'Visão 360', icon: Eye },
+    { key: 'historico', label: 'Histórico', icon: Clock },
     { key: 'timeline', label: 'Atividades', icon: ClipboardList, count: activitiesCount },
     { key: 'arquivos', label: 'Arquivos', icon: Paperclip, count: filesCount },
     { key: 'contratos', label: 'Contratos', icon: FileText },
@@ -381,6 +400,10 @@ export default function Cliente360() {
           onRefresh={fetchAll}
           readOnly={isViewer || isClient}
         />
+      )}
+
+      {activeTab === 'historico' && (
+        <Card className="p-6"><ClienteHistorico officeId={office.id} /></Card>
       )}
 
       {activeTab === 'timeline' && (
