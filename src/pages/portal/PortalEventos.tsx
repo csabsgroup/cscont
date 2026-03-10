@@ -85,8 +85,9 @@ export default function PortalEventos() {
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
 
-  const upcoming = events.filter(e => isFuture(new Date(e.event_date)));
-  const past = events.filter(e => isPast(new Date(e.event_date)));
+  const categoryFiltered = filterCategory === '__all__' ? events : events.filter(e => e.category === filterCategory);
+  const upcoming = categoryFiltered.filter(e => isFuture(new Date(e.event_date)));
+  const past = categoryFiltered.filter(e => isPast(new Date(e.event_date)));
   const allListEvents = [...upcoming, ...past];
 
   const startIdx = (page - 1) * pageSize;
