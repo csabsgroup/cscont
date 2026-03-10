@@ -5,7 +5,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Loader2, Calendar, List, Grid3x3, MapPin, Clock, CheckCircle2, XCircle } from 'lucide-react';
+import { Loader2, Calendar, List, Grid3x3, MapPin, Clock, CheckCircle2, XCircle, Filter } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, isFuture, isPast, subDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { PortalCalendar } from '@/components/portal/PortalCalendar';
@@ -33,6 +34,7 @@ export default function PortalEventos() {
   const [pageSize, setPageSize] = useState(25);
   const [selectedEvent, setSelectedEvent] = useState<any | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [filterCategory, setFilterCategory] = useState('__all__');
 
   useEffect(() => {
     if (!officeId) { setLoading(false); return; }
@@ -83,15 +85,16 @@ export default function PortalEventos() {
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
 
-  const upcoming = events.filter(e => isFuture(new Date(e.event_date)));
-  const past = events.filter(e => isPast(new Date(e.event_date)));
+  const categoryFiltered = filterCategory === '__all__' ? events : events.filter(e => e.category === filterCategory);
+  const upcoming = categoryFiltered.filter(e => isFuture(new Date(e.event_date)));
+  const past = categoryFiltered.filter(e => isPast(new Date(e.event_date)));
   const allListEvents = [...upcoming, ...past];
 
   const startIdx = (page - 1) * pageSize;
   const paginatedEvents = allListEvents.slice(startIdx, startIdx + pageSize);
 
   const calendarItems = [
-    ...events.map(ev => ({
+    ...categoryFiltered.map(ev => ({
       id: ev.id, title: ev.title, date: new Date(ev.event_date),
       endDate: ev.end_date ? new Date(ev.end_date) : undefined,
       type: 'event' as const, subtype: ev.type === 'online' ? 'Online' : 'Presencial',
@@ -117,8 +120,21 @@ export default function PortalEventos() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold">Eventos</h1>
+        <div className="flex items-center gap-2">
+          <Select value={filterCategory} onValueChange={v => { setFilterCategory(v); setPage(1); }}>
+            <SelectTrigger className="h-8 w-[160px] text-xs">
+              <Filter className="mr-1 h-3.5 w-3.5 shrink-0" />
+              <SelectValue placeholder="Categoria" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">Todas categorias</SelectItem>
+              {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
+                <SelectItem key={k} value={k}>{v}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         <div className="flex gap-1 rounded-lg border p-0.5">
           <Button size="sm" variant={view === 'lista' ? 'default' : 'ghost'} className="h-7 px-2 text-xs" onClick={() => setView('lista')}>
             <List className="mr-1 h-3.5 w-3.5" /> Lista
@@ -126,6 +142,7 @@ export default function PortalEventos() {
           <Button size="sm" variant={view === 'calendario' ? 'default' : 'ghost'} className="h-7 px-2 text-xs" onClick={() => setView('calendario')}>
             <Grid3x3 className="mr-1 h-3.5 w-3.5" /> Calendário
           </Button>
+        </div>
         </div>
       </div>
 
