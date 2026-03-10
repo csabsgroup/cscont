@@ -77,7 +77,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Skip pausado offices - freeze health score
     if (office.status === "pausado") {
       return new Response(
         JSON.stringify({ skipped: true, reason: "Office is paused (pausado)" }),
@@ -104,23 +103,21 @@ Deno.serve(async (req) => {
     const pillarIds = pillars.map((p) => p.id);
     const { data: indicators } = await sc
       .from("health_indicators")
-      .select("id, name, weight, data_source, data_key, pillar_id")
+      .select("id, name, weight, data_source, data_key, pillar_id, scoring_rules")
       .in("pillar_id", pillarIds);
 
     // 3. Resolve data for each indicator
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000).toISOString();
-    const ninetyDaysAgo = new Date(now.getTime() - 90 * 86400000).toISOString();
 
     // Pre-fetch all data sources in parallel
-    // Fetch office-level overdue data (synced from Asaas)
     const { data: officeOverdue } = await sc
       .from("offices")
       .select("installments_overdue, total_overdue_value")
       .eq("id", office_id)
       .single();
 
-    const [meetingsRes, contractRes, actionPlansRes, activitiesRes, eventsInvitedRes, eventsParticipatedRes, formSubmissionsRes] =
+    const [meetingsRes, contractRes, actionPlansRes, activitiesRes, eventsInvitedRes, eventsParticipatedRes, formSubmissionsRes, bandConfigRes] =
       await Promise.all([
         sc.from("meetings").select("id, scheduled_at, status").eq("office_id", office_id).eq("status", "completed").order("scheduled_at", { ascending: false }).limit(50),
         sc.from("contracts").select("status").eq("office_id", office_id).eq("status", "ativo").limit(1),
@@ -129,122 +126,170 @@ Deno.serve(async (req) => {
         sc.from("event_participants").select("id, status").eq("office_id", office_id),
         sc.from("event_participants").select("id").eq("office_id", office_id).eq("status", "participou"),
         sc.from("form_submissions").select("id, data, template_id, submitted_at").eq("office_id", office_id).order("submitted_at", { ascending: false }).limit(20),
+        sc.from("health_band_config").select("green_min, yellow_min").eq("product_id", productId).maybeSingle(),
       ]);
 
     const meetings = meetingsRes.data || [];
-    const activeContract = contractRes.data?.[0] || null;
     const actionPlans = actionPlansRes.data || [];
     const activities = activitiesRes.data || [];
     const eventsInvited = eventsInvitedRes.data || [];
     const eventsParticipated = eventsParticipatedRes.data || [];
     const formSubmissions = formSubmissionsRes.data || [];
 
-    // Helper: resolve indicator score (0-100) and whether data exists
-    function resolveIndicator(ind: any): { score: number; hasData: boolean } {
-      const src = ind.data_source || "";
-      const key = ind.data_key || "";
+    // Band thresholds (configurable or defaults)
+    const greenMin = bandConfigRes.data?.green_min ?? 70;
+    const yellowMin = bandConfigRes.data?.yellow_min ?? 40;
 
+    // Helper: apply custom scoring rules if available
+    function applyCustomRules(rawValue: number, rules: any[]): number | null {
+      if (!Array.isArray(rules) || rules.length === 0) return null;
+      // Sort by min descending for proper matching
+      const sorted = [...rules].sort((a, b) => b.min - a.min);
+      for (const rule of sorted) {
+        if (rawValue >= rule.min && rawValue <= rule.max) {
+          return rule.score;
+        }
+      }
+      // If no rule matches, return the lowest score rule or 0
+      return sorted.length > 0 ? sorted[sorted.length - 1].score : 0;
+    }
+
+    // Helper: get raw value for an indicator
+    function getRawValue(src: string, key: string): { value: number; hasData: boolean } {
       switch (src) {
         case "meetings": {
           if (key === "days_since_last" || key === "cadencia") {
-            if (meetings.length === 0) return { score: 0, hasData: false };
+            if (meetings.length === 0) return { value: 999, hasData: false };
             const lastDate = new Date(meetings[0].scheduled_at);
-            const daysSince = Math.floor((now.getTime() - lastDate.getTime()) / 86400000);
-            // 0 days = 100, 30 days = 70, 60+ days = 20, 90+ = 0
-            if (daysSince <= 7) return { score: 100, hasData: true };
-            if (daysSince <= 14) return { score: 90, hasData: true };
-            if (daysSince <= 30) return { score: 70, hasData: true };
-            if (daysSince <= 60) return { score: 40, hasData: true };
-            if (daysSince <= 90) return { score: 20, hasData: true };
-            return { score: 0, hasData: true };
+            return { value: Math.floor((now.getTime() - lastDate.getTime()) / 86400000), hasData: true };
           }
           if (key === "count_period") {
+            if (meetings.length === 0) return { value: 0, hasData: false };
             const recent = meetings.filter((m) => m.scheduled_at >= thirtyDaysAgo);
-            if (meetings.length === 0) return { score: 0, hasData: false };
-            const count = recent.length;
-            if (count >= 4) return { score: 100, hasData: true };
-            if (count >= 2) return { score: 70, hasData: true };
-            if (count >= 1) return { score: 40, hasData: true };
-            return { score: 10, hasData: true };
+            return { value: recent.length, hasData: true };
           }
-          return { score: 0, hasData: false };
+          return { value: 0, hasData: false };
         }
-
         case "contracts": {
           if (key === "installments_overdue" || key === "inadimplencia") {
-            // Use office-level overdue from Asaas sync (single source of truth)
             const overdue = officeOverdue?.installments_overdue || 0;
-            if (overdue === 0) return { score: 100, hasData: true };
-            if (overdue <= 1) return { score: 60, hasData: true };
-            if (overdue <= 2) return { score: 30, hasData: true };
-            return { score: 0, hasData: true };
+            return { value: overdue, hasData: true };
           }
-          return { score: 0, hasData: false };
+          return { value: 0, hasData: false };
         }
-
         case "form_submission": {
           if (key === "nps") {
-            const npsSubmission = formSubmissions.find((s: any) => {
+            const sub = formSubmissions.find((s: any) => {
               const d = s.data as any;
               return d?.nps !== undefined || d?.NPS !== undefined;
             });
-            if (!npsSubmission) return { score: 0, hasData: false };
-            const d = npsSubmission.data as any;
-            const nps = Number(d?.nps ?? d?.NPS ?? 0);
-            // NPS 0-10 → score
-            if (nps >= 9) return { score: 100, hasData: true };
-            if (nps >= 7) return { score: 70, hasData: true };
-            if (nps >= 5) return { score: 40, hasData: true };
-            return { score: 10, hasData: true };
+            if (!sub) return { value: 0, hasData: false };
+            const d = sub.data as any;
+            return { value: Number(d?.nps ?? d?.NPS ?? 0), hasData: true };
           }
           if (key === "csat") {
-            const csatSubmission = formSubmissions.find((s: any) => {
+            const sub = formSubmissions.find((s: any) => {
               const d = s.data as any;
               return d?.csat !== undefined || d?.CSAT !== undefined || d?.satisfacao !== undefined;
             });
-            if (!csatSubmission) return { score: 0, hasData: false };
-            const d = csatSubmission.data as any;
-            const csat = Number(d?.csat ?? d?.CSAT ?? d?.satisfacao ?? 0);
-            // CSAT 1-5 → score
-            if (csat >= 5) return { score: 100, hasData: true };
-            if (csat >= 4) return { score: 80, hasData: true };
-            if (csat >= 3) return { score: 50, hasData: true };
-            return { score: 20, hasData: true };
+            if (!sub) return { value: 0, hasData: false };
+            const d = sub.data as any;
+            return { value: Number(d?.csat ?? d?.CSAT ?? d?.satisfacao ?? 0), hasData: true };
           }
           if (key === "percepcao" || key === "perception") {
-            // Generic perception from latest form
-            if (formSubmissions.length === 0) return { score: 0, hasData: false };
-            return { score: 70, hasData: true }; // Default perception when form exists
+            if (formSubmissions.length === 0) return { value: 0, hasData: false };
+            return { value: 7, hasData: true }; // Default perception value
           }
-          return { score: 0, hasData: false };
+          return { value: 0, hasData: false };
         }
-
         case "events": {
-          if (eventsInvited.length === 0) return { score: 0, hasData: false };
+          if (eventsInvited.length === 0) return { value: 0, hasData: false };
           const rate = eventsParticipated.length / eventsInvited.length;
-          return { score: Math.round(rate * 100), hasData: true };
+          return { value: Math.round(rate * 100), hasData: true };
         }
-
         case "action_plans": {
-          if (actionPlans.length === 0) return { score: 0, hasData: false };
+          if (actionPlans.length === 0) return { value: 0, hasData: false };
           const done = actionPlans.filter((p) => p.status === "done").length;
-          const rate = done / actionPlans.length;
-          return { score: Math.round(rate * 100), hasData: true };
+          return { value: Math.round((done / actionPlans.length) * 100), hasData: true };
         }
-
         case "activities": {
-          if (activities.length === 0) return { score: 0, hasData: false };
+          if (activities.length === 0) return { value: 0, hasData: false };
           const completed = activities.filter((a) => a.completed_at).length;
-          const count = activities.length;
-          // More activity = better
-          let score = Math.min(100, count * 15);
-          if (count > 0) score = Math.max(score, Math.round((completed / count) * 100));
-          return { score, hasData: true };
+          return { value: Math.round((completed / activities.length) * 100), hasData: true };
         }
-
         default:
-          return { score: 0, hasData: false };
+          return { value: 0, hasData: false };
       }
+    }
+
+    // Default scoring fallback (legacy logic)
+    function defaultScore(src: string, key: string, rawValue: number, hasData: boolean): number {
+      if (!hasData) return 0;
+      switch (src) {
+        case "meetings": {
+          if (key === "days_since_last" || key === "cadencia") {
+            if (rawValue <= 7) return 100;
+            if (rawValue <= 14) return 90;
+            if (rawValue <= 30) return 70;
+            if (rawValue <= 60) return 40;
+            if (rawValue <= 90) return 20;
+            return 0;
+          }
+          if (key === "count_period") {
+            if (rawValue >= 4) return 100;
+            if (rawValue >= 2) return 70;
+            if (rawValue >= 1) return 40;
+            return 10;
+          }
+          return 0;
+        }
+        case "contracts": {
+          if (rawValue === 0) return 100;
+          if (rawValue <= 1) return 60;
+          if (rawValue <= 2) return 30;
+          return 0;
+        }
+        case "form_submission": {
+          if (key === "nps") {
+            if (rawValue >= 9) return 100;
+            if (rawValue >= 7) return 70;
+            if (rawValue >= 5) return 40;
+            return 10;
+          }
+          if (key === "csat") {
+            if (rawValue >= 5) return 100;
+            if (rawValue >= 4) return 80;
+            if (rawValue >= 3) return 50;
+            return 20;
+          }
+          return 70;
+        }
+        case "events":
+        case "action_plans":
+        case "activities":
+          return rawValue; // Already 0-100
+        default:
+          return 0;
+      }
+    }
+
+    // Resolve indicator: use scoring_rules if available, else fallback
+    function resolveIndicator(ind: any): { score: number; hasData: boolean; rawValue: number } {
+      const src = ind.data_source || "";
+      const key = ind.data_key || "";
+      const rules = ind.scoring_rules;
+
+      const { value: rawValue, hasData } = getRawValue(src, key);
+      if (!hasData) return { score: 0, hasData: false, rawValue };
+
+      // Try custom scoring rules first
+      const customScore = applyCustomRules(rawValue, rules);
+      if (customScore !== null) {
+        return { score: customScore, hasData: true, rawValue };
+      }
+
+      // Fallback to default logic
+      return { score: defaultScore(src, key, rawValue, hasData), hasData: true, rawValue };
     }
 
     // 4. Calculate per-pillar scores with neutralization
@@ -271,7 +316,6 @@ Deno.serve(async (req) => {
       const indBreakdown: any[] = [];
 
       if (hasAnyData) {
-        // Neutralize: redistribute weights of missing indicators
         const totalActiveWeight = withData.reduce((sum, r) => sum + r.weight, 0);
         if (totalActiveWeight > 0) {
           pillarScore = withData.reduce((sum, r) => sum + (r.score * r.weight) / totalActiveWeight, 0);
@@ -280,6 +324,7 @@ Deno.serve(async (req) => {
           indBreakdown.push({
             name: r.name,
             score: r.score,
+            rawValue: r.rawValue,
             weight: r.weight,
             hasData: r.hasData,
             data_source: r.data_source,
@@ -313,7 +358,6 @@ Deno.serve(async (req) => {
     let forcedBand: string | null = null;
     const overridesApplied: any[] = [];
 
-    // Calculate override condition values
     const daysSinceLastMeeting = meetings.length > 0
       ? Math.floor((now.getTime() - new Date(meetings[0].scheduled_at).getTime()) / 86400000)
       : 999;
@@ -353,13 +397,13 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 7. Determine band
+    // 7. Determine band using configurable thresholds
     let band: string;
     if (forcedBand) {
       band = forcedBand;
-    } else if (finalScore >= 70) {
+    } else if (finalScore >= greenMin) {
       band = "green";
-    } else if (finalScore >= 40) {
+    } else if (finalScore >= yellowMin) {
       band = "yellow";
     } else {
       band = "red";
@@ -381,7 +425,7 @@ Deno.serve(async (req) => {
         .update({
           score: finalScore,
           band: band as any,
-          breakdown: { pillars: breakdown, overrides_applied: overridesApplied },
+          breakdown: { pillars: breakdown, overrides_applied: overridesApplied, band_config: { green_min: greenMin, yellow_min: yellowMin } },
           calculated_at: now.toISOString(),
         })
         .eq("id", prevScore.id);
@@ -390,7 +434,7 @@ Deno.serve(async (req) => {
         office_id,
         score: finalScore,
         band: band as any,
-        breakdown: { pillars: breakdown, overrides_applied: overridesApplied },
+        breakdown: { pillars: breakdown, overrides_applied: overridesApplied, band_config: { green_min: greenMin, yellow_min: yellowMin } },
         calculated_at: now.toISOString(),
       });
     }
@@ -400,7 +444,6 @@ Deno.serve(async (req) => {
     if (oldBand && band !== oldBand) {
       const periodKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
-      // Check idempotency
       const { data: existing } = await sc
         .from("health_playbook_executions")
         .select("id")
@@ -454,7 +497,6 @@ Deno.serve(async (req) => {
             created_activity_ids: createdIds,
           });
 
-          // Audit log
           await sc.from("audit_logs").insert({
             user_id: userId,
             action: "playbook_executed",
@@ -498,6 +540,7 @@ Deno.serve(async (req) => {
         old_band: oldBand,
         breakdown,
         overrides_applied: overridesApplied,
+        band_config: { green_min: greenMin, yellow_min: yellowMin },
         playbook: playbookResult,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
