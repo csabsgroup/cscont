@@ -126,7 +126,6 @@ export function FormFillDialog({ open, onOpenChange, officeId, meetingId, meetin
     const q = officeSearch.toLowerCase();
     return offices.filter(o =>
       o.name?.toLowerCase().includes(q) ||
-      o.external_id?.toLowerCase().includes(q) ||
       o.cnpj?.toLowerCase().includes(q) ||
       o.office_code?.toLowerCase().includes(q)
     );
