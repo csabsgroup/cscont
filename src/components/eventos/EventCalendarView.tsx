@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { ChevronLeft, ChevronRight, Calendar, MapPin, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const CATEGORY_CONFIG: Record<string, { label: string; color: string }> = {
+export const CATEGORY_CONFIG: Record<string, { label: string; color: string }> = {
   encontro: { label: 'Encontro', color: 'bg-blue-500' },
   imersao: { label: 'Imersão', color: 'bg-purple-500' },
   workshop: { label: 'Workshop', color: 'bg-emerald-500' },
