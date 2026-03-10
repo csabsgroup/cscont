@@ -83,6 +83,17 @@ export function FormFieldRenderer({ field, value, onChange, error, disabled }: P
           />
         );
 
+      case 'long_text':
+        return (
+          <Textarea
+            value={value || ''}
+            onChange={e => onChange(e.target.value)}
+            placeholder={field.placeholder || 'Digite seu texto aqui...'}
+            rows={6}
+            disabled={disabled}
+          />
+        );
+
       case 'multiple_choice': {
         const options = field.options?.filter(o => o.trim()) || [];
         return (
