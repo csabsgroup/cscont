@@ -380,7 +380,7 @@ export default function FormBuilder() {
           </Button>
         </div>
         {/* Section fields */}
-        <Droppable droppableId={`section-fields-${sec.id}`}>
+        <Droppable droppableId={`section-fields-${sec.id}`} type="FIELD">
           {(provided) => (
             <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-2 pl-4 border-l-2 border-primary/20 ml-2 min-h-[40px]">
               {secFields.map((field, fIdx) => (

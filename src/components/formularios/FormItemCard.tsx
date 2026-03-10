@@ -350,7 +350,7 @@ export function FormItemCard({
             <div className="space-y-2">
               <Label className="text-xs font-medium">Validação</Label>
               <div className="grid grid-cols-2 gap-2">
-                {['short_answer', 'text', 'paragraph', 'textarea'].includes(field.type) && (
+                {['short_answer', 'text', 'paragraph', 'textarea', 'long_text'].includes(field.type) && (
                   <>
                     <div className="space-y-1">
                       <Label className="text-[10px]">Mín caracteres</Label>
