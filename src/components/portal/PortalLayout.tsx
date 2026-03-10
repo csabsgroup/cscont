@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePortal } from '@/contexts/PortalContext';
 import { Button } from '@/components/ui/button';
@@ -22,7 +22,7 @@ const allNavItems = [
   { to: '/portal/membros', label: 'Membros Ativos', icon: Users, settingKey: 'portal_show_members' },
 ];
 
-export function PortalLayout({ children }: { children: React.ReactNode }) {
+export function PortalLayout() {
   const { signOut, profile } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { officeName, officeLogo, settings, settingsLoading } = usePortal();
@@ -123,7 +123,7 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
 
         {/* Content */}
         <main className="flex-1 p-4 md:p-6">
-          {children}
+          <Outlet />
         </main>
       </div>
 
