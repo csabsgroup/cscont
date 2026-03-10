@@ -206,33 +206,115 @@ export function FormItemCard({
 
         {/* Footer actions */}
         {isSelected && (
-          <div className="flex items-center justify-between pt-2 border-t">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Switch checked={field.required} onCheckedChange={v => onUpdate({ required: v })} />
-                <Label className="text-xs">Obrigatório</Label>
+          <div className="space-y-3 pt-2 border-t">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Switch checked={field.required} onCheckedChange={v => onUpdate({ required: v })} />
+                  <Label className="text-xs">Obrigatório</Label>
+                </div>
+                {sections.length > 0 && (
+                  <Select value={field.section_id || '__none__'} onValueChange={v => onUpdate({ section_id: v === '__none__' ? null : v })}>
+                    <SelectTrigger className="h-7 text-xs w-36"><SelectValue placeholder="Seção" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Sem seção</SelectItem>
+                      {sections.map(s => <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
-              {sections.length > 0 && (
-                <Select value={field.section_id || '__none__'} onValueChange={v => onUpdate({ section_id: v === '__none__' ? null : v })}>
-                  <SelectTrigger className="h-7 text-xs w-36"><SelectValue placeholder="Seção" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Sem seção</SelectItem>
-                    {sections.map(s => <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              )}
+              <div className="flex items-center gap-1">
+                <Button size="sm" variant="ghost" onClick={onDuplicate} title="Duplicar">
+                  <Copy className="h-3.5 w-3.5" />
+                </Button>
+                <Button size="sm" variant="ghost" onClick={onDelete} title="Excluir">
+                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setShowAdvanced(!showAdvanced)} title="Avançado">
+                  <Settings2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             </div>
-            <div className="flex items-center gap-1">
-              <Button size="sm" variant="ghost" onClick={onDuplicate} title="Duplicar">
-                <Copy className="h-3.5 w-3.5" />
-              </Button>
-              <Button size="sm" variant="ghost" onClick={onDelete} title="Excluir">
-                <Trash2 className="h-3.5 w-3.5 text-destructive" />
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setShowAdvanced(!showAdvanced)} title="Avançado">
-                <Settings2 className="h-3.5 w-3.5" />
-              </Button>
-            </div>
+
+            {/* Conditional routing - always visible when type supports it */}
+            {supportsRouting && (
+              <div className="space-y-2 p-2 rounded-md bg-muted/50 border border-dashed">
+                {sections.length === 0 ? (
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    🔀 <span>Crie seções na barra lateral para habilitar lógica condicional (ir para seção por resposta).</span>
+                  </p>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={field.conditional_logic?.enabled && field.conditional_logic?.routing_type === 'answer_routing'}
+                        onCheckedChange={v => {
+                          if (v) {
+                            const options = getFieldOptions();
+                            onUpdate({
+                              conditional_logic: {
+                                enabled: true,
+                                logic_operator: 'and',
+                                rules: [],
+                                action: 'show',
+                                target_section_id: null,
+                                routing_type: 'answer_routing',
+                                routes: options.map(o => ({ answer_value: o, target_section_id: '' })),
+                                default_target_section_id: null,
+                              },
+                            });
+                          } else {
+                            onUpdate({
+                              conditional_logic: {
+                                enabled: false,
+                                logic_operator: 'and',
+                                rules: [],
+                                action: 'show',
+                                target_section_id: null,
+                              },
+                            });
+                          }
+                        }}
+                      />
+                      <Label className="text-xs font-medium">🔀 Ir para seção por resposta</Label>
+                    </div>
+                    {field.conditional_logic?.enabled && field.conditional_logic?.routing_type === 'answer_routing' && (
+                      <div className="pl-4 border-l-2 border-primary/20 space-y-1.5">
+                        {getFieldOptions().map((opt, oIdx) => {
+                          const route = (field.conditional_logic?.routes || []).find((r: any) => r.answer_value === opt);
+                          return (
+                            <div key={oIdx} className="flex items-center gap-2">
+                              <span className="text-xs min-w-[80px] truncate font-medium">{opt}</span>
+                              <span className="text-xs text-muted-foreground">→</span>
+                              <Select
+                                value={route?.target_section_id || '__next__'}
+                                onValueChange={val => {
+                                  const routes = getFieldOptions().map(o => {
+                                    const existing = (field.conditional_logic?.routes || []).find((r: any) => r.answer_value === o);
+                                    if (o === opt) return { answer_value: o, target_section_id: val === '__next__' ? '' : val };
+                                    return existing || { answer_value: o, target_section_id: '' };
+                                  });
+                                  onUpdate({
+                                    conditional_logic: { ...field.conditional_logic, routes },
+                                  });
+                                }}
+                              >
+                                <SelectTrigger className="h-6 text-xs flex-1"><SelectValue placeholder="Próxima" /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__next__">Próxima seção</SelectItem>
+                                  <SelectItem value="__end__">Encerrar formulário</SelectItem>
+                                  {sections.map(s => <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
           </div>
         )}
 
