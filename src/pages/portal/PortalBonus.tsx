@@ -119,12 +119,12 @@ export default function PortalBonus() {
         type: 'task' as any,
         priority: 'high' as any,
       });
-      try {
-        await supabase.functions.invoke('integration-slack', {
-          body: { action: 'sendNotification', message: `🎁 *Nova solicitação de bônus*\nCliente: ${officeData.name}\nItem: ${catalogItem?.name} (${qty}x)\n${notes ? 'Obs: ' + notes : ''}` },
-        });
-      } catch { /* Slack not configured */ }
     }
+    try {
+      await supabase.functions.invoke('execute-automations', {
+        body: { action: 'triggerV2', trigger_type: 'bonus.requested', office_id: officeId, context: { suffix: `bonus_req_${Date.now()}` } },
+      });
+    } catch { /* automations not configured */ }
     toast.success('Solicitação enviada!');
     setDialogOpen(false); setSelectedItem(''); setQty('1'); setNotes('');
     fetchAll(); setSaving(false);

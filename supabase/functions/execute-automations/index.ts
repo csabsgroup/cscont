@@ -22,7 +22,11 @@ function resolveVariables(template: string, office: any, csm: any, extra?: Recor
     .replace(/\{\{data_hoje\}\}/g, new Date().toLocaleDateString('pt-BR'))
     .replace(/\{\{mrr\}\}/g, office?.mrr?.toString() || office?.faturamento_mensal?.toString() || '0')
     .replace(/\{\{nps\}\}/g, office?.last_nps?.toString() || '--')
-    .replace(/\{\{ltv\}\}/g, extra?.ltv?.toString() || '0');
+    .replace(/\{\{ltv\}\}/g, extra?.ltv?.toString() || '0')
+    .replace(/\{\{cnpj\}\}/g, office?.cnpj || '')
+    .replace(/\{\{socio_nome\}\}/g, extra?.main_contact_name || '')
+    .replace(/\{\{socio_email\}\}/g, extra?.main_contact_email || '')
+    .replace(/\{\{socio_telefone\}\}/g, extra?.main_contact_phone || '');
 }
 
 // ─── Action Handlers ─────────────────────────────────────────

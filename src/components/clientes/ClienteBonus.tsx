@@ -146,7 +146,17 @@ export function ClienteBonus({ officeId }: { officeId: string }) {
       status: status as any, reviewed_by: session?.user?.id,
     }).eq('id', requestId);
     if (error) toast.error('Erro: ' + error.message);
-    else { toast.success(status === 'approved' ? 'Aprovado e debitado!' : 'Negado!'); fetchAll(); }
+    else {
+      toast.success(status === 'approved' ? 'Aprovado e debitado!' : 'Negado!');
+      if (status === 'approved') {
+        try {
+          await supabase.functions.invoke('execute-automations', {
+            body: { action: 'triggerV2', trigger_type: 'bonus.requested', office_id: officeId, context: { suffix: `bonus_approved_${Date.now()}` } },
+          });
+        } catch { /* automations not configured */ }
+      }
+      fetchAll();
+    }
   };
 
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>;
