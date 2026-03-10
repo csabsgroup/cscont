@@ -24,11 +24,12 @@ interface Props {
   isSelected: boolean;
   onSelect: () => void;
   mappingTargets: { value: string; label: string }[];
+  onSectionChange?: (sectionId: string | null) => void;
 }
 
 export function FormItemCard({
   field, index, dragHandleProps, sections, allFields,
-  onUpdate, onDelete, onDuplicate, isSelected, onSelect, mappingTargets,
+  onUpdate, onDelete, onDuplicate, isSelected, onSelect, mappingTargets, onSectionChange,
 }: Props) {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
