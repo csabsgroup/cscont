@@ -1,27 +1,35 @@
-import { useEffect, useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Switch } from '@/components/ui/switch';
-import { Plus, Edit2, Copy, Trash2, Link2, Globe, FileText } from 'lucide-react';
+import { FileText, ClipboardEdit, Link2, Globe } from 'lucide-react';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
+import { FormFillDialog } from '@/components/reunioes/FormFillDialog';
+
+interface FormTemplate {
+  id: string;
+  name: string;
+  form_type: string;
+  form_hash: string | null;
+  product_id: string | null;
+  fields: any[];
+  sections: any[];
+  is_published: boolean;
+}
 
 export default function Formularios() {
-  const navigate = useNavigate();
-  const { session, role } = useAuth();
-  const [templates, setTemplates] = useState<any[]>([]);
+  const [templates, setTemplates] = useState<FormTemplate[]>([]);
   const [products, setProducts] = useState<Record<string, string>>({});
+  const [fillDialogOpen, setFillDialogOpen] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>();
 
   useEffect(() => { loadData(); }, []);
 
   const loadData = async () => {
     const [{ data: tplData }, { data: prodData }] = await Promise.all([
-      supabase.from('form_templates').select('*').order('name'),
+      supabase.from('form_templates').select('*').eq('is_active', true).order('name'),
       supabase.from('products').select('id, name').eq('is_active', true),
     ]);
     setTemplates((tplData as any[]) || []);
@@ -30,120 +38,110 @@ export default function Formularios() {
     setProducts(pm);
   };
 
-  const handleDuplicate = async (t: any) => {
-    if (!session?.user?.id) return;
-    const { error } = await supabase.from('form_templates').insert({
-      name: t.name + ' (cópia)',
-      type: t.type,
-      form_type: t.form_type || 'internal',
-      product_id: t.product_id,
-      fields: t.fields,
-      sections: t.sections || [],
-      post_actions: t.post_actions,
-      settings: t.settings || {},
-      theme: t.theme || {},
-      description: t.description || null,
-      is_active: true,
-      is_published: false,
-      form_hash: t.form_type === 'external' ? crypto.randomUUID().replace(/-/g, '').slice(0, 16) : null,
-      created_by: session.user.id,
-    } as any);
-    if (error) toast.error('Erro: ' + error.message);
-    else { toast.success('Duplicado!'); loadData(); }
+  const handleFill = (templateId: string) => {
+    setSelectedTemplateId(templateId);
+    setFillDialogOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Excluir este formulário?')) return;
-    const { error } = await supabase.from('form_templates').delete().eq('id', id);
-    if (error) toast.error('Erro: ' + error.message);
-    else { toast.success('Removido!'); loadData(); }
-  };
-
-  const handleToggle = async (id: string, current: boolean) => {
-    const { error } = await supabase.from('form_templates').update({ is_active: !current } as any).eq('id', id);
-    if (error) toast.error('Erro: ' + error.message);
-    else loadData();
-  };
+  const internalForms = templates.filter(t => t.form_type !== 'external');
+  const externalForms = templates.filter(t => t.form_type === 'external');
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Formulários</h1>
-          <p className="text-sm text-muted-foreground">{templates.length} formulário{templates.length !== 1 ? 's' : ''}</p>
-        </div>
-        <Button onClick={() => navigate('/formularios/builder/new')}>
-          <Plus className="h-4 w-4 mr-1" /> Novo formulário
-        </Button>
+      <div>
+        <h1 className="text-2xl font-bold">Formulários</h1>
+        <p className="text-sm text-muted-foreground">Preencha formulários para seus clientes ou copie links de formulários externos.</p>
       </div>
 
-      {templates.length === 0 ? (
+      {/* Internal forms - fill directly */}
+      {internalForms.length > 0 && (
+        <div className="space-y-2">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Formulários internos</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {internalForms.map(t => (
+              <Card key={t.id} className="hover:shadow-sm transition-shadow">
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-1">
+                      <p className="font-medium text-sm">{t.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {t.product_id ? products[t.product_id] || '—' : 'Todos os produtos'} · {Array.isArray(t.fields) ? t.fields.length : 0} campos
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="text-xs shrink-0">📋 Interno</Badge>
+                  </div>
+                  <Button size="sm" className="w-full" onClick={() => handleFill(t.id)}>
+                    <ClipboardEdit className="h-4 w-4 mr-1" /> Preencher
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* External forms - copy link */}
+      {externalForms.length > 0 && (
+        <div className="space-y-2">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Formulários externos</h2>
+          <Card>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nome</TableHead>
+                  <TableHead>Produto</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {externalForms.map(t => (
+                  <TableRow key={t.id}>
+                    <TableCell className="font-medium text-sm">{t.name}</TableCell>
+                    <TableCell className="text-muted-foreground text-sm">
+                      {t.product_id ? products[t.product_id] || '—' : 'Todos'}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={t.is_published ? 'default' : 'secondary'} className="text-xs">
+                        {t.is_published ? <><Globe className="h-3 w-3 mr-1" />Publicado</> : 'Rascunho'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {t.form_hash ? (
+                        <Button size="sm" variant="outline" onClick={() => {
+                          navigator.clipboard.writeText(`${window.location.origin}/forms/${t.form_hash}`);
+                          toast.success('Link copiado!');
+                        }}>
+                          <Link2 className="h-4 w-4 mr-1" /> Copiar link
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Sem link</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+        </div>
+      )}
+
+      {templates.length === 0 && (
         <Card>
           <CardContent className="py-12 text-center space-y-3">
             <FileText className="h-12 w-12 mx-auto text-muted-foreground/30" />
-            <p className="text-muted-foreground">Nenhum formulário criado</p>
-            <Button variant="outline" onClick={() => navigate('/formularios/builder/new')}>Criar primeiro formulário</Button>
+            <p className="text-muted-foreground">Nenhum formulário ativo encontrado</p>
+            <p className="text-xs text-muted-foreground">Crie formulários em Configurações → Formulários</p>
           </CardContent>
         </Card>
-      ) : (
-        <Card>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Produto</TableHead>
-                <TableHead>Campos</TableHead>
-                <TableHead>Publicação</TableHead>
-                <TableHead>Ativo</TableHead>
-                <TableHead></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {templates.map(t => (
-                <TableRow key={t.id} className="cursor-pointer" onClick={() => navigate(`/formularios/builder/${t.id}`)}>
-                  <TableCell className="font-medium">{t.name}</TableCell>
-                  <TableCell>
-                    <Badge variant={t.form_type === 'external' ? 'default' : 'outline'} className="text-xs">
-                      {t.form_type === 'external' ? '📊 Externo' : '📋 Interno'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-sm">
-                    {t.product_id ? products[t.product_id] || '—' : 'Todos'}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-sm">{Array.isArray(t.fields) ? t.fields.length : 0}</TableCell>
-                  <TableCell>
-                    <Badge variant={t.is_published ? 'default' : 'secondary'} className="text-xs">
-                      {t.is_published ? <><Globe className="h-3 w-3 mr-1" />Publicado</> : 'Rascunho'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell onClick={e => e.stopPropagation()}>
-                    <Switch checked={t.is_active !== false} onCheckedChange={() => handleToggle(t.id, t.is_active !== false)} />
-                  </TableCell>
-                  <TableCell onClick={e => e.stopPropagation()}>
-                    <div className="flex gap-1">
-                      <Button size="sm" variant="ghost" onClick={() => navigate(`/formularios/builder/${t.id}`)} title="Editar">
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => handleDuplicate(t)} title="Duplicar">
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                      {t.form_type === 'external' && t.form_hash && (
-                        <Button size="sm" variant="ghost" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/forms/${t.form_hash}`); toast.success('Link copiado!'); }} title="Link">
-                          <Link2 className="h-4 w-4" />
-                        </Button>
-                      )}
-                      <Button size="sm" variant="ghost" onClick={() => handleDelete(t.id)} title="Excluir">
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Card>
       )}
+
+      <FormFillDialog
+        open={fillDialogOpen}
+        onOpenChange={setFillDialogOpen}
+        templateId={selectedTemplateId}
+        onSubmitted={() => { setFillDialogOpen(false); toast.success('Formulário enviado!'); }}
+      />
     </div>
   );
 }
