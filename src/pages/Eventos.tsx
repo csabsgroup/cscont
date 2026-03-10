@@ -317,6 +317,8 @@ export default function Eventos() {
         <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
       ) : view === 'calendar' ? (
         <EventCalendarView events={filtered} participantCounts={participantCounts} />
+      ) : view === 'year' ? (
+        <EventYearView events={filtered} participantCounts={participantCounts} currentYear={currentYear} onYearChange={setCurrentYear} />
       ) : filtered.length === 0 ? (
         <Card><CardContent className="flex flex-col items-center justify-center py-12">
           <Calendar className="mb-3 h-10 w-10 text-muted-foreground/40" />

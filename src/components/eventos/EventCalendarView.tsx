@@ -30,7 +30,7 @@ export const CATEGORY_BG: Record<string, string> = {
   outro: 'bg-muted text-muted-foreground',
 };
 
-const TYPE_LABELS: Record<string, string> = {
+export const TYPE_LABELS: Record<string, string> = {
   presencial: 'Presencial',
   online: 'Online',
   hibrido: 'Híbrido',
