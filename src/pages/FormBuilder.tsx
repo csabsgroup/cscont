@@ -126,47 +126,39 @@ export default function FormBuilder() {
     ...customFields.map(cf => ({ value: `custom_field:${cf.id}`, label: `📋 ${cf.name}` })),
   ], [customFields]);
 
-  // Build unified canvas items: sections interleaved with their fields
-  const canvasItems = useMemo((): CanvasItem[] => {
-    const items: CanvasItem[] = [];
-    const usedFieldIds = new Set<string>();
+  // Compute sorted sections and fields grouped by section
+  const sortedSections = useMemo(() => [...sections].sort((a, b) => a.order - b.order), [sections]);
 
-    // First, add fields without a section (in their natural order)
-    // Then for each section (in order), add the section header + its fields
-    const sortedSections = [...sections].sort((a, b) => a.order - b.order);
-
-    // Collect fields by section
-    const fieldsBySection = new Map<string, FormFieldDef[]>();
-    const unsectionedFields: FormFieldDef[] = [];
-
+  const { unsectionedFields, fieldsBySection } = useMemo(() => {
+    const bySection = new Map<string, FormFieldDef[]>();
+    const unsectioned: FormFieldDef[] = [];
     for (const f of fields) {
       if (f.section_id && sections.some(s => s.id === f.section_id)) {
-        const arr = fieldsBySection.get(f.section_id) || [];
+        const arr = bySection.get(f.section_id) || [];
         arr.push(f);
-        fieldsBySection.set(f.section_id, arr);
+        bySection.set(f.section_id, arr);
       } else {
-        unsectionedFields.push(f);
+        unsectioned.push(f);
       }
     }
+    return { unsectionedFields: unsectioned, fieldsBySection: bySection };
+  }, [fields, sections]);
 
-    // Add unsectioned fields first (intercalated freely at top)
+  // Build flat canvas items for save ordering only
+  const canvasItems = useMemo((): CanvasItem[] => {
+    const items: CanvasItem[] = [];
     for (const f of unsectionedFields) {
       items.push({ type: 'field', field: f, fieldIndex: fields.indexOf(f), draggableId: `field-${f.id}` });
-      usedFieldIds.add(f.id);
     }
-
-    // Add each section with its fields
     for (const sec of sortedSections) {
       items.push({ type: 'section', section: sec, draggableId: `section-${sec.id}` });
       const secFields = fieldsBySection.get(sec.id) || [];
       for (const f of secFields) {
         items.push({ type: 'field', field: f, fieldIndex: fields.indexOf(f), draggableId: `field-${f.id}` });
-        usedFieldIds.add(f.id);
       }
     }
-
     return items;
-  }, [fields, sections]);
+  }, [fields, sections, unsectionedFields, fieldsBySection, sortedSections]);
 
   const handleSave = async () => {
     if (!session?.user?.id || !name.trim()) { toast.error('Preencha o nome'); return; }
