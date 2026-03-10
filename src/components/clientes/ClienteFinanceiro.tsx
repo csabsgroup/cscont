@@ -227,7 +227,10 @@ export function ClienteFinanceiro({ officeId, cnpj }: Props) {
           <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
             <DollarSign className="h-4 w-4" /> Situação Financeira
           </h2>
-          <p className="text-xs text-muted-foreground">CNPJ: {data.cnpj} • Dados do Asaas</p>
+          <p className="text-xs text-muted-foreground">
+            CNPJ: {data.cnpj} • Dados do Asaas
+            {data.last_sync && <> • Atualizado: {new Date(data.last_sync).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</>}
+          </p>
         </div>
         <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing} className="gap-1.5">
           <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
