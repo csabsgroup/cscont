@@ -299,10 +299,15 @@ export function FormTemplatesTab() {
   };
 
   // ─── Field management ───
-  const addField = (type: string) => {
+  const addField = (fieldType: string) => {
     const f = defaultField();
-    f.type = type;
+    f.type = fieldType;
     f.order = fields.length;
+    // Only set scale properties for linear_scale
+    if (fieldType === 'linear_scale') {
+      f.scale_min = 1;
+      f.scale_max = 10;
+    }
     setFields(prev => [...prev, f]);
   };
 
