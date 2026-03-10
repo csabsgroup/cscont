@@ -115,6 +115,7 @@ export default function FormPublic() {
   }, [template]);
 
   const visibleFields = useMemo(() => fields.filter(f => isFieldVisible(f, formData)), [fields, formData]);
+  const useRouting = useMemo(() => sections.length > 0 && hasAnyRouting(fields), [sections, fields]);
 
   const setValue = (fieldId: string, value: any) => {
     setFormData(prev => ({ ...prev, [fieldId]: value }));
