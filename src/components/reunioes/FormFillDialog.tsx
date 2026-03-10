@@ -100,7 +100,7 @@ export function FormFillDialog({ open, onOpenChange, officeId, meetingId, meetin
 
       // FIX: Load ALL offices, not just status='ativo'
       if (!officeId) {
-        supabase.from('offices').select('id, name, cnpj, office_code')
+        supabase.from('offices').select('id, name, cnpj, office_code, active_product_id')
           .order('name')
           .then(({ data }) => setOffices((data as any[]) || []));
       }
