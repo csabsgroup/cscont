@@ -30,11 +30,11 @@ function resolveVariables(template: string, office: any, csm: any, extra?: Recor
 }
 
 // ─── Action Handlers ─────────────────────────────────────────
-async function handleAction(supabase: any, action: any, office_id: string, office: any, assignedCsm: string | null, userId: string, csmProfile: any, dryRun = false) {
+async function handleAction(supabase: any, action: any, office_id: string, office: any, assignedCsm: string | null, userId: string, csmProfile: any, dryRun = false, extraVars?: Record<string, any>) {
   const c = action.config || {};
 
   // Resolve variables in text fields
-  const resolveText = (text: string) => resolveVariables(text, office, csmProfile);
+  const resolveText = (text: string) => resolveVariables(text, office, csmProfile, extraVars);
 
   switch (action.type) {
     case "create_activity": {
