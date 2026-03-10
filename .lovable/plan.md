@@ -1,63 +1,113 @@
 
 
-# Diagnosis and Fix Plan
+# Diagnóstico QA Completo da Plataforma
 
-## Root Causes Found
+## Problemas Identificados
 
-### Problem 1 — Webhook mapping not filling fields
-The webhook_logs table confirms the error: `"supabase.from(...).insert(...).catch is not a function"`. The last two webhooks (March 5 and March 6) both crashed with this error BEFORE reaching office creation. The `.catch()` fix was applied in code but the webhooks arrived before deployment completed. The mapping paths are correct, the company data exists at root level with all expected fields. This problem is already fixed in code — just needs a new webhook to test.
+### 1. `confirm()` nativo usado em vez de AlertDialog (Violação do padrão UI)
+**Severidade: Média** -- Inconsistência visual, experiência ruim em mobile
 
-### Problem 2 — Only 3 of 17 create_activity actions succeeded
-**This is the critical finding.** The `activity_type` database enum has these valid values:
-`task, follow_up, onboarding, renewal, other, ligacao, check_in, email, whatsapp, planejamento`
+O padrão do sistema exige `AlertDialog` para todas as confirmações de exclusão, mas 10+ locais ainda usam `confirm()` nativo:
 
-It does NOT include `"meeting"`. The automation rule "[ELT] Delegação automática" has 14 actions with `activity_type: "meeting"` — every one of those fails silently because the INSERT violates the enum constraint. The `handleAction` function doesn't capture the error from `supabase.from("activities").insert(...)`.
+| Arquivo | Linha |
+|---------|-------|
+| `src/components/atividades/ActivityPopup.tsx` | 64 |
+| `src/components/atividades/ActivityEditDrawer.tsx` | 180 |
+| `src/components/clientes/ClienteTimeline.tsx` | 244 |
+| `src/components/clientes/ClienteContatos.tsx` | 95 |
+| `src/components/configuracoes/HierarchyTab.tsx` | 94 |
+| `src/components/configuracoes/BonusCatalogTab.tsx` | 80 |
+| `src/components/configuracoes/FolderAccordion.tsx` | 102 |
+| `src/components/configuracoes/FormTemplatesTab.tsx` | 55 |
+| `src/components/configuracoes/PlaybooksTab.tsx` | 140 |
+| `src/pages/Configuracoes.tsx` (JourneyStagesTab) | 166-168 |
 
-Evidence: automation_logs shows 19 `actions_executed` entries, but only 3 `create_activity` have an `id` (the ones with type "task" or "email"). The other 14 have no `id` — they failed silently.
+**Correção**: Substituir todos por `AlertDialog` com estado controlado.
 
-### Problem 3 — Webhook doesn't trigger automations
-Same root cause as Problem 1 — the webhook crashed before reaching the automation invocation lines (419-430). Once the webhook stops crashing, automations will be invoked via `supabase.functions.invoke()`.
+---
 
-## Fixes
+### 2. Warning: Badge sem forwardRef no FormTemplatesTab
+**Severidade: Baixa** -- Warning no console, potencial quebra futura
 
-### Fix A — Add "meeting" to activity_type enum (database migration)
-```sql
-ALTER TYPE activity_type ADD VALUE IF NOT EXISTS 'meeting';
-```
-This is the correct fix because:
-- The automation builder UI offers "meeting" as an option
-- Users have configured rules with this type
-- 14 activities are waiting to be created with this type
+O componente `Badge` está recebendo ref no `FormTemplatesTab`, mas não suporta. Isso gera warnings repetidos no console.
 
-### Fix B — Add error handling in handleAction (execute-automations)
-In the `create_activity` case (line 46-47), capture and log the error:
-```javascript
-const { data: act, error: actErr } = await supabase.from("activities").insert(payload).select("id").single();
-if (actErr) {
-  console.error('[AUTOMATIONS] Activity insert error:', actErr.message, 'payload:', JSON.stringify(payload));
-  return { type: "create_activity", error: actErr.message };
-}
-```
-Apply similar error capture to ALL action types that do database inserts (send_notification, add_note, create_action_plan, etc.).
+**Correção**: Verificar se o Badge está sendo usado como child de componente que passa ref (ex: Tooltip). Provavelmente basta envolver o Badge em `<span>`.
 
-### Fix C — Ensure webhook deployment is current
-The piperun-webhook code already has the `.catch()` fix from the previous iteration. Verify the edge function redeploys by checking logs after saving. No code change needed — just confirmation.
+---
 
-### Fix D — Add company fallback in webhook (safety)
-In `piperun-webhook/index.ts` line 341, add fallback to `person.company`:
-```javascript
-let companyData = deal.company || deal.person?.company;
-```
-This handles edge cases where the Piperun payload structure varies.
+### 3. Dependência faltante no useMemo do Dashboard
+**Severidade: Média** -- Filtro de CSM pode não reagir corretamente
 
-## Files Modified
-- `supabase/functions/execute-automations/index.ts` — error handling in handleAction
-- `supabase/functions/piperun-webhook/index.ts` — company fallback
-- Database migration: add `meeting` to `activity_type` enum
+Em `src/pages/Dashboard.tsx` linha 113, o `filteredOffices` depende de `[offices, selectedCsms, selectedProductId]` mas usa `expandedCsmIds` (derivado de `selectedCsms`). Deveria depender de `expandedCsmIds` em vez de `selectedCsms`.
 
-## Expected Result After Fix
-- All 17 `create_activity` actions succeed (activities created with correct types)
-- Webhook creates office with all mapped fields populated
-- Webhook triggers automations that execute all 19 actions
-- automation_logs show complete execution with all action IDs
+**Correção**: Trocar `selectedCsms` por `expandedCsmIds` na lista de dependências.
+
+---
+
+### 4. JourneyStagesTab: exclusão sem confirmação
+**Severidade: Alta** -- Dados podem ser excluídos acidentalmente
+
+Em `Configuracoes.tsx` linha 166-168, `handleDelete` exclui a etapa de jornada diretamente sem nenhuma confirmação (nem `confirm()` nem `AlertDialog`).
+
+**Correção**: Adicionar AlertDialog antes da exclusão.
+
+---
+
+### 5. `.catch()` em builder de query Supabase
+**Severidade: Média** -- Pode causar TypeError em runtime
+
+Dois locais violam o padrão do projeto:
+- `src/pages/Cliente360.tsx` linha 169
+- `src/components/configuracoes/AutomationRulesTab.tsx` linha 550
+
+**Correção**: Substituir por `const { error } = await ...` pattern.
+
+---
+
+### 6. useEffect com dependência `[]` em componentes que dependem de sessão
+**Severidade: Baixa** -- Dados podem não recarregar se sessão mudar
+
+Arquivos como `FormTemplatesTab`, `Formularios`, `Financeiro` fazem fetch no mount com `[]` mas não reagem a mudanças de sessão/auth. Se o usuário trocar de conta sem reload, dados ficam stale.
+
+**Correção**: Baixa prioridade, mas idealmente depender de `session?.user?.id`.
+
+---
+
+### 7. Configuracoes.tsx é um arquivo monolítico de 883 linhas
+**Severidade: Baixa (manutenção)** -- Dificulta manutenção, mas funcional
+
+Contém `ProductsTab`, `JourneyStagesTab`, `UsersTab` inline. Não é um bug, mas é debt técnico.
+
+---
+
+## Plano de Correção (ordenado por impacto)
+
+### Fase 1 -- Bugs críticos
+1. **JourneyStagesTab**: Adicionar AlertDialog para exclusão de etapas
+2. **`.catch()` patterns**: Converter para `{ error }` pattern nos 2 arquivos
+
+### Fase 2 -- Consistência UI (confirm → AlertDialog)
+3. Substituir `confirm()` nativo por `AlertDialog` em todos os 10 componentes listados acima. Para cada um:
+   - Adicionar estado `deleteId` ou `showDeleteConfirm`
+   - Renderizar `AlertDialog` controlado
+   - Mover a lógica de delete para o callback do AlertDialog
+
+### Fase 3 -- Warnings e polish
+4. **Badge ref warning**: Envolver Badge em `<span>` no FormTemplatesTab onde necessário
+5. **Dashboard useMemo deps**: Corrigir dependência de `expandedCsmIds`
+
+### Arquivos afetados (total: ~14 arquivos)
+- `src/pages/Configuracoes.tsx` (JourneyStagesTab + exclusão)
+- `src/pages/Cliente360.tsx` (.catch pattern)
+- `src/pages/Dashboard.tsx` (useMemo deps)
+- `src/components/atividades/ActivityPopup.tsx`
+- `src/components/atividades/ActivityEditDrawer.tsx`
+- `src/components/clientes/ClienteTimeline.tsx`
+- `src/components/clientes/ClienteContatos.tsx`
+- `src/components/configuracoes/HierarchyTab.tsx`
+- `src/components/configuracoes/BonusCatalogTab.tsx`
+- `src/components/configuracoes/FolderAccordion.tsx`
+- `src/components/configuracoes/FormTemplatesTab.tsx`
+- `src/components/configuracoes/PlaybooksTab.tsx`
+- `src/components/configuracoes/AutomationRulesTab.tsx`
 
