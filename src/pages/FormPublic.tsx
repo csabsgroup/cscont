@@ -57,10 +57,24 @@ function evaluateCondition(rule: { field_id: string; operator: string; value: st
 }
 
 function isFieldVisible(field: FieldDef, formData: Record<string, any>): boolean {
-  if (!field.conditional_logic?.enabled || !field.conditional_logic.rules.length) return true;
+  if (!field.conditional_logic?.enabled || field.conditional_logic.routing_type === 'answer_routing') return true;
+  if (!field.conditional_logic.rules.length) return true;
   const { rules, logic_operator } = field.conditional_logic;
   const results = rules.map(r => evaluateCondition(r, formData));
   return logic_operator === 'and' ? results.every(Boolean) : results.some(Boolean);
+}
+
+function hasAnyRouting(fields: FieldDef[]): boolean {
+  return fields.some(f => f.conditional_logic?.enabled && f.conditional_logic.routing_type === 'answer_routing');
+}
+
+function getNextSectionFromRouting(field: FieldDef, formData: Record<string, any>): string | null {
+  if (!field.conditional_logic?.enabled || field.conditional_logic.routing_type !== 'answer_routing') return null;
+  const answer = formData[field.id];
+  const answerStr = answer === true ? 'Sim' : answer === false ? 'Não' : String(answer ?? '');
+  const route = (field.conditional_logic.routes || []).find(r => r.answer_value === answerStr);
+  if (route?.target_section_id) return route.target_section_id;
+  return field.conditional_logic.default_target_section_id || null;
 }
 
 export default function FormPublic() {
