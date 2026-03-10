@@ -24,11 +24,12 @@ interface Props {
   isSelected: boolean;
   onSelect: () => void;
   mappingTargets: { value: string; label: string }[];
+  onSectionChange?: (sectionId: string | null) => void;
 }
 
 export function FormItemCard({
   field, index, dragHandleProps, sections, allFields,
-  onUpdate, onDelete, onDuplicate, isSelected, onSelect, mappingTargets,
+  onUpdate, onDelete, onDuplicate, isSelected, onSelect, mappingTargets, onSectionChange,
 }: Props) {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -214,7 +215,11 @@ export function FormItemCard({
                   <Label className="text-xs">Obrigatório</Label>
                 </div>
                 {sections.length > 0 && (
-                  <Select value={field.section_id || '__none__'} onValueChange={v => onUpdate({ section_id: v === '__none__' ? null : v })}>
+                  <Select value={field.section_id || '__none__'} onValueChange={v => {
+                    const newSectionId = v === '__none__' ? null : v;
+                    onUpdate({ section_id: newSectionId });
+                    onSectionChange?.(newSectionId);
+                  }}>
                     <SelectTrigger className="h-7 text-xs w-36"><SelectValue placeholder="Seção" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__none__">Sem seção</SelectItem>

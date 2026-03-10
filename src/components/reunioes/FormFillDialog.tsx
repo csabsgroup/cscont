@@ -25,7 +25,6 @@ interface FormTemplate {
 interface OfficeOption {
   id: string;
   name: string;
-  external_id?: string | null;
   cnpj?: string | null;
   office_code?: string | null;
 }
@@ -99,7 +98,7 @@ export function FormFillDialog({ open, onOpenChange, officeId, meetingId, meetin
 
       // FIX: Load ALL offices, not just status='ativo'
       if (!officeId) {
-        supabase.from('offices').select('id, name, external_id, cnpj, office_code')
+        supabase.from('offices').select('id, name, cnpj, office_code')
           .order('name')
           .then(({ data }) => setOffices((data as any[]) || []));
       }
@@ -127,7 +126,6 @@ export function FormFillDialog({ open, onOpenChange, officeId, meetingId, meetin
     const q = officeSearch.toLowerCase();
     return offices.filter(o =>
       o.name?.toLowerCase().includes(q) ||
-      o.external_id?.toLowerCase().includes(q) ||
       o.cnpj?.toLowerCase().includes(q) ||
       o.office_code?.toLowerCase().includes(q)
     );
