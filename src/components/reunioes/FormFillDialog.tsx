@@ -28,6 +28,7 @@ interface OfficeOption {
   name: string;
   cnpj?: string | null;
   office_code?: string | null;
+  active_product_id?: string | null;
 }
 
 interface Props {
