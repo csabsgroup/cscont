@@ -37,6 +37,7 @@ export function FormItemCard({
   const hasGridConfig = ['multiple_choice_grid', 'checkbox_grid'].includes(field.type);
   const hasScaleConfig = field.type === 'linear_scale';
   const hasRatingConfig = field.type === 'rating';
+  const isNumericType = ['number', 'currency'].includes(field.type);
   const supportsRouting = ['multiple_choice', 'checkboxes', 'dropdown', 'multi_select', 'boolean', 'rating_5', 'rating_nps'].includes(field.type);
 
   const getFieldOptions = (): string[] => {
