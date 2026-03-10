@@ -239,7 +239,7 @@ export function ClienteHistorico({ officeId }: { officeId: string }) {
                 : 'bg-muted text-muted-foreground hover:bg-muted/80'
             )}
           >
-            {f.icon && <f.icon className="h-3 w-3" />}
+            {'icon' in f && f.icon && <f.icon className="h-3 w-3" />}
             {f.label}
           </button>
         ))}

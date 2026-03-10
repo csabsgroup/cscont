@@ -291,6 +291,7 @@ export default function Cliente360() {
 
   const tabs360 = [
     { key: 'visao360', label: 'Visão 360', icon: Eye },
+    { key: 'historico', label: 'Histórico', icon: Clock },
     { key: 'timeline', label: 'Atividades', icon: ClipboardList, count: activitiesCount },
     { key: 'arquivos', label: 'Arquivos', icon: Paperclip, count: filesCount },
     { key: 'contratos', label: 'Contratos', icon: FileText },
