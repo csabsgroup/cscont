@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, isToday, addMonths, subMonths } from 'date-fns';
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, isToday, addMonths, subMonths, isBefore } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -10,9 +10,17 @@ interface CalendarItem {
   id: string;
   title: string;
   date: Date;
+  endDate?: Date;
   type: 'event' | 'meeting';
   subtype?: string;
   location?: string;
+}
+
+type SpanPos = 'single' | 'start' | 'middle' | 'end';
+
+interface DayItem {
+  item: CalendarItem;
+  _pos: SpanPos;
 }
 
 interface Props {
@@ -32,18 +40,39 @@ export function PortalCalendar({ events }: Props) {
   }, [currentMonth]);
 
   const eventsByDay = useMemo(() => {
-    const map = new Map<string, CalendarItem[]>();
-    events.forEach(ev => {
-      const key = format(ev.date, 'yyyy-MM-dd');
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(ev);
+    const map = new Map<string, DayItem[]>();
+    events.forEach(item => {
+      const startDate = item.date;
+      const endDate = item.endDate;
+
+      if (!endDate || isSameDay(startDate, endDate) || isBefore(endDate, startDate)) {
+        const key = format(startDate, 'yyyy-MM-dd');
+        if (!map.has(key)) map.set(key, []);
+        map.get(key)!.push({ item, _pos: 'single' });
+      } else {
+        const interval = eachDayOfInterval({ start: startDate, end: endDate });
+        interval.forEach((day, idx) => {
+          const pos: SpanPos = idx === 0 ? 'start' : idx === interval.length - 1 ? 'end' : 'middle';
+          const key = format(day, 'yyyy-MM-dd');
+          if (!map.has(key)) map.set(key, []);
+          map.get(key)!.push({ item, _pos: pos });
+        });
+      }
     });
     return map;
   }, [events]);
 
-  const selectedDayItems = selectedDay
-    ? eventsByDay.get(format(selectedDay, 'yyyy-MM-dd')) || []
-    : [];
+  const selectedDayItems = useMemo(() => {
+    if (!selectedDay) return [];
+    const dayItems = eventsByDay.get(format(selectedDay, 'yyyy-MM-dd')) || [];
+    // Deduplicate by id (multi-day events appear multiple times)
+    const seen = new Set<string>();
+    return dayItems.filter(({ item }) => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    }).map(d => d.item);
+  }, [selectedDay, eventsByDay]);
 
   const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
@@ -93,17 +122,25 @@ export function PortalCalendar({ events }: Props) {
                 {format(day, 'd')}
               </span>
               <div className="mt-0.5 space-y-0.5">
-                {dayEvents.slice(0, 2).map(ev => (
-                  <div
-                    key={ev.id}
-                    className={cn(
-                      'truncate rounded px-1 text-[10px] leading-tight',
-                      ev.type === 'event' ? 'bg-primary/10 text-primary' : 'bg-blue-500/10 text-blue-600',
-                    )}
-                  >
-                    {ev.title}
-                  </div>
-                ))}
+                {dayEvents.slice(0, 2).map(({ item, _pos }) => {
+                  const baseColor = item.type === 'event' ? 'bg-primary/10 text-primary' : 'bg-blue-500/10 text-blue-600';
+
+                  return (
+                    <div
+                      key={`${item.id}-${_pos}`}
+                      className={cn(
+                        'truncate px-1 text-[10px] leading-tight',
+                        baseColor,
+                        _pos === 'single' && 'rounded',
+                        _pos === 'start' && 'rounded-l -mr-1',
+                        _pos === 'middle' && 'rounded-none -mx-1',
+                        _pos === 'end' && 'rounded-r -ml-1',
+                      )}
+                    >
+                      {(_pos === 'single' || _pos === 'start') ? item.title : '\u00A0'}
+                    </div>
+                  );
+                })}
                 {dayEvents.length > 2 && (
                   <span className="text-[10px] text-muted-foreground px-1">+{dayEvents.length - 2}</span>
                 )}
@@ -134,6 +171,7 @@ export function PortalCalendar({ events }: Props) {
                     <p className="text-sm font-medium truncate">{item.title}</p>
                     <p className="text-xs text-muted-foreground">
                       {format(item.date, 'HH:mm')}
+                      {item.endDate && ` — ${format(item.endDate, 'dd/MM HH:mm')}`}
                       {item.subtype && ` · ${item.subtype}`}
                       {item.location && ` · 📍 ${item.location}`}
                     </p>

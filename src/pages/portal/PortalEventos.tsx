@@ -93,6 +93,7 @@ export default function PortalEventos() {
   const calendarItems = [
     ...events.map(ev => ({
       id: ev.id, title: ev.title, date: new Date(ev.event_date),
+      endDate: ev.end_date ? new Date(ev.end_date) : undefined,
       type: 'event' as const, subtype: ev.type === 'online' ? 'Online' : 'Presencial',
       location: ev.location || undefined,
     })),
