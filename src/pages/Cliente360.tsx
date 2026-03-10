@@ -385,6 +385,10 @@ export default function Cliente360() {
         />
       )}
 
+      {activeTab === 'historico' && (
+        <Card className="p-6"><ClienteHistorico officeId={office.id} /></Card>
+      )}
+
       {activeTab === 'timeline' && (
         <div className="space-y-4">
           <ActivityCounterBadges counts={activityCounts} />
