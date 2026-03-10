@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -32,6 +32,9 @@ interface FieldDef {
     rules: { field_id: string; operator: string; value: string }[];
     action: 'show' | 'skip_to_section';
     target_section_id: string | null;
+    routing_type?: 'answer_routing';
+    routes?: { answer_value: string; target_section_id: string }[];
+    default_target_section_id?: string | null;
   };
   controls_meeting_date?: boolean;
 }
@@ -88,10 +91,24 @@ function evaluateCondition(
 }
 
 function isFieldVisible(field: FieldDef, formData: Record<string, any>): boolean {
-  if (!field.conditional_logic?.enabled || !field.conditional_logic.rules.length) return true;
+  if (!field.conditional_logic?.enabled || field.conditional_logic.routing_type === 'answer_routing') return true;
+  if (!field.conditional_logic.rules.length) return true;
   const { rules, logic_operator } = field.conditional_logic;
   const results = rules.map(r => evaluateCondition(r, formData));
   return logic_operator === 'and' ? results.every(Boolean) : results.some(Boolean);
+}
+
+function hasAnyRouting(fields: FieldDef[]): boolean {
+  return fields.some(f => f.conditional_logic?.enabled && f.conditional_logic.routing_type === 'answer_routing');
+}
+
+function getNextSectionFromRouting(field: FieldDef, formData: Record<string, any>): string | null {
+  if (!field.conditional_logic?.enabled || field.conditional_logic.routing_type !== 'answer_routing') return null;
+  const answer = formData[field.id];
+  const answerStr = answer === true ? 'Sim' : answer === false ? 'Não' : String(answer ?? '');
+  const route = (field.conditional_logic.routes || []).find(r => r.answer_value === answerStr);
+  if (route?.target_section_id) return route.target_section_id;
+  return field.conditional_logic.default_target_section_id || null;
 }
 
 export function FormFillDialog({ open, onOpenChange, officeId, meetingId, meetingType, meetingDate, templateId, onSubmitted }: Props) {
@@ -396,6 +413,37 @@ export function FormFillDialog({ open, onOpenChange, officeId, meetingId, meetin
     }
   };
 
+  const useRouting = useMemo(() => sections.length > 0 && hasAnyRouting(fields), [sections, fields]);
+  const [currentSectionIdx, setCurrentSectionIdx] = useState(0);
+  const [sectionHistory, setSectionHistory] = useState<number[]>([0]);
+
+  const sortedSections = useMemo(() => [...sections].sort((a, b) => a.order - b.order), [sections]);
+
+  const getVisibleSectionIds = useCallback((): string[] => {
+    if (!useRouting) return sortedSections.map(s => s.id);
+    const visited: string[] = [];
+    let currentId = sortedSections[0]?.id;
+    const maxIter = sortedSections.length + 1;
+    let iter = 0;
+    while (currentId && iter < maxIter) {
+      visited.push(currentId);
+      const sectionFields = fields.filter(f => f.section_id === currentId);
+      let nextId: string | null = null;
+      for (const f of sectionFields) {
+        const target = getNextSectionFromRouting(f, formData);
+        if (target === '__end__') return visited;
+        if (target) { nextId = target; break; }
+      }
+      if (nextId) { currentId = nextId; }
+      else {
+        const idx = sortedSections.findIndex(s => s.id === currentId);
+        currentId = sortedSections[idx + 1]?.id || '';
+      }
+      iter++;
+    }
+    return visited;
+  }, [useRouting, sortedSections, fields, formData]);
+
   const renderFields = () => {
     if (sections.length === 0) {
       return visibleFields.map(field => (
@@ -407,11 +455,14 @@ export function FormFillDialog({ open, onOpenChange, officeId, meetingId, meetin
       ));
     }
 
+    const visibleSectionIds = getVisibleSectionIds();
     const unsectioned = visibleFields.filter(f => !f.section_id);
-    const sectionGroups = sections.map(s => ({
-      section: s,
-      fields: visibleFields.filter(f => f.section_id === s.id),
-    }));
+    const sectionGroups = sortedSections
+      .filter(s => visibleSectionIds.includes(s.id))
+      .map(s => ({
+        section: s,
+        fields: visibleFields.filter(f => f.section_id === s.id),
+      }));
 
     return (
       <>

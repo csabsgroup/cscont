@@ -32,6 +32,9 @@ interface FieldDef {
     rules: { field_id: string; operator: string; value: string }[];
     action: 'show' | 'skip_to_section';
     target_section_id: string | null;
+    routing_type?: 'answer_routing';
+    routes?: { answer_value: string; target_section_id: string }[];
+    default_target_section_id?: string | null;
   };
 }
 
@@ -54,10 +57,24 @@ function evaluateCondition(rule: { field_id: string; operator: string; value: st
 }
 
 function isFieldVisible(field: FieldDef, formData: Record<string, any>): boolean {
-  if (!field.conditional_logic?.enabled || !field.conditional_logic.rules.length) return true;
+  if (!field.conditional_logic?.enabled || field.conditional_logic.routing_type === 'answer_routing') return true;
+  if (!field.conditional_logic.rules.length) return true;
   const { rules, logic_operator } = field.conditional_logic;
   const results = rules.map(r => evaluateCondition(r, formData));
   return logic_operator === 'and' ? results.every(Boolean) : results.some(Boolean);
+}
+
+function hasAnyRouting(fields: FieldDef[]): boolean {
+  return fields.some(f => f.conditional_logic?.enabled && f.conditional_logic.routing_type === 'answer_routing');
+}
+
+function getNextSectionFromRouting(field: FieldDef, formData: Record<string, any>): string | null {
+  if (!field.conditional_logic?.enabled || field.conditional_logic.routing_type !== 'answer_routing') return null;
+  const answer = formData[field.id];
+  const answerStr = answer === true ? 'Sim' : answer === false ? 'Não' : String(answer ?? '');
+  const route = (field.conditional_logic.routes || []).find(r => r.answer_value === answerStr);
+  if (route?.target_section_id) return route.target_section_id;
+  return field.conditional_logic.default_target_section_id || null;
 }
 
 export default function FormPublic() {
@@ -71,7 +88,8 @@ export default function FormPublic() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
-
+  const [currentSectionIdx, setCurrentSectionIdx] = useState(0);
+  const [sectionHistory, setSectionHistory] = useState<number[]>([0]);
   useEffect(() => {
     if (!formHash) { setError('Link inválido'); setLoading(false); return; }
 
@@ -97,6 +115,7 @@ export default function FormPublic() {
   }, [template]);
 
   const visibleFields = useMemo(() => fields.filter(f => isFieldVisible(f, formData)), [fields, formData]);
+  const useRouting = useMemo(() => sections.length > 0 && hasAnyRouting(fields), [sections, fields]);
 
   const setValue = (fieldId: string, value: any) => {
     setFormData(prev => ({ ...prev, [fieldId]: value }));
@@ -278,13 +297,64 @@ export default function FormPublic() {
             {template?.description && <p className="text-sm text-muted-foreground">{template.description}</p>}
           </CardHeader>
           <CardContent className="space-y-4">
-            {visibleFields.map(field => (
-              <div key={field.id} className="space-y-2">
-                <Label>{field.label}{field.required && ' *'}</Label>
-                {field.description && <p className="text-xs text-muted-foreground">{field.description}</p>}
-                {renderField(field)}
-              </div>
-            ))}
+            {(() => {
+              if (sections.length === 0 || !useRouting) {
+                return visibleFields.map(field => (
+                  <div key={field.id} className="space-y-2">
+                    <Label>{field.label}{field.required && ' *'}</Label>
+                    {field.description && <p className="text-xs text-muted-foreground">{field.description}</p>}
+                    {renderField(field)}
+                  </div>
+                ));
+              }
+              // Section-based rendering with routing
+              const sortedSecs = [...sections].sort((a, b) => a.order - b.order);
+              const visitedIds: string[] = [];
+              let curId = sortedSecs[0]?.id;
+              let iter = 0;
+              while (curId && iter < sortedSecs.length + 1) {
+                visitedIds.push(curId);
+                const secFields = fields.filter(f => f.section_id === curId);
+                let nextId: string | null = null;
+                for (const f of secFields) {
+                  const t = getNextSectionFromRouting(f, formData);
+                  if (t === '__end__') { curId = ''; break; }
+                  if (t) { nextId = t; break; }
+                }
+                if (!curId) break;
+                if (nextId) curId = nextId;
+                else { const i = sortedSecs.findIndex(s => s.id === curId); curId = sortedSecs[i+1]?.id || ''; }
+                iter++;
+              }
+              const unsectioned = visibleFields.filter(f => !f.section_id);
+              return (
+                <>
+                  {unsectioned.map(field => (
+                    <div key={field.id} className="space-y-2">
+                      <Label>{field.label}{field.required && ' *'}</Label>
+                      {field.description && <p className="text-xs text-muted-foreground">{field.description}</p>}
+                      {renderField(field)}
+                    </div>
+                  ))}
+                  {sortedSecs.filter(s => visitedIds.includes(s.id)).map(sec => {
+                    const secFields = visibleFields.filter(f => f.section_id === sec.id);
+                    if (secFields.length === 0) return null;
+                    return (
+                      <div key={sec.id} className="space-y-3">
+                        <div className="border-b pb-1 pt-2"><h3 className="text-sm font-semibold">{sec.title}</h3></div>
+                        {secFields.map(field => (
+                          <div key={field.id} className="space-y-2">
+                            <Label>{field.label}{field.required && ' *'}</Label>
+                            {field.description && <p className="text-xs text-muted-foreground">{field.description}</p>}
+                            {renderField(field)}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </>
+              );
+            })()}
             <Button onClick={handleSubmit} className="w-full" disabled={submitting}>
               {submitting ? 'Enviando...' : 'Enviar'}
             </Button>

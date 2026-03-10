@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import { Progress } from '@/components/ui/progress';
-import { Loader2, Trash2, RotateCcw, CheckCircle2, Save, Plus, X } from 'lucide-react';
+import { Loader2, Trash2, RotateCcw, CheckCircle2, XCircle, Save, Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 
@@ -54,6 +54,7 @@ export function ActivityEditDrawer({ activityId, isOpen, onClose, onSave, readOn
   // Complete sub-dialog
   const [completeOpen, setCompleteOpen] = useState(false);
   const [completeObs, setCompleteObs] = useState('');
+  const [completeOutcome, setCompleteOutcome] = useState<'success' | 'no_show'>('success');
 
   const fetchData = useCallback(async () => {
     if (!activityId) return;
@@ -119,7 +120,8 @@ export function ActivityEditDrawer({ activityId, isOpen, onClose, onSave, readOn
     await supabase.from('activities').update({
       completed_at: completedAt,
       observations: completeObs,
-    }).eq('id', activityId!);
+      completion_outcome: completeOutcome,
+    } as any).eq('id', activityId!);
 
     // Fire automation trigger for activity completion
     if (activity?.office_id) {
@@ -135,6 +137,7 @@ export function ActivityEditDrawer({ activityId, isOpen, onClose, onSave, readOn
               activity_id: activity.id,
               activity_name: activity.title,
               activity_type: activity.type,
+              completion_outcome: completeOutcome,
               was_late: !!wasLate,
               days_late: daysLate,
               completed_by: activity.user_id,
@@ -157,7 +160,7 @@ export function ActivityEditDrawer({ activityId, isOpen, onClose, onSave, readOn
       }
     }
 
-    toast.success('Atividade concluída!');
+    toast.success(completeOutcome === 'success' ? 'Atividade concluída!' : 'Atividade concluída sem êxito.');
     setSaving(false);
     setCompleteOpen(false);
     onSave();
@@ -166,7 +169,7 @@ export function ActivityEditDrawer({ activityId, isOpen, onClose, onSave, readOn
 
   const handleReopen = async () => {
     setSaving(true);
-    await supabase.from('activities').update({ completed_at: null }).eq('id', activityId!);
+    await supabase.from('activities').update({ completed_at: null, completion_outcome: null } as any).eq('id', activityId!);
     toast.success('Atividade reaberta!');
     setSaving(false);
     onSave();
@@ -213,6 +216,9 @@ export function ActivityEditDrawer({ activityId, isOpen, onClose, onSave, readOn
 
   const getUserName = (uid: string) => users.find(u => u.id === uid)?.full_name || uid.slice(0, 8);
 
+  const outcomeLabel = activity?.completion_outcome === 'no_show' ? 'Sem êxito' : activity?.completed_at ? 'Concluída' : 'Pendente';
+  const outcomeVariant = activity?.completion_outcome === 'no_show' ? 'destructive' : activity?.completed_at ? 'default' : 'outline';
+
   return (
     <>
       <Sheet open={isOpen} onOpenChange={o => !o && onClose()}>
@@ -254,8 +260,10 @@ export function ActivityEditDrawer({ activityId, isOpen, onClose, onSave, readOn
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label>Status</Label>
-                  <Badge variant={activity.completed_at ? 'default' : 'outline'} className="text-sm">
-                    {activity.completed_at ? 'Concluída' : 'Pendente'}
+                  <Badge variant={outcomeVariant as any} className="text-sm">
+                    {activity.completion_outcome === 'no_show' && <XCircle className="h-3.5 w-3.5 mr-1" />}
+                    {activity.completed_at && activity.completion_outcome !== 'no_show' && <CheckCircle2 className="h-3.5 w-3.5 mr-1" />}
+                    {outcomeLabel}
                   </Badge>
                 </div>
                 <div className="space-y-1.5">
@@ -394,10 +402,16 @@ export function ActivityEditDrawer({ activityId, isOpen, onClose, onSave, readOn
                     <RotateCcw className="mr-1 h-4 w-4" />Reabrir
                   </Button>
                 ) : (
-                  <Button variant="outline" size="sm" className="text-green-600 border-green-600 hover:bg-green-50 dark:hover:bg-green-900/20"
-                    onClick={() => { setCompleteObs(''); setCompleteOpen(true); }} disabled={saving}>
-                    <CheckCircle2 className="mr-1 h-4 w-4" />Concluir
-                  </Button>
+                  <>
+                    <Button variant="outline" size="sm" className="text-destructive border-destructive/50 hover:bg-destructive/10"
+                      onClick={() => { setCompleteObs(''); setCompleteOutcome('no_show'); setCompleteOpen(true); }} disabled={saving}>
+                      <XCircle className="mr-1 h-4 w-4" />Sem êxito
+                    </Button>
+                    <Button variant="outline" size="sm" className="text-green-600 border-green-600 hover:bg-green-50 dark:hover:bg-green-900/20"
+                      onClick={() => { setCompleteObs(''); setCompleteOutcome('success'); setCompleteOpen(true); }} disabled={saving}>
+                      <CheckCircle2 className="mr-1 h-4 w-4" />Concluir
+                    </Button>
+                  </>
                 )}
                 <Button size="sm" onClick={handleSave} disabled={saving}>
                   {saving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Save className="mr-1 h-4 w-4" />}
@@ -412,15 +426,28 @@ export function ActivityEditDrawer({ activityId, isOpen, onClose, onSave, readOn
       {/* Complete sub-dialog */}
       <Dialog open={completeOpen} onOpenChange={setCompleteOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Concluir Atividade</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>
+              {completeOutcome === 'success' ? '✅ Concluir Atividade' : '❌ Concluir sem Êxito'}
+            </DialogTitle>
+          </DialogHeader>
           <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">Informe as observações para concluir "{activity?.title}".</p>
+            <p className="text-sm text-muted-foreground">
+              {completeOutcome === 'success'
+                ? `Informe as observações para concluir "${activity?.title}".`
+                : `Informe as observações sobre "${activity?.title}" (no-show, cancelamento, etc).`
+              }
+            </p>
             <Textarea placeholder="Observações obrigatórias..." value={completeObs} onChange={e => setCompleteObs(e.target.value)} rows={4} />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCompleteOpen(false)}>Cancelar</Button>
-            <Button onClick={handleComplete} disabled={saving || !completeObs.trim()}>
-              {saving ? 'Concluindo...' : 'Concluir'}
+            <Button
+              onClick={handleComplete}
+              disabled={saving || !completeObs.trim()}
+              variant={completeOutcome === 'no_show' ? 'destructive' : 'default'}
+            >
+              {saving ? 'Concluindo...' : completeOutcome === 'success' ? 'Concluir' : 'Registrar sem êxito'}
             </Button>
           </DialogFooter>
         </DialogContent>
