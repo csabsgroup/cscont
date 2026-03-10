@@ -131,6 +131,10 @@ interface ConditionalLogic {
   rules: ConditionalRule[];
   action: 'show' | 'skip_to_section';
   target_section_id: string | null;
+  // Typeform-style answer routing
+  routing_type?: 'answer_routing';
+  routes?: { answer_value: string; target_section_id: string }[];
+  default_target_section_id?: string | null;
 }
 
 interface HeaderMapping {
