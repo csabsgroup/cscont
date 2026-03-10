@@ -202,6 +202,13 @@ export default function Cliente360() {
     const timestamp = format(new Date(), "dd/MM/yyyy HH:mm");
     const updated = `[${timestamp}] ${quickNoteText.trim()}\n\n${current}`;
     await supabase.from('offices').update({ notes: updated }).eq('id', id!);
+    // Log timeline event
+    await supabase.from('office_timeline_events' as any).insert({
+      office_id: id!, event_type: 'note_added',
+      title: 'Nota adicionada',
+      description: quickNoteText.trim().substring(0, 200),
+      created_by: user?.id,
+    });
     toast.success('Nota adicionada!');
     setActionSaving(false); setShowQuickNote(false); setQuickNoteText(''); fetchAll();
   };
