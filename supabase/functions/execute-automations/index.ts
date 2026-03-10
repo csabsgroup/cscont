@@ -78,19 +78,39 @@ async function handleAction(supabase: any, action: any, office_id: string, offic
     }
 
     case "send_notification": {
-      const recipientId = c.recipient === "csm" ? assignedCsm : userId;
-      if (recipientId && !dryRun) {
-        const { error: notifErr } = await supabase.from("notifications").insert({
-          user_id: recipientId,
-          title: resolveText(c.title || "Notificação automática"),
-          message: resolveText(c.message || ""),
+      if (!dryRun) {
+        const notifTitle = resolveText(c.title || "Notificação automática");
+        const notifMessage = resolveText(c.message || "");
+        const notifPayload = (uid: string) => ({
+          user_id: uid,
+          title: notifTitle,
+          message: notifMessage,
           type: "info",
           entity_type: "office",
           entity_id: office_id,
         });
-        if (notifErr) {
-          console.error('[AUTOMATIONS] Notification insert error:', notifErr.message);
-          return { type: "send_notification", error: notifErr.message };
+
+        if (c.recipient === "all_admins" || c.recipient === "admin") {
+          // Send to all admins
+          const { data: adminRoles } = await supabase.from("user_roles").select("user_id").eq("role", "admin");
+          const adminIds = (adminRoles || []).map((r: any) => r.user_id);
+          if (adminIds.length > 0) {
+            const { error: notifErr } = await supabase.from("notifications").insert(adminIds.map(notifPayload));
+            if (notifErr) {
+              console.error('[AUTOMATIONS] Notification insert error:', notifErr.message);
+              return { type: "send_notification", error: notifErr.message };
+            }
+          }
+        } else {
+          // Default: send to CSM
+          const recipientId = assignedCsm || userId;
+          if (recipientId) {
+            const { error: notifErr } = await supabase.from("notifications").insert(notifPayload(recipientId));
+            if (notifErr) {
+              console.error('[AUTOMATIONS] Notification insert error:', notifErr.message);
+              return { type: "send_notification", error: notifErr.message };
+            }
+          }
         }
       }
       return { type: "send_notification" };
