@@ -18,6 +18,7 @@ import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { toast } from 'sonner';
 import { EventCard } from '@/components/eventos/EventCard';
 import { EventCalendarView } from '@/components/eventos/EventCalendarView';
+import { EventYearView } from '@/components/eventos/EventYearView';
 
 const CATEGORIES = [
   { value: 'encontro', label: 'Encontro' },
