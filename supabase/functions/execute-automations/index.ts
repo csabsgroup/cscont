@@ -750,7 +750,12 @@ async function executeV2Rules(supabase: any, triggerType: string, office_id: str
       for (const action of actions) {
         try {
           console.log(`[AUTOMATIONS] Executing action: ${action.type} ${JSON.stringify(action.config)?.substring(0, 150)}`);
-          const result = await handleAction(supabase, action, office_id, office, assignedCsm, userId, csmProfile, dryRun);
+          const extraVars = {
+            main_contact_name: mainContact?.name || '',
+            main_contact_email: mainContact?.email || '',
+            main_contact_phone: mainContact?.whatsapp || mainContact?.phone || '',
+          };
+          const result = await handleAction(supabase, action, office_id, office, assignedCsm, userId, csmProfile, dryRun, extraVars);
           actionResults.push(result);
           console.log(`[AUTOMATIONS] Action SUCCESS: ${action.type}`);
         } catch (actionErr: any) {
