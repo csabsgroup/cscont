@@ -148,6 +148,17 @@ export function ClienteBonus({ officeId }: { officeId: string }) {
     if (error) toast.error('Erro: ' + error.message);
     else {
       toast.success(status === 'approved' ? 'Aprovado e debitado!' : 'Negado!');
+
+      // Log timeline event
+      const itemName = request?.bonus_catalog?.name || 'Item';
+      await supabase.from('office_timeline_events' as any).insert({
+        office_id: officeId,
+        event_type: status === 'approved' ? 'bonus_grant' : 'field_change',
+        title: status === 'approved' ? `Cashback aprovado` : `Cashback negado`,
+        description: `${request?.quantity}x ${itemName}`,
+        created_by: session?.user?.id,
+      });
+
       if (status === 'approved') {
         try {
           await supabase.functions.invoke('execute-automations', {
