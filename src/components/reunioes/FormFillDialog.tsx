@@ -413,6 +413,37 @@ export function FormFillDialog({ open, onOpenChange, officeId, meetingId, meetin
     }
   };
 
+  const useRouting = useMemo(() => sections.length > 0 && hasAnyRouting(fields), [sections, fields]);
+  const [currentSectionIdx, setCurrentSectionIdx] = useState(0);
+  const [sectionHistory, setSectionHistory] = useState<number[]>([0]);
+
+  const sortedSections = useMemo(() => [...sections].sort((a, b) => a.order - b.order), [sections]);
+
+  const getVisibleSectionIds = useCallback((): string[] => {
+    if (!useRouting) return sortedSections.map(s => s.id);
+    const visited: string[] = [];
+    let currentId = sortedSections[0]?.id;
+    const maxIter = sortedSections.length + 1;
+    let iter = 0;
+    while (currentId && iter < maxIter) {
+      visited.push(currentId);
+      const sectionFields = fields.filter(f => f.section_id === currentId);
+      let nextId: string | null = null;
+      for (const f of sectionFields) {
+        const target = getNextSectionFromRouting(f, formData);
+        if (target === '__end__') return visited;
+        if (target) { nextId = target; break; }
+      }
+      if (nextId) { currentId = nextId; }
+      else {
+        const idx = sortedSections.findIndex(s => s.id === currentId);
+        currentId = sortedSections[idx + 1]?.id || '';
+      }
+      iter++;
+    }
+    return visited;
+  }, [useRouting, sortedSections, fields, formData]);
+
   const renderFields = () => {
     if (sections.length === 0) {
       return visibleFields.map(field => (
@@ -424,11 +455,14 @@ export function FormFillDialog({ open, onOpenChange, officeId, meetingId, meetin
       ));
     }
 
+    const visibleSectionIds = getVisibleSectionIds();
     const unsectioned = visibleFields.filter(f => !f.section_id);
-    const sectionGroups = sections.map(s => ({
-      section: s,
-      fields: visibleFields.filter(f => f.section_id === s.id),
-    }));
+    const sectionGroups = sortedSections
+      .filter(s => visibleSectionIds.includes(s.id))
+      .map(s => ({
+        section: s,
+        fields: visibleFields.filter(f => f.section_id === s.id),
+      }));
 
     return (
       <>
