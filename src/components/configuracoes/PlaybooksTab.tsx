@@ -13,6 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Plus, Loader2, Trash2, Edit2, GripVertical, Copy, MoreHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
+import { ConfirmDeleteDialog } from '@/components/shared/ConfirmDeleteDialog';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { FolderAccordion, useFolders, MoveToFolderMenu, type Folder } from './FolderAccordion';
 
@@ -136,10 +137,12 @@ export function PlaybooksTab() {
     setSaving(false); setEditorOpen(false); fetchAll();
   };
 
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
   const handleDelete = async (id: string) => {
-    if (!confirm('Excluir este playbook?')) return;
     await supabase.from('playbook_templates' as any).delete().eq('id', id);
     toast.success('Playbook excluído'); fetchAll();
+    setDeleteId(null);
   };
 
   const handleDuplicate = (pb: Playbook) => {
@@ -219,7 +222,7 @@ export function PlaybooksTab() {
           <DropdownMenuItem onClick={() => handleDuplicate(pb)}>
             <Copy className="mr-2 h-3 w-3" />Duplicar
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => handleDelete(pb.id)} className="text-destructive">
+          <DropdownMenuItem onClick={() => setDeleteId(pb.id)} className="text-destructive">
             <Trash2 className="mr-2 h-3 w-3" />Excluir
           </DropdownMenuItem>
           <MoveToFolderMenu
@@ -356,6 +359,7 @@ export function PlaybooksTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ConfirmDeleteDialog open={!!deleteId} onOpenChange={o => !o && setDeleteId(null)} onConfirm={() => deleteId && handleDelete(deleteId)} title="Excluir playbook" description="Tem certeza que deseja excluir este playbook?" />
     </div>
   );
 }

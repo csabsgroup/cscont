@@ -39,6 +39,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Plus, Loader2, Trash2, Edit2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { ConfirmDeleteDialog } from '@/components/shared/ConfirmDeleteDialog';
 
 // ─── Products Tab ────────────────────────────────────────────
 function ProductsTab() {
@@ -133,6 +134,7 @@ function JourneyStagesTab() {
   const [slaDays, setSlaDays] = useState('');
   const [position, setPosition] = useState('');
   const [saving, setSaving] = useState(false);
+  const [deleteStageId, setDeleteStageId] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.from('products').select('id, name').eq('is_active', true).order('name')
@@ -166,6 +168,7 @@ function JourneyStagesTab() {
   const handleDelete = async (id: string) => {
     const { error } = await supabase.from('journey_stages').delete().eq('id', id);
     if (error) toast.error('Erro: ' + error.message); else { toast.success('Etapa removida!'); fetchStages(); }
+    setDeleteStageId(null);
   };
 
   return (
@@ -193,7 +196,7 @@ function JourneyStagesTab() {
                   <TableCell>
                     <div className="flex gap-1">
                       <Button size="sm" variant="ghost" onClick={() => openEdit(s)}><Edit2 className="h-4 w-4" /></Button>
-                      <Button size="sm" variant="ghost" onClick={() => handleDelete(s.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                      <Button size="sm" variant="ghost" onClick={() => setDeleteStageId(s.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -216,6 +219,7 @@ function JourneyStagesTab() {
           </form>
         </DialogContent>
       </Dialog>
+      <ConfirmDeleteDialog open={!!deleteStageId} onOpenChange={o => !o && setDeleteStageId(null)} onConfirm={() => deleteStageId && handleDelete(deleteStageId)} title="Excluir etapa" description="Tem certeza que deseja excluir esta etapa de jornada?" />
     </div>
   );
 }

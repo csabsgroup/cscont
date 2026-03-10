@@ -19,6 +19,7 @@ import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { Constants } from '@/integrations/supabase/types';
+import { ConfirmDeleteDialog } from '@/components/shared/ConfirmDeleteDialog';
 
 interface Props { officeId: string; readOnly?: boolean; }
 
@@ -51,6 +52,9 @@ export function ClienteTimeline({ officeId, readOnly = false }: Props) {
   // Complete dialog (requires observations)
   const [completeItem, setCompleteItem] = useState<any>(null);
   const [completeObs, setCompleteObs] = useState('');
+
+  // Delete confirmation
+  const [deleteTarget, setDeleteTarget] = useState<{ type: string; id: string } | null>(null);
 
   // New activity dialog
   const [showNewActivity, setShowNewActivity] = useState(false);
@@ -241,10 +245,10 @@ export function ClienteTimeline({ officeId, readOnly = false }: Props) {
   };
 
   const handleDelete = async (type: string, id: string) => {
-    if (!window.confirm(`Deseja realmente excluir ${type === 'activity' ? 'esta atividade' : 'esta reunião'}?`)) return;
     if (type === 'activity') await supabase.from('activities').delete().eq('id', id);
     else await supabase.from('meetings').delete().eq('id', id);
     toast.success('Removido!'); fetchData(); setDetailItem(null);
+    setDeleteTarget(null);
   };
 
   const saveNewActivity = async () => {
@@ -411,7 +415,7 @@ export function ClienteTimeline({ officeId, readOnly = false }: Props) {
                               ) : (
                                 <DropdownMenuItem onClick={() => { setCompleteItem(act); setCompleteObs(''); }}><CheckCircle2 className="mr-2 h-4 w-4" />Concluir</DropdownMenuItem>
                               )}
-                              <DropdownMenuItem className="text-destructive" onClick={() => handleDelete('activity', act.id)}><Trash2 className="mr-2 h-4 w-4" />Excluir</DropdownMenuItem>
+                              <DropdownMenuItem className="text-destructive" onClick={() => setDeleteTarget({ type: 'activity', id: act.id })}><Trash2 className="mr-2 h-4 w-4" />Excluir</DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         )}
@@ -457,7 +461,7 @@ export function ClienteTimeline({ officeId, readOnly = false }: Props) {
                   ) : (
                     <DropdownMenuItem onClick={() => handleComplete(item as any)}><CheckCircle2 className="mr-2 h-4 w-4" />Concluir</DropdownMenuItem>
                   )}
-                  <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(item.type, d.id)}><Trash2 className="mr-2 h-4 w-4" />Excluir</DropdownMenuItem>
+                  <DropdownMenuItem className="text-destructive" onClick={() => setDeleteTarget({ type: item.type, id: d.id })}><Trash2 className="mr-2 h-4 w-4" />Excluir</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
@@ -522,7 +526,7 @@ export function ClienteTimeline({ officeId, readOnly = false }: Props) {
                       <RotateCcw className="mr-1 h-4 w-4" />Reabrir
                     </Button>
                   )}
-                  <Button size="sm" variant="destructive" onClick={() => handleDelete(detailItem.type, detailItem.data.id)}>
+                  <Button size="sm" variant="destructive" onClick={() => setDeleteTarget({ type: detailItem.type, id: detailItem.data.id })}>
                     <Trash2 className="mr-1 h-4 w-4" />Excluir
                   </Button>
                 </DialogFooter>
@@ -652,6 +656,7 @@ export function ClienteTimeline({ officeId, readOnly = false }: Props) {
 
       {/* Activity Edit Drawer */}
       <ActivityEditDrawer activityId={editActivityId} isOpen={!!editActivityId} onClose={() => setEditActivityId(null)} onSave={fetchData} readOnly={readOnly} />
+      <ConfirmDeleteDialog open={!!deleteTarget} onOpenChange={o => !o && setDeleteTarget(null)} onConfirm={() => deleteTarget && handleDelete(deleteTarget.type, deleteTarget.id)} title="Excluir item" description={`Deseja realmente excluir ${deleteTarget?.type === 'activity' ? 'esta atividade' : 'esta reunião'}?`} />
     </div>
   );
 }

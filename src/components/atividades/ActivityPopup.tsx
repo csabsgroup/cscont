@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { ActivityEditDrawer } from './ActivityEditDrawer';
 import { MoreVertical, CheckCircle2, XCircle, Pencil, Trash2, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
+import { ConfirmDeleteDialog } from '@/components/shared/ConfirmDeleteDialog';
 
 interface Activity {
   id: string;
@@ -30,6 +31,7 @@ export function ActivityPopup({ activity, onRefresh, readOnly }: Props) {
   const [observations, setObservations] = useState('');
   const [saving, setSaving] = useState(false);
   const [outcomeType, setOutcomeType] = useState<'success' | 'no_show'>('success');
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const handleComplete = async () => {
     if (!observations.trim()) {
@@ -61,10 +63,10 @@ export function ActivityPopup({ activity, onRefresh, readOnly }: Props) {
   };
 
   const handleDelete = async () => {
-    if (!confirm('Excluir esta atividade?')) return;
     const { error } = await supabase.from('activities').delete().eq('id', activity.id);
     if (error) toast.error('Erro: ' + error.message);
     else { toast.success('Atividade excluída!'); onRefresh(); }
+    setDeleteOpen(false);
   };
 
   if (readOnly) return null;
@@ -95,7 +97,7 @@ export function ActivityPopup({ activity, onRefresh, readOnly }: Props) {
               <RotateCcw className="h-4 w-4 mr-2" /> Reabrir
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem onClick={handleDelete} className="text-destructive">
+          <DropdownMenuItem onClick={() => setDeleteOpen(true)} className="text-destructive">
             <Trash2 className="h-4 w-4 mr-2" /> Excluir
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -133,6 +135,8 @@ export function ActivityPopup({ activity, onRefresh, readOnly }: Props) {
           </div>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDeleteDialog open={deleteOpen} onOpenChange={setDeleteOpen} onConfirm={handleDelete} title="Excluir atividade" description="Tem certeza que deseja excluir esta atividade?" />
 
       {/* Activity Edit Drawer */}
       <ActivityEditDrawer

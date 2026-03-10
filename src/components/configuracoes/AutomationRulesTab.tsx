@@ -544,11 +544,13 @@ export function AutomationRulesTab() {
       // Fire-and-forget: trigger batch processing (only force_rerun if explicitly checked)
       supabase.functions.invoke('execute-automations', {
         body: { action: 'runNowAll', rule_id: savedRuleId, force_rerun: forceRerun },
-      }).then(({ data: runResult }) => {
+      }).then(({ data: runResult, error: runError }) => {
+        if (runError) {
+          toast.error('Erro ao iniciar execução da regra. Verifique os Logs.');
+          return;
+        }
         const total = runResult?.total || 0;
         toast.success(`✅ Automação processando ${total} clientes em lotes. Acompanhe na aba Logs.`, { duration: 8000 });
-      }).catch(() => {
-        toast.error('Erro ao iniciar execução da regra. Verifique os Logs.');
       });
       return;
     }

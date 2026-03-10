@@ -110,7 +110,7 @@ export default function Dashboard() {
       result = result.filter(o => o.active_product_id === selectedProductId);
     }
     return result;
-  }, [offices, selectedCsms, selectedProductId]);
+  }, [offices, expandedCsmIds, selectedProductId]);
 
   // Deduplicate health scores: keep latest per office_id
   const dedupedHealthScores = useMemo(() => {

@@ -160,12 +160,10 @@ export default function Cliente360() {
     if (!office?.cnpj || !id) return;
     supabase.functions.invoke('integration-asaas', {
       body: { action: 'getFinancialByOffice', office_id: id },
-    }).then(() => {
+    }).then(async () => {
       // Silently refresh office data after sync
-      supabase.from('offices').select('installments_overdue, total_overdue_value').eq('id', id).single()
-        .then(({ data }) => {
-          if (data) setOffice((prev: any) => prev ? { ...prev, ...data } : prev);
-        });
+      const { data } = await supabase.from('offices').select('installments_overdue, total_overdue_value').eq('id', id).single();
+      if (data) setOffice((prev: any) => prev ? { ...prev, ...data } : prev);
     }).catch(() => { /* silent fail */ });
   }, [office?.cnpj, id]);
 
