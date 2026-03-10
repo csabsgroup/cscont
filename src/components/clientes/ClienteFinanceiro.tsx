@@ -39,6 +39,7 @@ interface FinancialData {
   customer_id: string;
   office_id: string;
   cnpj: string;
+  last_sync: string | null;
   summary: {
     totalPaid: number;
     totalOverdue: number;
