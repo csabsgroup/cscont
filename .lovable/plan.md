@@ -1,204 +1,63 @@
 
 
-# Rebuild Completo do Builder de Formulários (Google Forms Style)
+# Diagnosis and Fix Plan
 
-Este é um projeto grande que será dividido em etapas. O builder atual (1129 linhas em um único componente Sheet) será substituído por um editor visual dedicado em página própria, com canvas de blocos, sidebar de inserção e suporte completo aos 12 tipos de pergunta do Google Forms.
+## Root Causes Found
 
----
+### Problem 1 — Webhook mapping not filling fields
+The webhook_logs table confirms the error: `"supabase.from(...).insert(...).catch is not a function"`. The last two webhooks (March 5 and March 6) both crashed with this error BEFORE reaching office creation. The `.catch()` fix was applied in code but the webhooks arrived before deployment completed. The mapping paths are correct, the company data exists at root level with all expected fields. This problem is already fixed in code — just needs a new webhook to test.
 
-## Arquitetura
+### Problem 2 — Only 3 of 17 create_activity actions succeeded
+**This is the critical finding.** The `activity_type` database enum has these valid values:
+`task, follow_up, onboarding, renewal, other, ligacao, check_in, email, whatsapp, planejamento`
 
-```text
-/formularios                → Lista de formulários + submissões recentes
-/formularios/builder/:id    → Editor visual (novo)
-/formularios/builder/new    → Criação
-/forms/:formHash            → Formulário público (redesenhado)
-```
+It does NOT include `"meeting"`. The automation rule "[ELT] Delegação automática" has 14 actions with `activity_type: "meeting"` — every one of those fails silently because the INSERT violates the enum constraint. The `handleAction` function doesn't capture the error from `supabase.from("activities").insert(...)`.
 
-### Estrutura de componentes
+Evidence: automation_logs shows 19 `actions_executed` entries, but only 3 `create_activity` have an `id` (the ones with type "task" or "email"). The other 14 have no `id` — they failed silently.
 
-```text
-src/pages/FormBuilder.tsx              → Página principal do editor
-src/components/formularios/
-  ├── FormBuilderCanvas.tsx            → Canvas central com blocos
-  ├── FormBuilderSidebar.tsx           → Barra lateral de inserção
-  ├── FormBuilderSettings.tsx          → Aba Settings (publicação, validação, tema)
-  ├── FormBuilderResponses.tsx         → Aba Respostas (tabela simples)
-  ├── FormItemCard.tsx                 → Card individual de pergunta/bloco
-  ├── FormSectionBreak.tsx             → Bloco de quebra de seção
-  ├── FormFieldRenderer.tsx            → Renderizador universal de campos
-  ├── FormConditionalRouter.tsx        → UI de roteamento por resposta
-  └── FormThemePreview.tsx             → Preview com tema customizado
-```
+### Problem 3 — Webhook doesn't trigger automations
+Same root cause as Problem 1 — the webhook crashed before reaching the automation invocation lines (419-430). Once the webhook stops crashing, automations will be invoked via `supabase.functions.invoke()`.
 
----
+## Fixes
 
-## Mudanças no Banco de Dados
-
-### Migration: Novas colunas em `form_templates`
-
+### Fix A — Add "meeting" to activity_type enum (database migration)
 ```sql
-ALTER TABLE form_templates ADD COLUMN IF NOT EXISTS theme jsonb DEFAULT '{}';
--- theme: { primary_color, bg_color, header_image_url, font_style }
-
-ALTER TABLE form_templates ADD COLUMN IF NOT EXISTS settings jsonb DEFAULT '{}';
--- settings: { collect_email, limit_one_response, allow_edit, show_progress, 
---   shuffle_questions, confirmation_message, is_accepting_responses }
-
-ALTER TABLE form_templates ADD COLUMN IF NOT EXISTS is_published boolean DEFAULT false;
+ALTER TYPE activity_type ADD VALUE IF NOT EXISTS 'meeting';
 ```
+This is the correct fix because:
+- The automation builder UI offers "meeting" as an option
+- Users have configured rules with this type
+- 14 activities are waiting to be created with this type
 
-### Migration: Validação avançada (no JSON do campo)
-
-Não precisa de nova coluna -- a validação fica dentro do JSON `fields[]` de cada campo, em uma propriedade `validation`:
-
-```json
-{
-  "type": "regex",
-  "pattern": "^\\d{5}-\\d{3}$",
-  "error_message": "CEP inválido",
-  "min_length": 5,
-  "max_length": 100,
-  "min_selections": 2,
-  "max_selections": 5
+### Fix B — Add error handling in handleAction (execute-automations)
+In the `create_activity` case (line 46-47), capture and log the error:
+```javascript
+const { data: act, error: actErr } = await supabase.from("activities").insert(payload).select("id").single();
+if (actErr) {
+  console.error('[AUTOMATIONS] Activity insert error:', actErr.message, 'payload:', JSON.stringify(payload));
+  return { type: "create_activity", error: actErr.message };
 }
 ```
+Apply similar error capture to ALL action types that do database inserts (send_notification, add_note, create_action_plan, etc.).
 
----
+### Fix C — Ensure webhook deployment is current
+The piperun-webhook code already has the `.catch()` fix from the previous iteration. Verify the edge function redeploys by checking logs after saving. No code change needed — just confirmation.
 
-## Tipos de Pergunta (12 tipos)
-
-| Tipo interno | Label | Novo? |
-|---|---|---|
-| `short_answer` | Texto curto | Renomeia `text` |
-| `paragraph` | Parágrafo | Renomeia `textarea` |
-| `multiple_choice` | Múltipla escolha (radio) | **NOVO** |
-| `checkboxes` | Caixas de seleção | Renomeia `multi_select` |
-| `dropdown` | Menu suspenso | Mantém |
-| `file_upload` | Upload de arquivo | Renomeia `file` |
-| `linear_scale` | Escala linear | Mantém |
-| `rating` | Avaliação (estrelas/coração) | Evolui `rating_5` |
-| `multiple_choice_grid` | Grade única | **NOVO** |
-| `checkbox_grid` | Grade múltipla | **NOVO** |
-| `date` | Data | Mantém |
-| `time` | Hora | **NOVO** |
-
-Compatibilidade retroativa: os tipos antigos (`text`, `textarea`, `multi_select`, `rating_5`, `rating_nps`, `number`, `currency`, `boolean`) continuam funcionando no renderizador, mas o builder usará os novos nomes.
-
----
-
-## Editor Visual (FormBuilder.tsx)
-
-### Layout
-
-```text
-┌──────────────────────────────────────────────────────┐
-│ ← Voltar   [Título do Formulário editável]   Preview │Publicar│
-├──────────────────────────────────────────────────────┤
-│ [Perguntas]  [Respostas]  [Configurações]            │
-├────────────────────────────────┬─────────────────────┤
-│                                │  + Pergunta          │
-│   ┌─────────────────────┐     │  + Título/Desc       │
-│   │ Bloco de Seção      │     │  + Seção             │
-│   └─────────────────────┘     │  + Imagem            │
-│   ┌─────────────────────┐     │                      │
-│   │ Pergunta 1          │     │                      │
-│   │ [tipo] [opções]     │     │                      │
-│   │ [routing config]    │     │                      │
-│   └─────────────────────┘     │                      │
-│   ┌─────────────────────┐     │                      │
-│   │ Pergunta 2          │     │                      │
-│   └─────────────────────┘     │                      │
-│                                │                      │
-└────────────────────────────────┴─────────────────────┘
+### Fix D — Add company fallback in webhook (safety)
+In `piperun-webhook/index.ts` line 341, add fallback to `person.company`:
+```javascript
+let companyData = deal.company || deal.person?.company;
 ```
+This handles edge cases where the Piperun payload structure varies.
 
-### Funcionalidades do Canvas
+## Files Modified
+- `supabase/functions/execute-automations/index.ts` — error handling in handleAction
+- `supabase/functions/piperun-webhook/index.ts` — company fallback
+- Database migration: add `meeting` to `activity_type` enum
 
-- Cada item é um card editável inline (click to edit)
-- Drag & drop para reordenar (já usamos @hello-pangea/dnd)
-- Duplicar, excluir pergunta
-- Seções aparecem como separadores visuais com título e descrição
-- Seleção de tipo via dropdown no card
-- Roteamento por resposta configurável diretamente no card (para Multiple choice, Checkboxes, Dropdown)
-
-### Aba Configurações
-
-- **Publicação**: Publicar/Despublicar toggle, Aceitar respostas on/off
-- **Respostas**: Limitar a 1 resposta, Coletar email, Permitir edição
-- **Apresentação**: Mensagem de confirmação, Barra de progresso
-- **Tema**: Cor primária, cor de fundo, imagem de cabeçalho (upload para storage)
-- **Validação avançada**: Config por campo (regex, min/max, etc.)
-
-### Aba Respostas
-
-- Tabela de submissões (como está hoje na /formularios)
-- Visualização individual em drawer
-
----
-
-## Lógica Condicional (Branching por Seção)
-
-Modelo idêntico ao Google Forms:
-
-1. Seções são `PageBreakItem` -- cada uma inicia uma nova página
-2. Em perguntas de tipo `multiple_choice`, `checkboxes`, `dropdown` -- cada opção pode apontar para uma seção ou `__end__`
-3. Navegação do respondente é step-by-step (página a página)
-4. Botões Next/Back/Submit entre seções
-
-A estrutura de dados no campo permanece como já está (routing_type, routes[], default_target_section_id), apenas a UI melhora.
-
----
-
-## Formulário Público (FormPublic.tsx) -- Redesenho
-
-- Step-by-step quando há seções (uma seção por vez com Next/Back)
-- Tema customizável aplicado via CSS variables
-- Validação avançada no client-side
-- Barra de progresso
-- Suporte a todos os 12 tipos de pergunta
-- Mensagem de confirmação customizada
-
----
-
-## Bug do Seletor de Clientes
-
-O `FormFillDialog` carrega offices com `.eq('status', 'ativo')` -- o bug pode ser que os clientes não têm status 'ativo' ou a RLS está bloqueando. Será investigado e corrigido junto com o redesenho.
-
----
-
-## Arquivos Afetados
-
-### Novos
-- `src/pages/FormBuilder.tsx` -- Editor visual completo
-- `src/components/formularios/FormBuilderCanvas.tsx`
-- `src/components/formularios/FormBuilderSidebar.tsx`
-- `src/components/formularios/FormBuilderSettings.tsx`
-- `src/components/formularios/FormBuilderResponses.tsx`
-- `src/components/formularios/FormItemCard.tsx`
-- `src/components/formularios/FormFieldRenderer.tsx` -- Renderizador compartilhado
-
-### Editados
-- `src/App.tsx` -- Nova rota /formularios/builder/:id
-- `src/pages/Formularios.tsx` -- Redesenho da listagem com link para builder
-- `src/pages/FormPublic.tsx` -- Redesenho completo com temas e step-by-step
-- `src/components/reunioes/FormFillDialog.tsx` -- Usa FormFieldRenderer compartilhado + fix seletor de clientes
-- `src/components/configuracoes/FormTemplatesTab.tsx` -- Simplificado para redirecionar ao builder
-
-### Migration SQL
-- Colunas `theme`, `settings`, `is_published` em `form_templates`
-
----
-
-## Ordem de Implementação
-
-1. Migration SQL (colunas novas)
-2. FormFieldRenderer compartilhado (12 tipos)
-3. FormBuilder page + Canvas + Sidebar
-4. FormBuilderSettings (publicação, tema, validação)
-5. FormBuilderResponses
-6. Redesenho do FormPublic (step-by-step + tema)
-7. Atualização do FormFillDialog + fix seletor de clientes
-8. Atualização de rotas e listagem
-9. Simplificação do FormTemplatesTab
+## Expected Result After Fix
+- All 17 `create_activity` actions succeed (activities created with correct types)
+- Webhook creates office with all mapped fields populated
+- Webhook triggers automations that execute all 19 actions
+- automation_logs show complete execution with all action IDs
 
