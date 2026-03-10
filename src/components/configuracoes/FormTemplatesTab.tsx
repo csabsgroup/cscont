@@ -787,7 +787,7 @@ export function FormTemplatesTab() {
                                             </div>
                                           );
                                         })()}
-                                    </CollapsibleContent>
+                                      </div>
                                     </CollapsibleContent>
                                   </Collapsible>
                                 </div>
