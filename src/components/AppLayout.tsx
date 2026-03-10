@@ -2,12 +2,11 @@ import { useState } from 'react';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/AppSidebar';
 import { useAuth } from '@/contexts/AuthContext';
-import { useLocation } from 'react-router-dom';
+import { useLocation, Outlet } from 'react-router-dom';
 import { Search, User, LogOut, Sun, Moon } from 'lucide-react';
 import { UserAvatar } from '@/components/shared/UserAvatar';
 import { useTheme } from '@/contexts/ThemeContext';
 import { NavigationTabs } from '@/components/NavigationTabs';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import {
   DropdownMenu,
@@ -17,10 +16,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { UserProfileDialog } from '@/components/UserProfileDialog';
 import { NotificationPanel } from '@/components/NotificationPanel';
-
-interface AppLayoutProps {
-  children: React.ReactNode;
-}
 
 const pageNames: Record<string, string> = {
   '/': 'Minha Carteira',
@@ -38,7 +33,7 @@ const pageNames: Record<string, string> = {
   '/formularios': 'Formulários',
 };
 
-export function AppLayout({ children }: AppLayoutProps) {
+export function AppLayout() {
   const { profile, role, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
@@ -117,7 +112,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             </div>
           </header>
           {!location.pathname.match(/^\/clientes\/[^/]+$/) && <NavigationTabs />}
-          <main className="flex-1 overflow-auto p-6">{children}</main>
+          <main className="flex-1 overflow-auto p-6"><Outlet /></main>
         </div>
       </div>
       <UserProfileDialog open={profileOpen} onOpenChange={setProfileOpen} />
