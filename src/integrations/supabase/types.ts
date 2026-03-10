@@ -1520,6 +1520,41 @@ export type Database = {
           },
         ]
       }
+      health_band_config: {
+        Row: {
+          created_at: string | null
+          green_min: number
+          id: string
+          product_id: string
+          updated_at: string | null
+          yellow_min: number
+        }
+        Insert: {
+          created_at?: string | null
+          green_min?: number
+          id?: string
+          product_id: string
+          updated_at?: string | null
+          yellow_min?: number
+        }
+        Update: {
+          created_at?: string | null
+          green_min?: number
+          id?: string
+          product_id?: string
+          updated_at?: string | null
+          yellow_min?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "health_band_config_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: true
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       health_indicators: {
         Row: {
           created_at: string
@@ -1528,6 +1563,7 @@ export type Database = {
           id: string
           name: string
           pillar_id: string
+          scoring_rules: Json | null
           updated_at: string
           weight: number
         }
@@ -1538,6 +1574,7 @@ export type Database = {
           id?: string
           name: string
           pillar_id: string
+          scoring_rules?: Json | null
           updated_at?: string
           weight?: number
         }
@@ -1548,6 +1585,7 @@ export type Database = {
           id?: string
           name?: string
           pillar_id?: string
+          scoring_rules?: Json | null
           updated_at?: string
           weight?: number
         }
