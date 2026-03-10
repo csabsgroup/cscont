@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, Plus, Trash2, UserCheck, Users, ChevronDown, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { UserAvatar } from '@/components/shared/UserAvatar';
+import { ConfirmDeleteDialog } from '@/components/shared/ConfirmDeleteDialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 interface Profile {
@@ -90,11 +91,13 @@ export function HierarchyTab() {
     fetch();
   };
 
+  const [deleteLinkId, setDeleteLinkId] = useState<string | null>(null);
+
   const removeLink = async (linkId: string) => {
-    if (!window.confirm('Remover este vínculo?')) return;
     const { error } = await supabase.from('manager_csm_links').delete().eq('id', linkId);
-    if (error) { toast.error('Erro: ' + error.message); return; }
+    if (error) { toast.error('Erro: ' + error.message); setDeleteLinkId(null); return; }
     toast.success('Vínculo removido!');
+    setDeleteLinkId(null);
     fetch();
   };
 
@@ -189,7 +192,7 @@ export function HierarchyTab() {
                             <span className="text-sm">{c.full_name || 'Sem nome'}</span>
                             <Badge variant="secondary" className="text-[0.65rem]">CSM</Badge>
                           </div>
-                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => link && removeLink(link.id)}>
+                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => link && setDeleteLinkId(link.id)}>
                             <Trash2 className="h-3.5 w-3.5 text-destructive" />
                           </Button>
                         </div>
@@ -219,6 +222,7 @@ export function HierarchyTab() {
           )}
         </CardContent>
       </Card>
+      <ConfirmDeleteDialog open={!!deleteLinkId} onOpenChange={o => !o && setDeleteLinkId(null)} onConfirm={() => deleteLinkId && removeLink(deleteLinkId)} title="Remover vínculo" description="Tem certeza que deseja remover este vínculo?" />
     </div>
   );
 }

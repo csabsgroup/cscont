@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Plus, Loader2, Trash2, Edit2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { ConfirmDeleteDialog } from '@/components/shared/ConfirmDeleteDialog';
 
 export function BonusCatalogTab() {
   const [items, setItems] = useState<any[]>([]);
@@ -76,10 +77,12 @@ export function BonusCatalogTab() {
     setSaving(false); setDialogOpen(false); fetchAll();
   };
 
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Tem certeza que deseja remover este item do catálogo?')) return;
     const { error } = await supabase.from('bonus_catalog').delete().eq('id', id);
     if (error) toast.error('Erro: ' + error.message); else { toast.success('Item removido!'); fetchAll(); }
+    setDeleteId(null);
   };
 
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>;
@@ -113,7 +116,7 @@ export function BonusCatalogTab() {
                   <TableCell>
                     <div className="flex gap-1">
                       <Button size="sm" variant="ghost" onClick={() => openEdit(item)}><Edit2 className="h-4 w-4" /></Button>
-                      <Button size="sm" variant="ghost" onClick={() => handleDelete(item.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                      <Button size="sm" variant="ghost" onClick={() => setDeleteId(item.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -151,6 +154,7 @@ export function BonusCatalogTab() {
           </form>
         </DialogContent>
       </Dialog>
+      <ConfirmDeleteDialog open={!!deleteId} onOpenChange={o => !o && setDeleteId(null)} onConfirm={() => deleteId && handleDelete(deleteId)} title="Remover item" description="Tem certeza que deseja remover este item do catálogo?" />
     </div>
   );
 }

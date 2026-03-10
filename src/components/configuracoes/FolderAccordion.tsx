@@ -10,6 +10,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { ChevronDown, ChevronRight, FolderPlus, MoreHorizontal, Pencil, Trash2, FolderOpen, Check, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { ConfirmDeleteDialog } from '@/components/shared/ConfirmDeleteDialog';
 
 export interface Folder {
   id: string;
@@ -98,14 +99,16 @@ export function FolderAccordion<T extends { id: string; folder_id?: string | nul
     setSaving(false);
   };
 
+  const [deleteFolderId, setDeleteFolderId] = useState<string | null>(null);
+
   const handleDeleteFolder = async (folderId: string) => {
-    if (!confirm('Excluir esta pasta? Os itens serão movidos para "Sem pasta".')) return;
     const { error } = await supabase.from('config_folders' as any).delete().eq('id', folderId);
     if (error) toast.error('Erro ao excluir pasta: ' + error.message);
     else {
       toast.success('Pasta excluída!');
       onFoldersChange();
     }
+    setDeleteFolderId(null);
   };
 
   const renderFolderSection = (folder: Folder | null, folderItems: T[]) => {
@@ -160,7 +163,7 @@ export function FolderAccordion<T extends { id: string; folder_id?: string | nul
                       <Pencil className="mr-2 h-3 w-3" />Renomear
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={e => { e.stopPropagation(); handleDeleteFolder(folder.id); }} className="text-destructive">
+                    <DropdownMenuItem onClick={e => { e.stopPropagation(); setDeleteFolderId(folder.id); }} className="text-destructive">
                       <Trash2 className="mr-2 h-3 w-3" />Excluir pasta
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -228,6 +231,7 @@ export function FolderAccordion<T extends { id: string; folder_id?: string | nul
           <p className="text-center text-sm text-muted-foreground">{emptyMessage}</p>
         </Card>
       )}
+      <ConfirmDeleteDialog open={!!deleteFolderId} onOpenChange={o => !o && setDeleteFolderId(null)} onConfirm={() => deleteFolderId && handleDeleteFolder(deleteFolderId)} title="Excluir pasta" description="Excluir esta pasta? Os itens serão movidos para 'Sem pasta'." />
     </div>
   );
 }

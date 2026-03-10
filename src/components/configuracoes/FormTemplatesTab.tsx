@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Switch } from '@/components/ui/switch';
 import { Plus, Edit2, Copy, Trash2, Link2, Globe, FileText } from 'lucide-react';
 import { toast } from 'sonner';
+import { ConfirmDeleteDialog } from '@/components/shared/ConfirmDeleteDialog';
 
 export function FormTemplatesTab() {
   const navigate = useNavigate();
@@ -51,11 +52,13 @@ export function FormTemplatesTab() {
     else { toast.success('Duplicado!'); loadData(); }
   };
 
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
   const handleDelete = async (id: string) => {
-    if (!confirm('Excluir este formulário?')) return;
     const { error } = await supabase.from('form_templates').delete().eq('id', id);
     if (error) toast.error('Erro: ' + error.message);
     else { toast.success('Removido!'); loadData(); }
+    setDeleteId(null);
   };
 
   const handleToggle = async (id: string, current: boolean) => {
@@ -129,7 +132,7 @@ export function FormTemplatesTab() {
                           <Link2 className="h-4 w-4" />
                         </Button>
                       )}
-                      <Button size="sm" variant="ghost" onClick={() => handleDelete(t.id)} title="Excluir">
+                      <Button size="sm" variant="ghost" onClick={() => setDeleteId(t.id)} title="Excluir">
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </div>
@@ -140,6 +143,7 @@ export function FormTemplatesTab() {
           </Table>
         </Card>
       )}
+      <ConfirmDeleteDialog open={!!deleteId} onOpenChange={o => !o && setDeleteId(null)} onConfirm={() => deleteId && handleDelete(deleteId)} title="Excluir formulário" description="Tem certeza que deseja excluir este formulário?" />
     </div>
   );
 }

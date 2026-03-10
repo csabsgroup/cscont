@@ -14,6 +14,7 @@ import { Progress } from '@/components/ui/progress';
 import { Loader2, Trash2, RotateCcw, CheckCircle2, XCircle, Save, Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+import { ConfirmDeleteDialog } from '@/components/shared/ConfirmDeleteDialog';
 
 interface Props {
   activityId: string | null;
@@ -176,12 +177,14 @@ export function ActivityEditDrawer({ activityId, isOpen, onClose, onSave, readOn
     onClose();
   };
 
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
   const handleDelete = async () => {
-    if (!confirm('Excluir esta atividade?')) return;
     setSaving(true);
     await supabase.from('activities').delete().eq('id', activityId!);
     toast.success('Atividade excluída!');
     setSaving(false);
+    setDeleteOpen(false);
     onSave();
     onClose();
   };
@@ -393,7 +396,7 @@ export function ActivityEditDrawer({ activityId, isOpen, onClose, onSave, readOn
           {/* Footer actions */}
           {!loading && activity && !readOnly && (
             <SheetFooter className="flex-row justify-between gap-2 border-t pt-4 mt-auto">
-              <Button variant="destructive" size="sm" onClick={handleDelete} disabled={saving}>
+              <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)} disabled={saving}>
                 <Trash2 className="mr-1 h-4 w-4" />Excluir
               </Button>
               <div className="flex gap-2">
@@ -452,6 +455,8 @@ export function ActivityEditDrawer({ activityId, isOpen, onClose, onSave, readOn
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDeleteDialog open={deleteOpen} onOpenChange={setDeleteOpen} onConfirm={handleDelete} title="Excluir atividade" description="Tem certeza que deseja excluir esta atividade?" />
     </>
   );
 }

@@ -14,6 +14,7 @@ import {
 import { Plus, Pencil, Trash2, Star, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import { ConfirmDeleteDialog } from '@/components/shared/ConfirmDeleteDialog';
 
 interface Contact {
   id: string;
@@ -91,11 +92,13 @@ export function ClienteContatos({ officeId, contacts, onRefresh }: Props) {
     setSaving(false);
   };
 
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
   const handleDelete = async (id: string) => {
-    if (!confirm('Excluir este contato?')) return;
     const { error } = await supabase.from('contacts').delete().eq('id', id);
     if (error) toast.error('Erro: ' + error.message);
     else { toast.success('Contato excluído!'); onRefresh(); }
+    setDeleteId(null);
   };
 
   return (
@@ -193,7 +196,7 @@ export function ClienteContatos({ officeId, contacts, onRefresh }: Props) {
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(c)}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(c.id)}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteId(c.id)}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
@@ -204,6 +207,7 @@ export function ClienteContatos({ officeId, contacts, onRefresh }: Props) {
           </TableBody>
         </Table>
       )}
+      <ConfirmDeleteDialog open={!!deleteId} onOpenChange={o => !o && setDeleteId(null)} onConfirm={() => deleteId && handleDelete(deleteId)} title="Excluir contato" description="Tem certeza que deseja excluir este contato?" />
     </div>
   );
 }
