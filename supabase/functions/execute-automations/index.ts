@@ -22,15 +22,19 @@ function resolveVariables(template: string, office: any, csm: any, extra?: Recor
     .replace(/\{\{data_hoje\}\}/g, new Date().toLocaleDateString('pt-BR'))
     .replace(/\{\{mrr\}\}/g, office?.mrr?.toString() || office?.faturamento_mensal?.toString() || '0')
     .replace(/\{\{nps\}\}/g, office?.last_nps?.toString() || '--')
-    .replace(/\{\{ltv\}\}/g, extra?.ltv?.toString() || '0');
+    .replace(/\{\{ltv\}\}/g, extra?.ltv?.toString() || '0')
+    .replace(/\{\{cnpj\}\}/g, office?.cnpj || '')
+    .replace(/\{\{socio_nome\}\}/g, extra?.main_contact_name || '')
+    .replace(/\{\{socio_email\}\}/g, extra?.main_contact_email || '')
+    .replace(/\{\{socio_telefone\}\}/g, extra?.main_contact_phone || '');
 }
 
 // ─── Action Handlers ─────────────────────────────────────────
-async function handleAction(supabase: any, action: any, office_id: string, office: any, assignedCsm: string | null, userId: string, csmProfile: any, dryRun = false) {
+async function handleAction(supabase: any, action: any, office_id: string, office: any, assignedCsm: string | null, userId: string, csmProfile: any, dryRun = false, extraVars?: Record<string, any>) {
   const c = action.config || {};
 
   // Resolve variables in text fields
-  const resolveText = (text: string) => resolveVariables(text, office, csmProfile);
+  const resolveText = (text: string) => resolveVariables(text, office, csmProfile, extraVars);
 
   switch (action.type) {
     case "create_activity": {
@@ -640,6 +644,11 @@ async function executeV2Rules(supabase: any, triggerType: string, office_id: str
 
   const { data: office } = await supabase.from("offices").select("*").eq("id", office_id).single();
 
+  // Fetch main contact for variable resolution
+  const { data: mainContact } = await supabase.from("contacts")
+    .select("name, email, phone, whatsapp")
+    .eq("office_id", office_id).eq("is_main_contact", true).limit(1).maybeSingle();
+
   const effectiveCsmId = csm_id || office?.csm_id;
   let csmProfile: any = null;
   if (effectiveCsmId) {
@@ -741,7 +750,12 @@ async function executeV2Rules(supabase: any, triggerType: string, office_id: str
       for (const action of actions) {
         try {
           console.log(`[AUTOMATIONS] Executing action: ${action.type} ${JSON.stringify(action.config)?.substring(0, 150)}`);
-          const result = await handleAction(supabase, action, office_id, office, assignedCsm, userId, csmProfile, dryRun);
+          const extraVars = {
+            main_contact_name: mainContact?.name || '',
+            main_contact_email: mainContact?.email || '',
+            main_contact_phone: mainContact?.whatsapp || mainContact?.phone || '',
+          };
+          const result = await handleAction(supabase, action, office_id, office, assignedCsm, userId, csmProfile, dryRun, extraVars);
           actionResults.push(result);
           console.log(`[AUTOMATIONS] Action SUCCESS: ${action.type}`);
         } catch (actionErr: any) {
