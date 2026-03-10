@@ -32,6 +32,7 @@ interface Activity {
   priority: string;
   created_at: string;
   observations?: string | null;
+  completion_outcome?: string | null;
   offices?: { name: string } | null;
 }
 
