@@ -239,6 +239,7 @@ export function BoardView() {
         due_date: data.due_date || null,
         checklist: data.checklist || [],
         column_id: data.column_id,
+        priority: data.priority || 'medium',
         updated_at: new Date().toISOString(),
       }).eq('id', data.id!);
       if (error) { toast({ title: 'Erro ao salvar', variant: 'destructive' }); return; }

@@ -74,6 +74,17 @@ export function BoardCard({ card, tagColors, onClick }: BoardCardProps) {
       {/* Bottom row */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          {/* Priority badge */}
+          {(() => {
+            const pri = priorityConfig[card.priority] || priorityConfig.medium;
+            const Icon = pri.icon;
+            return (
+              <span className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${pri.class}`}>
+                <Icon className="h-2.5 w-2.5" />
+                {pri.label}
+              </span>
+            );
+          })()}
           {card.due_date && (
             <span className={`flex items-center gap-1 ${isOverdue ? 'text-destructive font-medium' : ''}`}>
               <Calendar className="h-3 w-3" />

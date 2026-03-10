@@ -1,0 +1,1 @@
+ALTER TABLE public.board_cards ADD COLUMN priority text NOT NULL DEFAULT 'medium';
