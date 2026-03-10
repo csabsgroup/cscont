@@ -495,7 +495,7 @@ export default function FormBuilder() {
 
                   {/* Sections as draggable blocks */}
                   {sortedSections.length > 0 && (
-                    <Droppable droppableId="sections-list">
+                    <Droppable droppableId="sections-list" type="SECTION">
                       {(provided) => (
                         <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-4">
                           {sortedSections.map((sec, idx) => (
