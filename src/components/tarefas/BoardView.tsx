@@ -109,6 +109,7 @@ export function BoardView() {
       column_id: c.column_id,
       checklist: c.checklist || [],
       status: c.status,
+      priority: c.priority || 'medium',
       created_by: c.created_by,
       assignees: (c.board_card_assignees || []).map((a: any) => {
         const p = internalProfiles.find(pr => pr.id === a.user_id);
