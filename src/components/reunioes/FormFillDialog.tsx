@@ -124,14 +124,19 @@ export function FormFillDialog({ open, onOpenChange, officeId, meetingId, meetin
   const useRouting = useMemo(() => sections.length > 0 && fields.some(f => f.conditional_logic?.enabled && f.conditional_logic.routing_type === 'answer_routing'), [sections, fields]);
 
   const filteredOffices = useMemo(() => {
-    if (!officeSearch.trim()) return offices;
+    let list = offices;
+    // Filter by product if template has product_id
+    if (currentTemplate?.product_id) {
+      list = list.filter(o => o.active_product_id === currentTemplate.product_id);
+    }
+    if (!officeSearch.trim()) return list;
     const q = officeSearch.toLowerCase();
-    return offices.filter(o =>
+    return list.filter(o =>
       o.name?.toLowerCase().includes(q) ||
       o.cnpj?.toLowerCase().includes(q) ||
       o.office_code?.toLowerCase().includes(q)
     );
-  }, [offices, officeSearch]);
+  }, [offices, officeSearch, currentTemplate]);
 
   const selectedOfficeName = useMemo(() => {
     const o = offices.find(o => o.id === (officeId || selectedOfficeId));
