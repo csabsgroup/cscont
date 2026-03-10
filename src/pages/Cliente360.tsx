@@ -250,6 +250,7 @@ export default function Cliente360() {
         'health_scores', 'health_playbook_executions', 'office_stage_history',
         'office_journey', 'automation_executions', 'event_participants',
         'client_office_links', 'office_files', 'office_notes', 'custom_field_values',
+        'office_timeline_events',
       ] as const;
       for (const table of directTables) {
         await supabase.from(table).delete().eq('office_id', id);
