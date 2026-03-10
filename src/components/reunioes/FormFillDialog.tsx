@@ -17,6 +17,7 @@ interface FormTemplate {
   id: string;
   name: string;
   form_type: string;
+  product_id: string | null;
   fields: FormFieldDef[];
   sections: SectionDef[];
   post_actions: any;
@@ -27,6 +28,7 @@ interface OfficeOption {
   name: string;
   cnpj?: string | null;
   office_code?: string | null;
+  active_product_id?: string | null;
 }
 
 interface Props {
@@ -85,7 +87,7 @@ export function FormFillDialog({ open, onOpenChange, officeId, meetingId, meetin
 
   useEffect(() => {
     if (open) {
-      supabase.from('form_templates').select('id, name, form_type, fields, sections, post_actions')
+      supabase.from('form_templates').select('id, name, form_type, product_id, fields, sections, post_actions')
         .eq('is_active', true)
         .then(({ data }) => {
           const internal = ((data as any[]) || []).filter(t => (t.form_type || 'internal') === 'internal');
@@ -98,7 +100,7 @@ export function FormFillDialog({ open, onOpenChange, officeId, meetingId, meetin
 
       // FIX: Load ALL offices, not just status='ativo'
       if (!officeId) {
-        supabase.from('offices').select('id, name, cnpj, office_code')
+        supabase.from('offices').select('id, name, cnpj, office_code, active_product_id')
           .order('name')
           .then(({ data }) => setOffices((data as any[]) || []));
       }
@@ -122,14 +124,19 @@ export function FormFillDialog({ open, onOpenChange, officeId, meetingId, meetin
   const useRouting = useMemo(() => sections.length > 0 && fields.some(f => f.conditional_logic?.enabled && f.conditional_logic.routing_type === 'answer_routing'), [sections, fields]);
 
   const filteredOffices = useMemo(() => {
-    if (!officeSearch.trim()) return offices;
+    let list = offices;
+    // Filter by product if template has product_id
+    if (currentTemplate?.product_id) {
+      list = list.filter(o => o.active_product_id === currentTemplate.product_id);
+    }
+    if (!officeSearch.trim()) return list;
     const q = officeSearch.toLowerCase();
-    return offices.filter(o =>
+    return list.filter(o =>
       o.name?.toLowerCase().includes(q) ||
       o.cnpj?.toLowerCase().includes(q) ||
       o.office_code?.toLowerCase().includes(q)
     );
-  }, [offices, officeSearch]);
+  }, [offices, officeSearch, currentTemplate]);
 
   const selectedOfficeName = useMemo(() => {
     const o = offices.find(o => o.id === (officeId || selectedOfficeId));
@@ -345,7 +352,7 @@ export function FormFillDialog({ open, onOpenChange, officeId, meetingId, meetin
 
           <div className="space-y-2">
             <Label>Modelo de formulário</Label>
-            <Select value={selectedTemplate} onValueChange={v => { setSelectedTemplate(v); setFormData({}); }}>
+            <Select value={selectedTemplate} onValueChange={v => { setSelectedTemplate(v); setFormData({}); if (!isOfficeLocked) setSelectedOfficeId(''); }}>
               <SelectTrigger><SelectValue placeholder="Selecione o modelo" /></SelectTrigger>
               <SelectContent>
                 {templates.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
