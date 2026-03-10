@@ -190,12 +190,15 @@ async function handleAction(supabase: any, action: any, office_id: string, offic
             return { type: "send_slack", error: "Slack not configured (missing API keys)" };
           }
 
-          // Get channel from integration_settings
-          const { data: slackSetting } = await supabase.from('integration_settings')
-            .select('config').eq('provider', 'slack').maybeSingle();
-          const channelId = slackSetting?.config?.channel_id;
+          // Priority: action-level channel > integration_settings fallback
+          let channelId = c.channel || c.channel_id || null;
           if (!channelId) {
-            console.error('[AUTOMATIONS] Slack channel not configured in integration_settings');
+            const { data: slackSetting } = await supabase.from('integration_settings')
+              .select('config').eq('provider', 'slack').maybeSingle();
+            channelId = slackSetting?.config?.channel_id;
+          }
+          if (!channelId) {
+            console.error('[AUTOMATIONS] Slack channel not configured');
             return { type: "send_slack", error: "Slack channel not configured" };
           }
 
