@@ -16,6 +16,7 @@ export interface BoardCardData {
   column_id: string;
   checklist: { id: string; text: string; checked: boolean }[];
   status: string;
+  priority: string;
   created_by: string | null;
   assignees: { user_id: string; full_name: string | null; avatar_url: string | null }[];
 }
