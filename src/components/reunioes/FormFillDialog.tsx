@@ -17,6 +17,7 @@ interface FormTemplate {
   id: string;
   name: string;
   form_type: string;
+  product_id: string | null;
   fields: FormFieldDef[];
   sections: SectionDef[];
   post_actions: any;
