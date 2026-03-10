@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { ChevronLeft, ChevronRight, Calendar, MapPin, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const CATEGORY_CONFIG: Record<string, { label: string; color: string }> = {
+export const CATEGORY_CONFIG: Record<string, { label: string; color: string }> = {
   encontro: { label: 'Encontro', color: 'bg-blue-500' },
   imersao: { label: 'Imersão', color: 'bg-purple-500' },
   workshop: { label: 'Workshop', color: 'bg-emerald-500' },
@@ -21,7 +21,7 @@ const CATEGORY_CONFIG: Record<string, { label: string; color: string }> = {
   outro: { label: 'Outro', color: 'bg-muted-foreground' },
 };
 
-const CATEGORY_BG: Record<string, string> = {
+export const CATEGORY_BG: Record<string, string> = {
   encontro: 'bg-blue-500/20 text-blue-700 dark:text-blue-300',
   imersao: 'bg-purple-500/20 text-purple-700 dark:text-purple-300',
   workshop: 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300',
@@ -30,7 +30,7 @@ const CATEGORY_BG: Record<string, string> = {
   outro: 'bg-muted text-muted-foreground',
 };
 
-const TYPE_LABELS: Record<string, string> = {
+export const TYPE_LABELS: Record<string, string> = {
   presencial: 'Presencial',
   online: 'Online',
   hibrido: 'Híbrido',

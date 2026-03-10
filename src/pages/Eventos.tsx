@@ -18,6 +18,7 @@ import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { toast } from 'sonner';
 import { EventCard } from '@/components/eventos/EventCard';
 import { EventCalendarView } from '@/components/eventos/EventCalendarView';
+import { EventYearView } from '@/components/eventos/EventYearView';
 
 const CATEGORIES = [
   { value: 'encontro', label: 'Encontro' },
@@ -33,7 +34,8 @@ interface Product { id: string; name: string; }
 export default function Eventos() {
   const { session, isViewer, role } = useAuth();
   const navigate = useNavigate();
-  const [view, setView] = useState<'list' | 'calendar'>('list');
+  const [view, setView] = useState<'list' | 'calendar' | 'year'>('list');
+  const [currentYear, setCurrentYear] = useState(new Date());
   const [events, setEvents] = useState<any[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [participantCounts, setParticipantCounts] = useState<Record<string, { confirmed: number; total: number }>>({});
@@ -177,7 +179,7 @@ export default function Eventos() {
         </div>
         <div className="flex items-center gap-3">
           {role && ['admin', 'manager', 'viewer'].includes(role) && (
-            <Tabs value={view} onValueChange={v => setView(v as 'list' | 'calendar')}>
+            <Tabs value={view} onValueChange={v => setView(v as 'list' | 'calendar' | 'year')}>
               <TabsList className="h-9">
                 <TabsTrigger value="list" className="gap-1.5 px-3">
                   <List className="h-3.5 w-3.5" />
@@ -185,7 +187,11 @@ export default function Eventos() {
                 </TabsTrigger>
                 <TabsTrigger value="calendar" className="gap-1.5 px-3">
                   <CalendarDays className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">Calendário</span>
+                  <span className="hidden sm:inline">Mensal</span>
+                </TabsTrigger>
+                <TabsTrigger value="year" className="gap-1.5 px-3">
+                  <Calendar className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Anual</span>
                 </TabsTrigger>
               </TabsList>
             </Tabs>
@@ -311,6 +317,8 @@ export default function Eventos() {
         <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
       ) : view === 'calendar' ? (
         <EventCalendarView events={filtered} participantCounts={participantCounts} />
+      ) : view === 'year' ? (
+        <EventYearView events={filtered} participantCounts={participantCounts} currentYear={currentYear} onYearChange={setCurrentYear} />
       ) : filtered.length === 0 ? (
         <Card><CardContent className="flex flex-col items-center justify-center py-12">
           <Calendar className="mb-3 h-10 w-10 text-muted-foreground/40" />
