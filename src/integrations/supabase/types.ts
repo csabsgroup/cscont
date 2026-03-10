@@ -1462,10 +1462,13 @@ export type Database = {
           form_type: string
           id: string
           is_active: boolean | null
+          is_published: boolean | null
           name: string
           post_actions: Json
           product_id: string | null
           sections: Json | null
+          settings: Json | null
+          theme: Json | null
           type: Database["public"]["Enums"]["form_template_type"]
           updated_at: string
         }
@@ -1478,10 +1481,13 @@ export type Database = {
           form_type?: string
           id?: string
           is_active?: boolean | null
+          is_published?: boolean | null
           name: string
           post_actions?: Json
           product_id?: string | null
           sections?: Json | null
+          settings?: Json | null
+          theme?: Json | null
           type?: Database["public"]["Enums"]["form_template_type"]
           updated_at?: string
         }
@@ -1494,10 +1500,13 @@ export type Database = {
           form_type?: string
           id?: string
           is_active?: boolean | null
+          is_published?: boolean | null
           name?: string
           post_actions?: Json
           product_id?: string | null
           sections?: Json | null
+          settings?: Json | null
+          theme?: Json | null
           type?: Database["public"]["Enums"]["form_template_type"]
           updated_at?: string
         }
