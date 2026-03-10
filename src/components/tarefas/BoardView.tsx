@@ -109,6 +109,7 @@ export function BoardView() {
       column_id: c.column_id,
       checklist: c.checklist || [],
       status: c.status,
+      priority: c.priority || 'medium',
       created_by: c.created_by,
       assignees: (c.board_card_assignees || []).map((a: any) => {
         const p = internalProfiles.find(pr => pr.id === a.user_id);
@@ -222,6 +223,7 @@ export function BoardView() {
         checklist: data.checklist || [],
         column_id: data.column_id || columns[0]?.id,
         sort_order: colCards.length,
+        priority: data.priority || 'medium',
         created_by: user?.id,
       }).select().single();
       if (error) { toast({ title: 'Erro ao criar tarefa', variant: 'destructive' }); return; }
@@ -237,6 +239,7 @@ export function BoardView() {
         due_date: data.due_date || null,
         checklist: data.checklist || [],
         column_id: data.column_id,
+        priority: data.priority || 'medium',
         updated_at: new Date().toISOString(),
       }).eq('id', data.id!);
       if (error) { toast({ title: 'Erro ao salvar', variant: 'destructive' }); return; }

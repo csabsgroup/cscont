@@ -137,6 +137,20 @@ export function CardEditDrawer({
             </Select>
           </div>
 
+          {/* Priority */}
+          <div className="space-y-1.5">
+            <Label>Prioridade</Label>
+            <Select value={form.priority || 'medium'} onValueChange={v => setForm({ ...form, priority: v })} disabled={readOnly}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="low">🟢 Baixa</SelectItem>
+                <SelectItem value="medium">🔵 Média</SelectItem>
+                <SelectItem value="high">🟡 Alta</SelectItem>
+                <SelectItem value="urgent">🔴 Urgente</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           {/* Assignees */}
           <div className="space-y-1.5">
             <Label>Responsáveis</Label>
